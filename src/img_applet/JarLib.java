@@ -5,55 +5,55 @@ import java.net.*;
 
 public class JarLib{
 
-  static public boolean load(Class cl, String libname){
+  static public boolean loadLib(Class cl, String libname, boolean shared){
     try{
-      loadX(cl,libname);
+      loadLibX(cl, libname, shared);
       return true;
     }catch(Exception e){
-      System.out.println("JarLib.load\n\tException = "+e.getMessage());
-      System.err.println("JarLib.load\n\tException = "+e.getMessage());
+      System.out.println("JarLib.loadLib\n\tException = "+e.getMessage());
+      System.err.println("JarLib.loadLib\n\tException = "+e.getMessage());
       e.printStackTrace();
     }catch(Error e){
-      System.out.println("JarLib.load\n\tError = "+e);
-      System.err.println("JarLib.load\n\tError = "+e);
+      System.out.println("JarLib.loadLib\n\tError = "+e);
+      System.err.println("JarLib.loadLib\n\tError = "+e);
       e.printStackTrace();
     }
     try{                                    // Shouldn't really need to load from system defaults anymore
       System.loadLibrary(libname);
-      System.out.println("JarLib.load: Successfully loaded library ["+libname+"] from some default system folder");
+      System.out.println("JarLib.loadLib: Successfully loaded library ["+libname+"] from some default system folder");
       return true;
     }catch(Exception e){
-      System.out.println("JarLib.load\n\tException = "+e.getMessage());
-      System.err.println("JarLib.load\n\tException = "+e.getMessage());
+      System.out.println("JarLib.loadLib\n\tException = "+e.getMessage());
+      System.err.println("JarLib.loadLib\n\tException = "+e.getMessage());
     }catch(Error e){
-      System.out.println("JarLib.load\n\tError = "+e);
-      System.err.println("JarLib.load\n\tError = "+e);
+      System.out.println("JarLib.loadLib\n\tError = "+e);
+      System.err.println("JarLib.loadLib\n\tError = "+e);
       e.printStackTrace();
     }
     return false;
   }
 
-  static private void loadX(Class cl, String name)throws IOException, UnsatisfiedLinkError{
+  static private void loadLibX(Class cl, String name, boolean shared)throws IOException, UnsatisfiedLinkError{
     String libname=System.mapLibraryName(name);
     URL url = cl.getResource(JarLib.getOsSubDir()+"/"+libname);
     if(url==null){ 
-      throw new UnsatisfiedLinkError(JarLib.class.getName()+".loadX: Could not find library ["+libname+"]");
+      throw new UnsatisfiedLinkError(JarLib.class.getName()+".loadLibX: Could not find library ["+libname+"]");
     }
-    System.load(getFile(url,libname).getAbsolutePath());
-    System.out.println("JarLib.load: Successfully loaded library ["+url+"]");
+    System.load(getFile(url, libname, shared).getAbsolutePath());
+    System.out.println("JarLib.loadLib: Successfully loaded library ["+url+"]");
   }
 
-  static public File loadFile(Class cl, String name)throws IOException, UnsatisfiedLinkError{
+  static public File loadFile(Class cl, String name, boolean shared)throws IOException, UnsatisfiedLinkError{
     URL url = cl.getResource(JarLib.getOsSubDir()+"/"+name);
     if(url==null){ 
       throw new UnsatisfiedLinkError(JarLib.class.getName()+".loadFile: Could not find file ["+name+"]");
     }
-    File tmp = getFile(url,name);
+    File tmp = getFile(url, name, shared);
     System.out.println("JarLib.loadFile: Successfully loaded file ["+url+"]");
     return tmp;
   }
 
-  static private File getFile(URL url, String filename)throws IOException, UnsatisfiedLinkError{
+  static private File getFile(URL url, String filename, boolean shared)throws IOException, UnsatisfiedLinkError{
     try{
       URI uri = new URI(url.toString());    
       String scheme = uri.getScheme();
@@ -72,10 +72,17 @@ public class JarLib{
             files[i].delete();                     
           }
         }
-
-        File   tmp    = File.createTempFile("img_applet",filename,dir);  // System.out.println(tmp.getAbsolutePath());
+        File   tmp;
+        if (shared) {
+          tmp    = new File(dir, "img_applet_" + filename);
+          tmp.createNewFile();
+        }else{
+          tmp    = File.createTempFile("img_applet_",filename,dir);  // System.out.println(tmp.getAbsolutePath());
+        }
         System.out.println("JarLib.getFile: Jar file location: " + tmp.getAbsolutePath());  
-        JarLib.extract(tmp,url);
+        tmp.deleteOnExit();
+        if (tmp.length() == 0L)
+          JarLib.extract(tmp,url);
         System.out.println("JarLib.getFile: Successfully loaded file ["+url+"] from jar file location");  
         return tmp;
       }else{

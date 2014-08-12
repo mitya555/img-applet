@@ -18,9 +18,8 @@ public class FFmpeg {
 	static {
 		// win : load file 'ffmpeg.exe'
 		try {
-			exe = JarLib.loadFile(FFmpeg.class, "ffmpeg.exe");
+			exe = JarLib.loadFile(FFmpeg.class, "ffmpeg.exe", true);
 		} catch (UnsatisfiedLinkError | IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
