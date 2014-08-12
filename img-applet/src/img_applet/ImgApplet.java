@@ -16,8 +16,8 @@ public class ImgApplet extends JApplet implements Runnable {
 		getContentPane().add(console = new TextArea());
 		console.setEditable(false);
 		getContentPane().setBackground(Color.WHITE);
-		System.out.println(ffmpeg.ffmpeg.ffmpeg.getAbsolutePath());
-		console.append(ffmpeg.ffmpeg.ffmpeg.getAbsolutePath() + "\n");
+		System.out.println(ffmpeg.FFmpeg.exe.getAbsolutePath());
+		console.append(ffmpeg.FFmpeg.exe.getAbsolutePath() + "\n");
 	}
 
 	@Override
