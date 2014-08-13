@@ -2,12 +2,15 @@ package img_applet;
 
 import java.awt.Color;
 import java.awt.TextArea;
-import java.io.File;
+//import java.io.File;
 import java.io.IOException;
-import java.util.Map;
+import java.io.InputStreamReader;
+import java.util.Arrays;
+//import java.util.Map;
 
 import javax.swing.JApplet;
 import javax.swing.SwingUtilities;
+import javax.xml.bind.DatatypeConverter;
 
 import ffmpeg.FFmpeg;
 
@@ -18,7 +21,11 @@ public class ImgApplet extends JApplet implements Runnable {
 	public TextArea console;
 	private String rtmp;
 	private Process ffmp;
-	//private InputStr
+	private Thread ffmt, errt;
+	private volatile boolean ffm_stop;
+	private static final int MAX_FRAME_SIZE = 100000;
+	private volatile byte[] b1 = new byte[MAX_FRAME_SIZE], b2 = new byte[MAX_FRAME_SIZE];
+	private volatile int sn, sn1, sn2, l1, l2;
 
 	@Override
 	public void run() {
@@ -63,8 +70,64 @@ public class ImgApplet extends JApplet implements Runnable {
 //		pb.redirectOutput(ProcessBuilder.Redirect.appendTo(log));
 		try {
 			this.ffmp = pb.start();
+			this.ffmt = new Thread(new Runnable() {
+				@Override
+				public void run() {
+					int res = 0;
+					MjpegInputStream in_ = null;
+					try {
+						in_ = new MjpegInputStream(ffmp.getInputStream());
+						while (res != -1 && !ffm_stop)
+							try {
+								if (sn1 <= sn2) {
+									res = l1 = in_.readFrame(b1);
+									sn1 = ++sn;
+								}
+								else {
+									res = l2 = in_.readFrame(b2);
+									sn2 = ++sn;
+								}
+							} catch (IOException e) {
+								e.printStackTrace();
+							}
+					}
+					finally {
+						if (in_ != null)
+							try {
+								in_.close();
+							} catch (IOException e) {
+								e.printStackTrace();
+							}
+					}
+				}
+			});
+			this.errt = new Thread(new Runnable() {
+				@Override
+				public void run() {
+					int res = 0;
+					InputStreamReader err_ = null;
+					try {
+						err_ = new InputStreamReader(ffmp.getErrorStream());
+						while (res != -1 && !ffm_stop)
+							try {
+								res = err_.read();
+								if (res != -1)
+									System.out.print((char)res);
+							} catch (IOException e) {
+								e.printStackTrace();
+							}
+					}
+					finally {
+						if (err_ != null)
+							try {
+								err_.close();
+							} catch (IOException e) {
+								e.printStackTrace();
+							}
+					}
+				}
+			});
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 //		assert pb.redirectInput() == ProcessBuilder.Redirect.PIPE;
@@ -72,10 +135,29 @@ public class ImgApplet extends JApplet implements Runnable {
 //		assert p.getInputStream().read() == -1;
 	}
 
+	private void stopProcessing() {
+		this.ffm_stop = true;
+		if (this.ffmt != null)
+			this.ffmt.interrupt();
+		if (this.errt != null)
+			this.errt.interrupt();
+		this.ffmp.destroy();
+	}
+	
+	private StringBuilder sb = new StringBuilder("data:image/jpeg;base64,");
+	private int sb_len = sb.length();
+	
+	public String getDataURI() {
+		if (sn1 == 0 && sn2 == 0)
+			return null;
+		sb.setLength(sb_len);
+		return sb.append(DatatypeConverter.printBase64Binary(Arrays.copyOf(sn1 > sn2 ? b1 : b2, sn1 > sn2 ? l1 : l2))).toString();
+	}
+
 	@Override
 	public void stop() {
 		
-		this.ffmp.destroy();
+		stopProcessing();
 		
 		super.stop();
 	}
@@ -83,7 +165,7 @@ public class ImgApplet extends JApplet implements Runnable {
 	@Override
 	public void destroy() {
 		
-		this.ffmp.destroy();
+		stopProcessing();
 		
 		super.destroy();
 	}
