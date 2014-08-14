@@ -4,7 +4,7 @@ import java.awt.Color;
 import java.awt.TextArea;
 //import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
+//import java.io.InputStreamReader;
 import java.util.Arrays;
 //import java.util.Map;
 
@@ -21,7 +21,7 @@ public class ImgApplet extends JApplet implements Runnable {
 	public TextArea console;
 	private String rtmp;
 	private Process ffmp;
-	private Thread ffmt, errt;
+	private Thread ffmt; // , errt;
 	private volatile boolean ffm_stop;
 	private static final int MAX_FRAME_SIZE = 100000;
 	private volatile byte[] b1 = new byte[MAX_FRAME_SIZE], b2 = new byte[MAX_FRAME_SIZE];
@@ -59,7 +59,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		
 		super.start();
 		
-		ProcessBuilder pb = new ProcessBuilder(FFmpeg.exe.getName(), "-i", rtmp, "-vcodec mjpeg", "-");
+		ProcessBuilder pb = new ProcessBuilder("\"" + FFmpeg.exe.getAbsolutePath() + "\"", /*"-f", "h264",*/ "-i", rtmp, "-c:v", "mjpeg", "-f", "mjpeg", "pipe:1");
 //		Map<String, String> env = pb.environment();
 //		env.put("VAR1", "myValue");
 //		env.remove("OTHERVAR");
@@ -68,6 +68,7 @@ public class ImgApplet extends JApplet implements Runnable {
 //		File log = new File("log");
 //		pb.redirectErrorStream(true);
 //		pb.redirectOutput(ProcessBuilder.Redirect.appendTo(log));
+		pb.redirectError(ProcessBuilder.Redirect.INHERIT);
 		try {
 			this.ffmp = pb.start();
 			this.ffmt = new Thread(new Runnable() {
@@ -101,32 +102,34 @@ public class ImgApplet extends JApplet implements Runnable {
 					}
 				}
 			});
-			this.errt = new Thread(new Runnable() {
-				@Override
-				public void run() {
-					int res = 0;
-					InputStreamReader err_ = null;
-					try {
-						err_ = new InputStreamReader(ffmp.getErrorStream());
-						while (res != -1 && !ffm_stop)
-							try {
-								res = err_.read();
-								if (res != -1)
-									System.out.print((char)res);
-							} catch (IOException e) {
-								e.printStackTrace();
-							}
-					}
-					finally {
-						if (err_ != null)
-							try {
-								err_.close();
-							} catch (IOException e) {
-								e.printStackTrace();
-							}
-					}
-				}
-			});
+			this.ffmt.start();
+//			this.errt = new Thread(new Runnable() {
+//				@Override
+//				public void run() {
+//					int res = 0;
+//					InputStreamReader err_ = null;
+//					try {
+//						err_ = new InputStreamReader(ffmp.getErrorStream());
+//						while (res != -1 && !ffm_stop)
+//							try {
+//								res = err_.read();
+//								if (res != -1)
+//									System.out.print((char)res);
+//							} catch (IOException e) {
+//								e.printStackTrace();
+//							}
+//					}
+//					finally {
+//						if (err_ != null)
+//							try {
+//								err_.close();
+//							} catch (IOException e) {
+//								e.printStackTrace();
+//							}
+//					}
+//				}
+//			});
+//			this.errt.start();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -139,8 +142,8 @@ public class ImgApplet extends JApplet implements Runnable {
 		this.ffm_stop = true;
 		if (this.ffmt != null)
 			this.ffmt.interrupt();
-		if (this.errt != null)
-			this.errt.interrupt();
+//		if (this.errt != null)
+//			this.errt.interrupt();
 		this.ffmp.destroy();
 	}
 	
