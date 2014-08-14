@@ -1,12 +1,25 @@
 package img_applet;
 
+import java.awt.Button;
 import java.awt.Color;
-import java.awt.TextArea;
+import java.awt.FlowLayout;
+//import java.awt.TextArea;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 //import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
+//import java.io.OutputStreamWriter;
 //import java.io.InputStreamReader;
 import java.util.Arrays;
 //import java.util.Map;
+
+
+
+
+
+
+
 
 import javax.swing.JApplet;
 import javax.swing.SwingUtilities;
@@ -18,19 +31,36 @@ import ffmpeg.FFmpeg;
 @SuppressWarnings("serial")
 public class ImgApplet extends JApplet implements Runnable {
 	
-	public TextArea console;
 	private String rtmp;
 	private Process ffmp;
-	private Thread ffmt; // , errt;
-	private volatile boolean ffm_stop;
+	private Thread ffmt;
+//	private volatile boolean ffm_stop;
 	private static final int MAX_FRAME_SIZE = 100000;
 	private volatile byte[] b1 = new byte[MAX_FRAME_SIZE], b2 = new byte[MAX_FRAME_SIZE];
 	private volatile int sn, sn1, sn2, l1, l2;
 
 	@Override
 	public void run() {
-		getContentPane().add(this.console = new TextArea());
-		this.console.setEditable(false);
+		
+		FlowLayout cont = new FlowLayout(FlowLayout.CENTER, 10, 10);
+		getContentPane().setLayout(cont);
+		
+		Button button = new Button();
+		getContentPane().add(button);
+		button.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) { stop(); }
+		});
+		button.setLabel("Stop");
+		
+		button = new Button();
+		getContentPane().add(button);
+		button.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) { start(); }
+		});
+		button.setLabel("Start");
+		
 		getContentPane().setBackground(Color.WHITE);
 //		System.out.println(FFmpeg.exe.getAbsolutePath());
 //		console.append(FFmpeg.exe.getAbsolutePath() + "\n");
@@ -59,7 +89,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		
 		super.start();
 		
-		ProcessBuilder pb = new ProcessBuilder("\"" + FFmpeg.exe.getAbsolutePath() + "\"", /*"-f", "h264",*/ "-i", rtmp, "-c:v", "mjpeg", "-f", "mjpeg", "pipe:1");
+		ProcessBuilder pb = new ProcessBuilder(FFmpeg.exe.getAbsolutePath(), /*"-f", "mp4",*/ "-i", rtmp, "-map", "0:0", "-c:v", "mjpeg", "-f", "mjpeg", "pipe:1");
 //		Map<String, String> env = pb.environment();
 //		env.put("VAR1", "myValue");
 //		env.remove("OTHERVAR");
@@ -74,11 +104,12 @@ public class ImgApplet extends JApplet implements Runnable {
 			this.ffmt = new Thread(new Runnable() {
 				@Override
 				public void run() {
+					sn = sn1 = sn2 = 0;
 					int res = 0;
 					MjpegInputStream in_ = null;
 					try {
 						in_ = new MjpegInputStream(ffmp.getInputStream());
-						while (res != -1 && !ffm_stop)
+						while (res != -1/* && !ffm_stop*/)
 							try {
 								if (sn1 <= sn2) {
 									res = l1 = in_.readFrame(b1);
@@ -91,6 +122,7 @@ public class ImgApplet extends JApplet implements Runnable {
 							} catch (IOException e) {
 								e.printStackTrace();
 							}
+						System.out.println("Thread processing output from ffmpeg is ending...");
 					}
 					finally {
 						if (in_ != null)
@@ -99,37 +131,11 @@ public class ImgApplet extends JApplet implements Runnable {
 							} catch (IOException e) {
 								e.printStackTrace();
 							}
+						System.out.println("Thread processing output from ffmpeg has ended.");
 					}
 				}
 			});
 			this.ffmt.start();
-//			this.errt = new Thread(new Runnable() {
-//				@Override
-//				public void run() {
-//					int res = 0;
-//					InputStreamReader err_ = null;
-//					try {
-//						err_ = new InputStreamReader(ffmp.getErrorStream());
-//						while (res != -1 && !ffm_stop)
-//							try {
-//								res = err_.read();
-//								if (res != -1)
-//									System.out.print((char)res);
-//							} catch (IOException e) {
-//								e.printStackTrace();
-//							}
-//					}
-//					finally {
-//						if (err_ != null)
-//							try {
-//								err_.close();
-//							} catch (IOException e) {
-//								e.printStackTrace();
-//							}
-//					}
-//				}
-//			});
-//			this.errt.start();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -138,12 +144,24 @@ public class ImgApplet extends JApplet implements Runnable {
 //		assert p.getInputStream().read() == -1;
 	}
 
-	private void stopProcessing() {
-		this.ffm_stop = true;
-		if (this.ffmt != null)
-			this.ffmt.interrupt();
-//		if (this.errt != null)
-//			this.errt.interrupt();
+	private void quitProcess() {
+		try {
+			OutputStream out_ = ffmp.getOutputStream();
+			if (out_ != null) {
+				out_.write('q');
+				out_.flush();
+			}
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		}
+	}
+
+	private void killProcess() {
+		
+//		this.ffm_stop = true;
+//		if (this.ffmt != null)
+//			this.ffmt.interrupt();
+
 		this.ffmp.destroy();
 	}
 	
@@ -160,7 +178,16 @@ public class ImgApplet extends JApplet implements Runnable {
 	@Override
 	public void stop() {
 		
-		stopProcessing();
+		if (this.ffmt.isAlive()) {
+			quitProcess();
+			try {
+				this.ffmt.join(200);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+		if (this.ffmt.isAlive())
+			killProcess();
 		
 		super.stop();
 	}
@@ -168,7 +195,7 @@ public class ImgApplet extends JApplet implements Runnable {
 	@Override
 	public void destroy() {
 		
-		stopProcessing();
+		killProcess();
 		
 		super.destroy();
 	}

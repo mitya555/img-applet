@@ -66,21 +66,21 @@ public class JarLib{
         ){
         File   dir    = new File(System.getProperty("java.io.tmpdir"),"img_applet");
         dir.mkdirs();
-        File[] files=dir.listFiles();
-        for(int i=0;i<files.length;i++){                          // delete all unused library copies
-          if(files[i].getName().endsWith(filename)){              // if library is still needed we won't be able to delete it
-            files[i].delete();                     
-          }
-        }
         File   tmp;
         if (shared) {
           tmp    = new File(dir, "img_applet_" + filename);
           tmp.createNewFile();
         }else{
+          File[] files=dir.listFiles();
+          for(int i=0;i<files.length;i++){                          // delete all unused library copies
+            if(files[i].getName().endsWith(filename)){              // if library is still needed we won't be able to delete it
+              files[i].delete();                     
+            }
+          }
           tmp    = File.createTempFile("img_applet_",filename,dir);  // System.out.println(tmp.getAbsolutePath());
+          tmp.deleteOnExit();
         }
         System.out.println("JarLib.getFile: Jar file location: " + tmp.getAbsolutePath());  
-        tmp.deleteOnExit();
         if (tmp.length() == 0L)
           JarLib.extract(tmp,url);
         System.out.println("JarLib.getFile: Successfully loaded file ["+url+"] from jar file location");  
