@@ -21,7 +21,6 @@ import javax.xml.bind.DatatypeConverter;
 
 import ffmpeg.FFmpeg;
 
-
 @SuppressWarnings("serial")
 public class ImgApplet extends JApplet implements Runnable {
 	
