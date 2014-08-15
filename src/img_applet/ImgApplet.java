@@ -15,12 +15,6 @@ import java.util.Arrays;
 //import java.util.Map;
 
 
-
-
-
-
-
-
 import javax.swing.JApplet;
 import javax.swing.SwingUtilities;
 import javax.xml.bind.DatatypeConverter;
@@ -31,7 +25,7 @@ import ffmpeg.FFmpeg;
 @SuppressWarnings("serial")
 public class ImgApplet extends JApplet implements Runnable {
 	
-	private String rtmp;
+	private String rtmp, qscale;
 	private Process ffmp;
 	private Thread ffmt;
 //	private volatile boolean ffm_stop;
@@ -65,6 +59,8 @@ public class ImgApplet extends JApplet implements Runnable {
 //		System.out.println(FFmpeg.exe.getAbsolutePath());
 //		console.append(FFmpeg.exe.getAbsolutePath() + "\n");
 	}
+	
+	private boolean tryParseFloat(String val) { try { Float.parseFloat(val); return true; } catch (Throwable ex) { return false; } }
 
 	@Override
 	public void init() {
@@ -72,6 +68,9 @@ public class ImgApplet extends JApplet implements Runnable {
 		super.init();
 		
 		this.rtmp = getParameter("rtmp");
+		this.qscale = getParameter("qscale");
+		if (!tryParseFloat(this.qscale))
+			this.qscale = "0.0";
 		
         //Execute a job on the event-dispatching thread:
         //creating this applet's GUI.
@@ -89,7 +88,14 @@ public class ImgApplet extends JApplet implements Runnable {
 		
 		super.start();
 		
-		ProcessBuilder pb = new ProcessBuilder(FFmpeg.exe.getAbsolutePath(), /*"-analyzeduration", "1000", "-probesize", "1000",*/ "-f", "flv", /*"-flv_metadata", "1",*/ "-i", rtmp, "-an", "-c:v", "mjpeg", "-f", "mjpeg", "pipe:1");
+		if (this.ffmt != null && this.ffmt.isAlive())
+			return;
+		
+		ProcessBuilder pb = new ProcessBuilder(FFmpeg.exe.getAbsolutePath(),
+				/*"-analyzeduration", "1000", "-probesize", "1000",*/
+				"-f", "flv", /*"-flv_metadata", "1",*/ "-i", rtmp,
+				"-an", "-c:v", "mjpeg", "-q:v", qscale, "-f", "mjpeg",
+				"pipe:1");
 //		Map<String, String> env = pb.environment();
 //		env.put("VAR1", "myValue");
 //		env.remove("OTHERVAR");
@@ -174,6 +180,8 @@ public class ImgApplet extends JApplet implements Runnable {
 		sb.setLength(sb_len);
 		return sb.append(DatatypeConverter.printBase64Binary(Arrays.copyOf(sn1 > sn2 ? b1 : b2, sn1 > sn2 ? l1 : l2))).toString();
 	}
+	
+	public int getSN() { return sn; }
 
 	@Override
 	public void stop() {
