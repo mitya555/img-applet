@@ -89,7 +89,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		
 		super.start();
 		
-		ProcessBuilder pb = new ProcessBuilder(FFmpeg.exe.getAbsolutePath(), /*"-f", "mp4",*/ "-i", rtmp, "-map", "0:0", "-c:v", "mjpeg", "-f", "mjpeg", "pipe:1");
+		ProcessBuilder pb = new ProcessBuilder(FFmpeg.exe.getAbsolutePath(), /*"-analyzeduration", "1000", "-probesize", "1000",*/ "-f", "flv", /*"-flv_metadata", "1",*/ "-i", rtmp, "-an", "-c:v", "mjpeg", "-f", "mjpeg", "pipe:1");
 //		Map<String, String> env = pb.environment();
 //		env.put("VAR1", "myValue");
 //		env.remove("OTHERVAR");
