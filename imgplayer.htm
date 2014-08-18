@@ -37,7 +37,8 @@ script>-->
        archive="img-applet.jar"
        code="img_applet.ImgApplet"
        pluginspage="http://java.com/download/"
-       rtmp="rtmp://localhost/rtmp/webcam" />
+       rtmp="rtmp://localhost/rtmp/webcam"
+       qscale="0.0" />
 
 <img id="image" width="320" height="240" style="visibility: hidden; display: none;"></img>
 <br />
@@ -71,10 +72,12 @@ function animate() {
 }
 
 function render() {
-	var sn_ = applet.getSN();
-	if ( sn_ > sn ) {
-		sn = sn_;
-		image.src = applet.getDataURI();
+	if (applet.getSN) {
+		var sn_ = applet.getSN();
+		if ( sn_ > sn ) {
+			sn = sn_;
+			image.src = applet.getDataURI();
+		}
 	}
 }
 
