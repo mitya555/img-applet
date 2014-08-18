@@ -31,6 +31,26 @@ if ( !window.requestAnimationFrame ) {
 		rtmp:		'rtmp://localhost/rtmp/webcam'
 	});*/
 script>-->
+<object id="img-applet-ie"
+  classid="clsid:8AD9C840-044E-11D1-B3E9-00805F499D93"
+  width="100" height="40">
+  <param name="archive" value="img-applet.jar">
+  <param name="code" value="img_applet.ImgApplet">
+  <param name="rtmp" value="rtmp://localhost/rtmp/webcam">
+  <param name="qscale" value="0.0">
+  <comment>
+    <embed id="img-applet"
+      type="application/x-java-applet"
+      width="100" height="40" 
+      archive="img-applet.jar"
+      code="img_applet.ImgApplet"
+      pluginspage="http://java.com/download/"
+      rtmp="rtmp://localhost/rtmp/webcam"
+      qscale="0.0" />
+    </comment>
+  </object>
+
+<!--
 <embed id="img-applet"
        type="application/x-java-applet"
        width="100" height="40" 
@@ -38,30 +58,41 @@ script>-->
        code="img_applet.ImgApplet"
        pluginspage="http://java.com/download/"
        rtmp="rtmp://localhost/rtmp/webcam"
-       qscale="0.0" />
+       qscale="0.0" />-->
 
-<img id="image" width="320" height="240" style="visibility: hidden; display: none;"></img>
+<img id="image" width="320" height="240" />
 <br />
-<canvas id="videoImage" width="320" height="240" style="visibility: visible;"></canvas>
+<canvas id="videoImage" width="320" height="240" style="visibility: hidden; display: none;"></canvas>
 
 <script>
 
 // global variables
-var image, videoImage, videoImageContext, applet, sn = 0;
+var image, videoImage, videoImageContext, applet, applet_ie, applet_, sn = 0;
 
 // assign variables to HTML elements
 image = document.getElementById( 'image' );
 videoImage = document.getElementById( 'videoImage' );
 videoImageContext = videoImage.getContext( '2d' );
 applet = document.getElementById( 'img-applet' );
+applet_ie = document.getElementById( 'img-applet-ie' );
+
+function checkApplet() {
+	if (!applet_) {
+		if (applet && applet.getSN) // Non IE browser
+			applet_ = applet;
+		else if (applet_ie && typeof(applet_ie.getSN) === "unknown") // IE
+			applet_ = applet_ie;
+	}
+	return applet_;
+}
 
 // background color if no video present
 videoImageContext.fillStyle = '#005337';
 videoImageContext.fillRect( 0, 0, videoImage.width, videoImage.height );				
 
-image.onload = function() {
-	videoImageContext.drawImage( image, 0, 0, videoImage.width, videoImage.height );
-};
+//image.onload = function() {
+//	videoImageContext.drawImage( image, 0, 0, videoImage.width, videoImage.height );
+//};
 
 // start the loop				
 animate();
@@ -72,15 +103,14 @@ function animate() {
 }
 
 function render() {
-	if (applet.getSN) {
-		var sn_ = applet.getSN();
+	if (checkApplet()) {
+		var sn_ = applet_.getSN();
 		if ( sn_ > sn ) {
 			sn = sn_;
-			image.src = applet.getDataURI();
+			image.src = applet_.getDataURI();
 		}
 	}
 }
-
 </script>
 
 </body>
