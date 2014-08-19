@@ -36,8 +36,10 @@ script>-->
   width="100" height="40">
   <param name="archive" value="img-applet.jar">
   <param name="code" value="img_applet.ImgApplet">
-  <param name="rtmp" value="rtmp://localhost/rtmp/webcam">
+  <!--<param name="rtmp" value="rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp">-->
+  <param name="rtmp" value="rtmp://10.44.41.97/rtmp/webcam">
   <param name="qscale" value="0.0">
+  <param name="debug" value="no">
   <comment>
     <embed id="img-applet"
       type="application/x-java-applet"
@@ -45,8 +47,9 @@ script>-->
       archive="img-applet.jar"
       code="img_applet.ImgApplet"
       pluginspage="http://java.com/download/"
-      rtmp="rtmp://localhost/rtmp/webcam"
-      qscale="0.0" />
+      rtmp="rtmp://10.44.41.97/rtmp/webcam"
+      qscale="0.0"
+      debug="no" />
     </comment>
   </object>
 
@@ -60,9 +63,9 @@ script>-->
        rtmp="rtmp://localhost/rtmp/webcam"
        qscale="0.0" />-->
 
-<img id="image" width="320" height="240" />
+<img id="image" width="320" height="240" style="visibility: hidden; display: none;" />
 <br />
-<canvas id="videoImage" width="320" height="240" style="visibility: hidden; display: none;"></canvas>
+<canvas id="videoImage" width="320" height="240"></canvas>
 
 <script>
 
@@ -78,9 +81,9 @@ applet_ie = document.getElementById( 'img-applet-ie' );
 
 function checkApplet() {
 	if (!applet_) {
-		if (applet && applet.getSN) // Non IE browser
+		if (applet && applet.getSN)
 			applet_ = applet;
-		else if (applet_ie && typeof(applet_ie.getSN) === "unknown") // IE
+		else if (applet_ie && typeof(applet_ie.getSN) === "unknown")
 			applet_ = applet_ie;
 	}
 	return applet_;
@@ -90,9 +93,9 @@ function checkApplet() {
 videoImageContext.fillStyle = '#005337';
 videoImageContext.fillRect( 0, 0, videoImage.width, videoImage.height );				
 
-//image.onload = function() {
-//	videoImageContext.drawImage( image, 0, 0, videoImage.width, videoImage.height );
-//};
+image.onload = function() {
+	videoImageContext.drawImage( image, 0, 0, videoImage.width, videoImage.height );
+};
 
 // start the loop				
 animate();
@@ -105,10 +108,10 @@ function animate() {
 function render() {
 	if (checkApplet()) {
 		var sn_ = applet_.getSN();
-		if ( sn_ > sn ) {
-			sn = sn_;
-			image.src = applet_.getDataURI();
-		}
+		if ( sn_ == sn )
+			return;
+		sn = sn_;
+		image.src = applet_.getDataURI();
 	}
 }
 </script>

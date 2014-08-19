@@ -8,11 +8,13 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 //import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 //import java.io.OutputStreamWriter;
 //import java.io.InputStreamReader;
 import java.util.Arrays;
 //import java.util.Map;
+
 
 
 import javax.swing.JApplet;
@@ -59,12 +61,21 @@ public class ImgApplet extends JApplet implements Runnable {
 //		console.append(FFmpeg.exe.getAbsolutePath() + "\n");
 	}
 	
-	private boolean tryParseFloat(String val) { try { Float.parseFloat(val); return true; } catch (Throwable ex) { return false; } }
+	private static boolean tryParseFloat(String val) { try { Float.parseFloat(val); return true; } catch (Throwable ex) { return false; } }
+    private static boolean strEmpty(String str) { return str == null || str.length() == 0; }
+    private static boolean isNo(String str) { return strEmpty(str) || "No".equalsIgnoreCase(str) || "False".equalsIgnoreCase(str); }
+
+    private static boolean DEBUG = true;
+    private static void debug(String dbg) { if (DEBUG) System.out.println(dbg); }
+    private static void debug(String dbg, String inf) { if (DEBUG) System.out.println(dbg); else System.out.println(inf); }
+
 
 	@Override
 	public void init() {
 		
 		super.init();
+		
+		DEBUG = !isNo(getParameter("debug"));
 		
 		this.rtmp = getParameter("rtmp");
 		this.qscale = getParameter("qscale");
@@ -103,9 +114,13 @@ public class ImgApplet extends JApplet implements Runnable {
 //		File log = new File("log");
 //		pb.redirectErrorStream(true);
 //		pb.redirectOutput(ProcessBuilder.Redirect.appendTo(log));
-		pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+//		assert pb.redirectInput() == ProcessBuilder.Redirect.PIPE;
+//		assert pb.redirectOutput().file() == log;
+		if (!DEBUG)
+			pb.redirectError(ProcessBuilder.Redirect.INHERIT);
 		try {
 			this.ffmp = pb.start();
+			System.out.println("FFMPEG process started.");
 			this.ffmt = new Thread(new Runnable() {
 				@Override
 				public void run() {
@@ -127,7 +142,7 @@ public class ImgApplet extends JApplet implements Runnable {
 							} catch (IOException e) {
 								e.printStackTrace();
 							}
-						System.out.println("Thread processing output from ffmpeg is ending...");
+						debug("Thread processing output from ffmpeg is ending...");
 					}
 					finally {
 						if (in_ != null)
@@ -136,7 +151,7 @@ public class ImgApplet extends JApplet implements Runnable {
 							} catch (IOException e) {
 								e.printStackTrace();
 							}
-						System.out.println("Thread processing output from ffmpeg has ended.");
+						debug("Thread processing output from ffmpeg has ended.", "FFMPEG process terminated.");
 					}
 				}
 			});
@@ -144,9 +159,25 @@ public class ImgApplet extends JApplet implements Runnable {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-//		assert pb.redirectInput() == ProcessBuilder.Redirect.PIPE;
-//		assert pb.redirectOutput().file() == log;
-//		assert p.getInputStream().read() == -1;
+//		assert ffmp.getInputStream().read() == -1;
+		if (DEBUG)
+			new Thread(new Runnable() {
+				@Override
+				public void run() {
+					int res, prev = 0;
+					InputStream in_ = ffmp.getErrorStream();
+					try {
+						while ((res = in_.read()) != -1) {
+							if (prev == 13 && res != 10)
+								System.out.write(10);
+							System.out.write(res);
+							prev = res;
+						}
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+				}
+			}).start();
 	}
 
 	private void quitProcess() {
