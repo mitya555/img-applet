@@ -10,12 +10,15 @@ import java.awt.event.ActionListener;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 //import java.io.OutputStreamWriter;
 //import java.io.InputStreamReader;
 import java.util.Arrays;
 //import java.util.Map;
 
 
+
+import java.util.List;
 
 import javax.swing.JApplet;
 import javax.swing.SwingUtilities;
@@ -26,7 +29,8 @@ import ffmpeg.FFmpeg;
 @SuppressWarnings("serial")
 public class ImgApplet extends JApplet implements Runnable {
 	
-	private String rtmp, qscale;
+	private String rtmp, qscale, vsync;
+	private boolean re; 
 	private Process ffmp;
 	private Thread ffmt;
 //	private volatile boolean ffm_stop;
@@ -81,6 +85,10 @@ public class ImgApplet extends JApplet implements Runnable {
 		this.qscale = getParameter("qscale");
 		if (!tryParseFloat(this.qscale))
 			this.qscale = "0.0";
+		this.vsync = getParameter("vsync");
+		if (strEmpty(this.vsync))
+			this.vsync = "-1"; // "auto"
+		this.re = !isNo(getParameter("re"));
 		
         //Execute a job on the event-dispatching thread:
         //creating this applet's GUI.
@@ -101,11 +109,17 @@ public class ImgApplet extends JApplet implements Runnable {
 		if (this.ffmt != null && this.ffmt.isAlive())
 			return;
 		
-		ProcessBuilder pb = new ProcessBuilder(FFmpeg.exe.getAbsolutePath(),
+		List<String> command = new ArrayList<String>();
+		command.add(FFmpeg.exe.getAbsolutePath());
+		if (this.re)
+			command.add("-re");
+		command.addAll(Arrays.asList(new String[] {
 				/*"-analyzeduration", "1000", "-probesize", "1000",*/
 				"-f", "flv", /*"-flv_metadata", "1",*/ "-i", rtmp,
-				"-an", "-c:v", "mjpeg", "-q:v", qscale, "-f", "mjpeg",
-				"pipe:1");
+				"-an", "-c:v", "mjpeg", "-q:v", qscale, "-vsync", vsync,
+				"-f", "mjpeg", "pipe:1"
+		}));
+		ProcessBuilder pb = new ProcessBuilder(command);
 //		Map<String, String> env = pb.environment();
 //		env.put("VAR1", "myValue");
 //		env.remove("OTHERVAR");
