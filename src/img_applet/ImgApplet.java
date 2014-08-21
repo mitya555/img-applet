@@ -34,7 +34,7 @@ public class ImgApplet extends JApplet implements Runnable {
 	private Process ffmp;
 	private Thread ffmt;
 //	private volatile boolean ffm_stop;
-	private static final int MAX_FRAME_SIZE = 100000;
+	private static final int MAX_FRAME_SIZE = 300000;
 	private volatile byte[] b1 = new byte[MAX_FRAME_SIZE], b2 = new byte[MAX_FRAME_SIZE];
 	private volatile int sn, sn1, sn2, l1, l2;
 
@@ -138,7 +138,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			this.ffmt = new Thread(new Runnable() {
 				@Override
 				public void run() {
-					sn = sn1 = sn2 = 0;
+					sn = sn1 = sn2 = prev_sn = 0;
 					int res = 0;
 					MjpegInputStream in_ = null;
 					try {
@@ -179,14 +179,26 @@ public class ImgApplet extends JApplet implements Runnable {
 				@Override
 				public void run() {
 					int res, prev = 0;
+					byte[] buf = new byte[500];
+					int ptr = 0;
 					InputStream in_ = ffmp.getErrorStream();
 					try {
 						while ((res = in_.read()) != -1) {
-							if (prev == 13 && res != 10)
-								System.out.write(10);
-							System.out.write(res);
+							if (prev == 13 && res != 10) {
+//								System.out.write(10);
+								buf[ptr++] = 10;
+								System.out.write(buf, 0, ptr);
+								ptr = 0;
+							}
+//							System.out.write(res);
+							buf[ptr++] = (byte)res;
+							if (ptr == 500 || res == 10) {
+								System.out.write(buf, 0, ptr);
+								ptr = 0;
+							}
 							prev = res;
 						}
+						System.out.write(buf, 0, ptr);
 					} catch (IOException e) {
 						e.printStackTrace();
 					}
@@ -217,10 +229,17 @@ public class ImgApplet extends JApplet implements Runnable {
 	
 	private StringBuilder sb = new StringBuilder("data:image/jpeg;base64,");
 	private int sb_len = sb.length();
-	
+	private int prev_sn;
 	public String getDataURI() {
 		if (sn1 == 0 && sn2 == 0)
 			return null;
+//		if (DEBUG) {
+//			int cur_sn = sn1 > sn2 ? sn1 : sn2;
+//			if (cur_sn - prev_sn > 1) {
+//				System.out.println("ImgApplet.getDataURI(): Dropped frames ## " + (prev_sn + 1) + " - " + (cur_sn - 1));
+//			}
+//			prev_sn = cur_sn;
+//		}
 		sb.setLength(sb_len);
 		return sb.append(DatatypeConverter.printBase64Binary(Arrays.copyOf(sn1 > sn2 ? b1 : b2, sn1 > sn2 ? l1 : l2))).toString();
 	}
