@@ -47,9 +47,11 @@ script>-->
       archive="img-applet.jar"
       code="img_applet.ImgApplet"
       pluginspage="http://java.com/download/"
-      rtmp="rtmp://10.44.41.97/rtmp/webcam"
+      rtmp="rtmp://85.132.78.6:1935/live/muztv.stream"
+      re="yes"
       qscale="0.0"
-      debug="no" />
+      vsync="0"
+      debug="yes" />
     </comment>
   </object>
 
@@ -63,9 +65,9 @@ script>-->
        rtmp="rtmp://localhost/rtmp/webcam"
        qscale="0.0" />-->
 
-<img id="image" width="320" height="240" style="visibility: hidden; display: none;" />
+<img id="image" width="1047" height="576" style="visibility: hidden; display: none;" />
 <br />
-<canvas id="videoImage" width="320" height="240"></canvas>
+<canvas id="videoImage" width="1047" height="576"></canvas>
 
 <script>
 
