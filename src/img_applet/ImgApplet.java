@@ -29,8 +29,8 @@ import ffmpeg.FFmpeg;
 @SuppressWarnings("serial")
 public class ImgApplet extends JApplet implements Runnable {
 	
-	private String rtmp, qscale, vsync;
-	private boolean re; 
+//	private String rtmp, qscale, vsync;
+//	private boolean re; 
 	private Process ffmp;
 	private Thread ffmt;
 //	private volatile boolean ffm_stop;
@@ -67,12 +67,19 @@ public class ImgApplet extends JApplet implements Runnable {
 	
 	private static boolean tryParseFloat(String val) { try { Float.parseFloat(val); return true; } catch (Throwable ex) { return false; } }
     private static boolean strEmpty(String str) { return str == null || str.length() == 0; }
-    private static boolean isNo(String str) { return strEmpty(str) || "No".equalsIgnoreCase(str) || "False".equalsIgnoreCase(str); }
+    private static boolean isNo(String str) { return str == null || "No".equalsIgnoreCase(str) || "False".equalsIgnoreCase(str); }
 
     private static boolean DEBUG = true;
     private static void debug(String dbg) { if (DEBUG) System.out.println(dbg); }
     private static void debug(String dbg, String inf) { if (DEBUG) System.out.println(dbg); else System.out.println(inf); }
 
+    private class BufferedConsoleOut
+    {
+		private byte[] buf = new byte[500];
+		private int ptr = 0;
+		public void flush() { System.out.write(buf, 0, ptr); ptr = 0; }
+		public void write(int b) { buf[ptr++] = (byte)b; if (b == 10 || ptr == 500) flush(); }
+    }
 
 	@Override
 	public void init() {
@@ -81,14 +88,14 @@ public class ImgApplet extends JApplet implements Runnable {
 		
 		DEBUG = !isNo(getParameter("debug"));
 		
-		this.rtmp = getParameter("rtmp");
-		this.qscale = getParameter("qscale");
-		if (!tryParseFloat(this.qscale))
-			this.qscale = "0.0";
-		this.vsync = getParameter("vsync");
-		if (strEmpty(this.vsync))
-			this.vsync = "-1"; // "auto"
-		this.re = !isNo(getParameter("re"));
+//		this.rtmp = getParameter("rtmp");
+//		this.qscale = getParameter("qscale");
+//		if (!tryParseFloat(this.qscale))
+//			this.qscale = "0.0";
+//		this.vsync = getParameter("vsync");
+//		if (strEmpty(this.vsync))
+//			this.vsync = "-1"; // "auto"
+//		this.re = !isNo(getParameter("re"));
 		
         //Execute a job on the event-dispatching thread:
         //creating this applet's GUI.
@@ -101,6 +108,20 @@ public class ImgApplet extends JApplet implements Runnable {
 		SwingUtilities.invokeLater(this);
 	}
 
+	private void addOptNV(String param, String opt, List<String> command, String dflt) {
+		String _param = getParameter("_" + param);
+		if (!strEmpty(_param) || !strEmpty(dflt)) {
+			if (!strEmpty(opt))
+				command.add("-" + opt);
+			command.add(!strEmpty(_param) ? _param : dflt);
+		}
+	}
+	private void addOptNV(String param, String opt, List<String> command) { addOptNV(param, opt, command, null); }
+	private void addOptNV(String name, List<String> command, String dflt) { addOptNV(name, name, command, dflt); }
+	private void addOptNV(String name, List<String> command) { addOptNV(name, command, null); }
+	private void addOpt_V(String name, List<String> command, String dflt) { addOptNV(name, null, command, dflt); }
+	private void addOptN_(String name, List<String> command) { if (!isNo(getParameter("_" + name))) command.add("-" + name); }
+	
 	@Override
 	public void start() {
 		
@@ -111,14 +132,25 @@ public class ImgApplet extends JApplet implements Runnable {
 		
 		List<String> command = new ArrayList<String>();
 		command.add(FFmpeg.exe.getAbsolutePath());
-		if (this.re)
-			command.add("-re");
-		command.addAll(Arrays.asList(new String[] {
-				/*"-analyzeduration", "1000", "-probesize", "1000",*/
-				"-f", "flv", /*"-flv_metadata", "1",*/ "-i", rtmp,
-				"-an", "-c:v", "mjpeg", "-q:v", qscale, "-vsync", vsync,
-				"-f", "mjpeg", "pipe:1"
-		}));
+//		command.addAll(Arrays.asList(new String[] {
+//				/*"-analyzeduration", "1000", "-probesize", "1000",*/
+//				"-f", "flv", /*"-flv_metadata", "1",*/ "-i", rtmp,
+//				"-an", "-c:v", "mjpeg", "-q:v", qscale, "-vsync", vsync,
+//				"-f", "mjpeg", "pipe:1"
+//		}));
+		addOptN_("re", command);
+		addOptNV("analyzeduration", command);
+		addOptNV("probesize", command);
+		addOptNV("f:i", "f", command);
+		addOptNV("flv_metadata", command);
+		addOptNV("i", command);
+		addOptN_("an", command);
+		addOptNV("c:v", command);
+		addOptNV("q:v", command);
+		addOptNV("vsync", command);
+		addOptNV("f:o", "f", command);
+		addOpt_V("o", command, "pipe:1");
+
 		ProcessBuilder pb = new ProcessBuilder(command);
 //		Map<String, String> env = pb.environment();
 //		env.put("VAR1", "myValue");
@@ -179,26 +211,19 @@ public class ImgApplet extends JApplet implements Runnable {
 				@Override
 				public void run() {
 					int res, prev = 0;
-					byte[] buf = new byte[500];
-					int ptr = 0;
+					BufferedConsoleOut conOut = new BufferedConsoleOut();
 					InputStream in_ = ffmp.getErrorStream();
 					try {
 						while ((res = in_.read()) != -1) {
 							if (prev == 13 && res != 10) {
 //								System.out.write(10);
-								buf[ptr++] = 10;
-								System.out.write(buf, 0, ptr);
-								ptr = 0;
+								conOut.write(10);
 							}
 //							System.out.write(res);
-							buf[ptr++] = (byte)res;
-							if (ptr == 500 || res == 10) {
-								System.out.write(buf, 0, ptr);
-								ptr = 0;
-							}
+							conOut.write(res);
 							prev = res;
 						}
-						System.out.write(buf, 0, ptr);
+						conOut.flush();
 					} catch (IOException e) {
 						e.printStackTrace();
 					}
