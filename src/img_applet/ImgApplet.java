@@ -37,6 +37,14 @@ public class ImgApplet extends JApplet implements Runnable {
 	private static final int MAX_FRAME_SIZE = 300000;
 	private volatile byte[] b1 = new byte[MAX_FRAME_SIZE], b2 = new byte[MAX_FRAME_SIZE];
 	private volatile int sn, sn1, sn2, l1, l2;
+	
+	private void addButton(String label, ActionListener click) {
+		Button button = new Button();
+		getContentPane().add(button);
+		button.addActionListener(click);
+		button.setLabel(label);
+		button.setEnabled(true);
+	}
 
 	@Override
 	public void run() {
@@ -44,28 +52,22 @@ public class ImgApplet extends JApplet implements Runnable {
 		FlowLayout cont = new FlowLayout(FlowLayout.CENTER, 10, 10);
 		getContentPane().setLayout(cont);
 		
-		Button button = new Button();
-		getContentPane().add(button);
-		button.addActionListener(new ActionListener() {
+		addButton("Stop", new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) { stop(); }
 		});
-		button.setLabel("Stop");
 		
-		button = new Button();
-		getContentPane().add(button);
-		button.addActionListener(new ActionListener() {
+		addButton("Start", new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) { start(); }
 		});
-		button.setLabel("Start");
 		
 		getContentPane().setBackground(Color.WHITE);
 //		System.out.println(FFmpeg.exe.getAbsolutePath());
 //		console.append(FFmpeg.exe.getAbsolutePath() + "\n");
 	}
 	
-	private static boolean tryParseFloat(String val) { try { Float.parseFloat(val); return true; } catch (Throwable ex) { return false; } }
+//	private static boolean tryParseFloat(String val) { try { Float.parseFloat(val); return true; } catch (Throwable ex) { return false; } }
     private static boolean strEmpty(String str) { return str == null || str.length() == 0; }
     private static boolean isNo(String str) { return str == null || "No".equalsIgnoreCase(str) || "False".equalsIgnoreCase(str); }
 
@@ -75,10 +77,15 @@ public class ImgApplet extends JApplet implements Runnable {
 
     private class BufferedConsoleOut
     {
-		private byte[] buf = new byte[500];
-		private int ptr = 0;
-		public void flush() { System.out.write(buf, 0, ptr); ptr = 0; }
-		public void write(int b) { buf[ptr++] = (byte)b; if (b == 10 || ptr == 500) flush(); }
+    	public BufferedConsoleOut(OutputStream out, int len) { this.out = out; buf = new byte[len]; }
+    	public BufferedConsoleOut(OutputStream out) { this(out, 500); }
+    	public BufferedConsoleOut() { this(System.out); }    	
+    	private OutputStream out;
+		private byte[] buf;
+		private int len = 0;
+		public void flush() throws IOException { if (len > 0) out.write(buf, 0, len); len = 0; }
+		public void write(int b) throws IOException { buf[len++] = (byte)b; if (b == 10 || len == 500) flush(); }
+		public void println(String s) throws IOException { for (byte b : s.getBytes()) write(b); write(13); write(10); }
     }
 
 	@Override
@@ -108,9 +115,10 @@ public class ImgApplet extends JApplet implements Runnable {
 		SwingUtilities.invokeLater(this);
 	}
 
+	private static final String PARAM_PREFIX = "ffmpeg-"; 
 	private void addOptNV(String param, String opt, List<String> command, String dflt) {
-		String _param = getParameter("_" + param);
-		if (!strEmpty(_param) || !strEmpty(dflt)) {
+		String _param = getParameter(PARAM_PREFIX + param);
+		if (!strEmpty(_param) || (_param == null && !strEmpty(dflt))) {
 			if (!strEmpty(opt))
 				command.add("-" + opt);
 			command.add(!strEmpty(_param) ? _param : dflt);
@@ -118,9 +126,9 @@ public class ImgApplet extends JApplet implements Runnable {
 	}
 	private void addOptNV(String param, String opt, List<String> command) { addOptNV(param, opt, command, null); }
 	private void addOptNV(String name, List<String> command, String dflt) { addOptNV(name, name, command, dflt); }
-	private void addOptNV(String name, List<String> command) { addOptNV(name, command, null); }
+	private void addOptNV(String name, List<String> command) { addOptNV(name, name, command); }
 	private void addOpt_V(String name, List<String> command, String dflt) { addOptNV(name, null, command, dflt); }
-	private void addOptN_(String name, List<String> command) { if (!isNo(getParameter("_" + name))) command.add("-" + name); }
+	private void addOptN_(String name, List<String> command) { if (!isNo(getParameter(PARAM_PREFIX + name))) command.add("-" + name); }
 	
 	@Override
 	public void start() {
@@ -138,18 +146,22 @@ public class ImgApplet extends JApplet implements Runnable {
 //				"-an", "-c:v", "mjpeg", "-q:v", qscale, "-vsync", vsync,
 //				"-f", "mjpeg", "pipe:1"
 //		}));
-		addOptN_("re", command);
 		addOptNV("analyzeduration", command);
 		addOptNV("probesize", command);
-		addOptNV("f:i", "f", command);
+		addOptN_("re", command);
+		addOptNV("f:i", "f", command, "flv");
 		addOptNV("flv_metadata", command);
 		addOptNV("i", command);
 		addOptN_("an", command);
-		addOptNV("c:v", command);
+		addOptN_("vn", command);
+		addOptNV("c:v", command, "mjpeg");
 		addOptNV("q:v", command);
 		addOptNV("vsync", command);
-		addOptNV("f:o", "f", command);
+		addOptNV("f:o", "f", command, "mjpeg");
+		addOptNV("muxdelay", command);
+		addOptNV("muxpreload", command);
 		addOpt_V("o", command, "pipe:1");
+		addOptNV("loglevel", command);
 
 		ProcessBuilder pb = new ProcessBuilder(command);
 //		Map<String, String> env = pb.environment();
@@ -166,7 +178,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			pb.redirectError(ProcessBuilder.Redirect.INHERIT);
 		try {
 			this.ffmp = pb.start();
-			System.out.println("FFMPEG process started.");
+			debug(">" + command, "FFMPEG process started.");
 			this.ffmt = new Thread(new Runnable() {
 				@Override
 				public void run() {
@@ -238,8 +250,8 @@ public class ImgApplet extends JApplet implements Runnable {
 				out_.write('q');
 				out_.flush();
 			}
-		} catch (IOException e1) {
-			e1.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
 	}
 
@@ -255,16 +267,17 @@ public class ImgApplet extends JApplet implements Runnable {
 	private StringBuilder sb = new StringBuilder("data:image/jpeg;base64,");
 	private int sb_len = sb.length();
 	private int prev_sn;
-	public String getDataURI() {
+	private BufferedConsoleOut getDataUriErr = new BufferedConsoleOut(System.err); 
+	public String getDataURI() throws IOException {
 		if (sn1 == 0 && sn2 == 0)
 			return null;
-//		if (DEBUG) {
-//			int cur_sn = sn1 > sn2 ? sn1 : sn2;
-//			if (cur_sn - prev_sn > 1) {
-//				System.out.println("ImgApplet.getDataURI(): Dropped frames ## " + (prev_sn + 1) + " - " + (cur_sn - 1));
-//			}
-//			prev_sn = cur_sn;
-//		}
+		if (DEBUG) {
+			int cur_sn = sn1 > sn2 ? sn1 : sn2;
+			if (cur_sn - prev_sn > 1) {
+				getDataUriErr.println("Dropped frame" + (cur_sn - prev_sn == 2 ? " " + (cur_sn - 1) : "s " + (prev_sn + 1) + " - " + (cur_sn - 1)));
+			}
+			prev_sn = cur_sn;
+		}
 		sb.setLength(sb_len);
 		return sb.append(DatatypeConverter.printBase64Binary(Arrays.copyOf(sn1 > sn2 ? b1 : b2, sn1 > sn2 ? l1 : l2))).toString();
 	}
