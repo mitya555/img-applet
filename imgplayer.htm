@@ -36,7 +36,7 @@ script>-->
   width="100" height="40">
   <param name="archive" value="img-applet.jar">
   <param name="code" value="img_applet.ImgApplet">
-  <param name="ffmpeg-re" value="yes">
+  <param name="ffmpeg-re" value="">
   <!--<param name="ffmpeg-muxpreload" value="10">
   <param name="ffmpeg-muxdelay" value="10">-->
   <param name="ffmpeg-f:i" value="">
@@ -45,8 +45,7 @@ script>-->
   <!--<param name="ffmpeg-i" value="rtmp://85.132.78.6:1935/live/muztv.stream">-->
   <param name="ffmpeg-i" value="http://83.139.104.101/Content/HLS/Live/Channel(Sk_1)/index.m3u8">
   <param name="ffmpeg-q:v" value="0.0">
-  <!--
-‘-vsync parameter’
+  <!-- ‘-vsync parameter’
     Video sync method. For compatibility reasons old values can be specified as numbers. 
     Newly added values will have to be specified as strings always.
     ‘0, passthrough’ - Each frame is passed with its timestamp from the demuxer to the muxer. 
@@ -65,7 +64,7 @@ script>-->
       archive="img-applet.jar"
       code="img_applet.ImgApplet"
       pluginspage="http://java.com/download/"
-      ffmpeg-re="yes"
+      ffmpeg-re=""
       ffmpeg-i="rtmp://85.132.78.6:1935/live/muztv.stream"
       ffmpeg-q:v="0.0"
       ffmpeg-vsync="0"
@@ -90,6 +89,8 @@ script>-->
 
 <script>
 
+var width = 1024, height = 576;
+
 // global variables
 var image, videoImage, videoImageContext, applet, applet_ie, applet_, sn = 0, last_img = -1;
 
@@ -99,6 +100,9 @@ videoImage = document.getElementById( 'videoImage' );
 videoImageContext = videoImage.getContext( '2d' );
 applet = document.getElementById( 'img-applet' );
 applet_ie = document.getElementById( 'img-applet-ie' );
+
+image[0].width = image[1].width = videoImage.width = width;
+image[0].height = image[1].height = videoImage.height = height;
 
 function checkApplet() {
 	if (!applet_) {

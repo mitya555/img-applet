@@ -33,15 +33,120 @@ import ffmpeg.FFmpeg;
 @SuppressWarnings("serial")
 public class ImgApplet extends JApplet implements Runnable {
 	
+	private class Buffer
+	{
+		public volatile byte[] b;
+		public volatile int sn, len;
+		public final int size;
+		public Buffer(int size) { b = new byte[this.size = size]; }
+	}
+	
+	private abstract class MultiBuffer
+	{
+		protected volatile int sn;
+		abstract void reset();
+		abstract int read(InputStream in) throws IOException;
+		abstract int getSN();
+		abstract byte[] getBytes() throws IOException;
+	}
+	
+	private class DoubleBuffer extends MultiBuffer
+	{
+		private Buffer b1 = new Buffer(MAX_FRAME_SIZE), b2 = new Buffer(MAX_FRAME_SIZE);
+		@Override
+		public void reset() { b1.sn = b2.sn = sn = prev_sn = 0; }
+		@Override
+		public int read(InputStream in) throws IOException {
+			int res;
+			if (b1.sn <= b2.sn) {
+				res = b1.len = in.read(b1.b);
+				b1.sn = ++sn;
+			}
+			else {
+				res = b2.len = in.read(b2.b);
+				b2.sn = ++sn;
+			}
+			return res;
+		}
+		private int prev_sn;
+		private BufferedConsoleOut errOut = new BufferedConsoleOut(System.err); 
+		@Override
+		int getSN() { return sn; }
+		@Override
+		public byte[] getBytes() throws IOException {
+			if (DEBUG) {
+				if (sn - prev_sn > 1) {
+					errOut.println("Dropped frame" + (sn - prev_sn == 2 ? " " + (sn - 1) : "s " + (prev_sn + 1) + " - " + (sn - 1)));
+				}
+				prev_sn = sn;
+			}
+			return Arrays.copyOf(b1.sn > b2.sn ? b1.b : b2.b, b1.sn > b2.sn ? b1.len : b2.len);
+		}
+	}
+	
+	private class BufferList extends MultiBuffer
+	{
+		private class _List
+		{
+			private class _ListItem { public volatile _ListItem next; public Object obj; public _ListItem(Object obj) { this.obj = obj; } }
+			private _ListItem head, tail;
+			public synchronized void add(Object o) { if (head == null) head = tail = new _ListItem(o); else { tail.next = new _ListItem(o); tail = tail.next;  } }
+			public synchronized Object remove() { Object ret = null; if (head != null) { ret = head.obj; head = head.next; } return ret; }
+		}
+		private _List filledBufferList = new _List(), emptyBufferList = new _List();
+		private Buffer currentBuffer;
+		private int bufferCount;
+		@Override
+		void reset() {
+			while (filledBufferList.remove() != null) {}
+			while (emptyBufferList.remove() != null) {}
+			currentBuffer = null;
+			sn = bufferCount = 0;
+		}
+		@Override
+		int read(InputStream in) throws IOException {
+			Buffer buf = (Buffer)emptyBufferList.remove();
+			if (buf == null) {
+				buf = new Buffer(MAX_FRAME_SIZE);
+				bufferCount++;
+			}
+			int res = buf.len = in.read(buf.b);
+			buf.sn = ++sn;
+			filledBufferList.add(buf);
+			return res;
+		}
+		@Override
+		int getSN() {
+			if (currentBuffer == null)
+				currentBuffer = (Buffer)filledBufferList.remove();
+			if (currentBuffer != null)
+				return currentBuffer.sn;
+			return 0;
+		}
+		@Override
+		byte[] getBytes() throws IOException {
+			if (currentBuffer == null)
+				currentBuffer = (Buffer)filledBufferList.remove();
+			if (currentBuffer != null) {
+				byte[] ret = Arrays.copyOf(currentBuffer.b, currentBuffer.len);
+				emptyBufferList.add(currentBuffer);
+				currentBuffer = null;
+				return ret;
+			}
+			return null;
+		}
+	}
+
 //	private String rtmp, qscale, vsync;
 //	private boolean re; 
 	private Process ffmp;
 	private Thread ffmt;
 //	private volatile boolean ffm_stop;
+
 	private static final int MAX_FRAME_SIZE = 300000;
-	private volatile byte[] b1 = new byte[MAX_FRAME_SIZE], b2 = new byte[MAX_FRAME_SIZE];
-	private volatile int sn, sn1, sn2, l1, l2;
-	
+
+	private MultiBuffer multiBuffer = new DoubleBuffer();
+
 	private void addButton(String label, ActionListener click) {
 		Button button = new Button();
 		getContentPane().add(button);
@@ -202,7 +307,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			this.ffmt = new Thread(new Runnable() {
 				@Override
 				public void run() {
-					sn = sn1 = sn2 = prev_sn = 0;
+					multiBuffer.reset();
 					int res = 0;
 					FilterInputStream in_ = null;
 					try {
@@ -210,14 +315,7 @@ public class ImgApplet extends JApplet implements Runnable {
 							new BufferedInputStream(ffmp.getInputStream(), 1);
 						while (res != -1/* && !ffm_stop*/)
 							try {
-								if (sn1 <= sn2) {
-									res = l1 = in_.read(b1);
-									sn1 = ++sn;
-								}
-								else {
-									res = l2 = in_.read(b2);
-									sn2 = ++sn;
-								}
+								res = multiBuffer.read(in_);
 							} catch (IOException e) {
 								e.printStackTrace();
 							}
@@ -287,23 +385,14 @@ public class ImgApplet extends JApplet implements Runnable {
 	
 	private StringBuilder sb = new StringBuilder("data:image/jpeg;base64,");
 	private int sb_len = sb.length();
-	private int prev_sn;
-	private BufferedConsoleOut getDataUriErr = new BufferedConsoleOut(System.err); 
 	public String getDataURI() throws IOException {
-		if (sn1 == 0 && sn2 == 0)
+		if (multiBuffer.getSN() == 0)
 			return null;
-		if (DEBUG) {
-			int cur_sn = sn1 > sn2 ? sn1 : sn2;
-			if (cur_sn - prev_sn > 1) {
-				getDataUriErr.println("Dropped frame" + (cur_sn - prev_sn == 2 ? " " + (cur_sn - 1) : "s " + (prev_sn + 1) + " - " + (cur_sn - 1)));
-			}
-			prev_sn = cur_sn;
-		}
 		sb.setLength(sb_len);
-		return sb.append(DatatypeConverter.printBase64Binary(Arrays.copyOf(sn1 > sn2 ? b1 : b2, sn1 > sn2 ? l1 : l2))).toString();
+		return sb.append(DatatypeConverter.printBase64Binary(multiBuffer.getBytes())).toString();
 	}
 	
-	public int getSN() { return sn; }
+	public int getSN() { return multiBuffer.getSN(); }
 
 	@Override
 	public void stop() {
