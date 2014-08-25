@@ -8,7 +8,8 @@ public class MjpegInputStream extends FilterInputStream {
 
 	public MjpegInputStream(InputStream in) { super(in); }
 	
-	public int readFrame(byte[] b, int off, int len) throws IOException {
+	@Override
+	public int read(byte[] b, int off, int len) throws IOException {
 		int off_ = off;
 		int b_, b_prev = 0;
 		while ((b_ = in.read()) != 0xD8 || b_prev != 0xFF) {
@@ -34,5 +35,6 @@ public class MjpegInputStream extends FilterInputStream {
 		return off_ - off;
 	}
 
-	public int readFrame(byte[] b) throws IOException { return readFrame(b, 0, b.length); }
+	@Override
+	public int read(byte[] b) throws IOException { return read(b, 0, b.length); }
 }

@@ -6,6 +6,8 @@ import java.awt.FlowLayout;
 //import java.awt.TextArea;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.FilterInputStream;
+import java.io.BufferedInputStream;
 //import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,7 +20,9 @@ import java.util.Arrays;
 
 
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.swing.JApplet;
 import javax.swing.SwingUtilities;
@@ -115,13 +119,19 @@ public class ImgApplet extends JApplet implements Runnable {
 		SwingUtilities.invokeLater(this);
 	}
 
-	private static final String PARAM_PREFIX = "ffmpeg-"; 
+	private static final String PARAM_PREFIX = "ffmpeg-";
+	private Map<String,String> optName = new HashMap<String,String>(), optValue = new HashMap<String,String>();
 	private void addOptNV(String param, String opt, List<String> command, String dflt) {
 		String _param = getParameter(PARAM_PREFIX + param);
 		if (!strEmpty(_param) || (_param == null && !strEmpty(dflt))) {
-			if (!strEmpty(opt))
-				command.add("-" + opt);
-			command.add(!strEmpty(_param) ? _param : dflt);
+			if (!strEmpty(opt)) {
+				String _opt = "-" + opt;
+				command.add(_opt);
+				optName.put(param, _opt);
+			}
+			String _val = (!strEmpty(_param) ? _param : dflt);
+			command.add(_val);
+			optValue.put(param, _val);
 		}
 	}
 	private void addOptNV(String param, String opt, List<String> command) { addOptNV(param, opt, command, null); }
@@ -152,15 +162,25 @@ public class ImgApplet extends JApplet implements Runnable {
 		addOptNV("f:i", "f", command, "flv");
 		addOptNV("flv_metadata", command);
 		addOptNV("i", command);
+		addOptNV("frames:d", command);
+		addOptNV("map", command);
+		addOptNV("map1", "map", command);
+		addOptNV("map2", "map", command);
 		addOptN_("an", command);
+		addOptNV("c:a", command);
+		addOptNV("q:a", command);
+		addOptNV("b:a", command);
 		addOptN_("vn", command);
 		addOptNV("c:v", command, "mjpeg");
 		addOptNV("q:v", command);
+		addOptNV("b:v", command);
+		addOptNV("g", command);
 		addOptNV("vsync", command);
 		addOptNV("f:o", "f", command, "mjpeg");
+		addOptNV("movflags", command);
+		addOpt_V("o", command, "pipe:1");
 		addOptNV("muxdelay", command);
 		addOptNV("muxpreload", command);
-		addOpt_V("o", command, "pipe:1");
 		addOptNV("loglevel", command);
 
 		ProcessBuilder pb = new ProcessBuilder(command);
@@ -184,17 +204,18 @@ public class ImgApplet extends JApplet implements Runnable {
 				public void run() {
 					sn = sn1 = sn2 = prev_sn = 0;
 					int res = 0;
-					MjpegInputStream in_ = null;
+					FilterInputStream in_ = null;
 					try {
-						in_ = new MjpegInputStream(ffmp.getInputStream());
+						in_ = "mjpeg".equalsIgnoreCase(optValue.get("f:o")) && optValue.get("o").startsWith("pipe:") ? new MjpegInputStream(ffmp.getInputStream()) :
+							new BufferedInputStream(ffmp.getInputStream(), 1);
 						while (res != -1/* && !ffm_stop*/)
 							try {
 								if (sn1 <= sn2) {
-									res = l1 = in_.readFrame(b1);
+									res = l1 = in_.read(b1);
 									sn1 = ++sn;
 								}
 								else {
-									res = l2 = in_.readFrame(b2);
+									res = l2 = in_.read(b2);
 									sn2 = ++sn;
 								}
 							} catch (IOException e) {
