@@ -95,23 +95,39 @@ public class ImgApplet extends JApplet implements Runnable {
 		}
 		private _List filledBufferList = new _List(), emptyBufferList = new _List();
 		private Buffer currentBuffer;
-		private int bufferCount;
-		private BufferedConsoleOut errOut = new BufferedConsoleOut(System.err); 
+		private int bufferCount, maxBufferCount;
+		private BufferedConsoleOut errOut = new BufferedConsoleOut(System.err);
+		private int dropFrameFirst, dropFrameLast;
+		public BufferList(int maxBufferCount) { this.maxBufferCount = maxBufferCount; }
 		@Override
 		void reset() {
 			while (filledBufferList.remove() != null) {}
 			while (emptyBufferList.remove() != null) {}
 			currentBuffer = null;
 			sn = bufferCount = 0;
+			dropFrameFirst = dropFrameLast = 0; 
 		}
 		@Override
 		int read(InputStream in) throws IOException {
 			Buffer buf = (Buffer)emptyBufferList.remove();
 			if (buf == null) {
-				buf = new Buffer(MAX_FRAME_SIZE);
-				bufferCount++;
-				if (DEBUG)
-					errOut.println("Buffer # " + bufferCount + " allocated.");
+				if (bufferCount < maxBufferCount) {
+					buf = new Buffer(MAX_FRAME_SIZE);
+					bufferCount++;
+					if (DEBUG)
+						errOut.println("Buffer # " + bufferCount + " allocated");
+				} else {
+					buf = (Buffer)filledBufferList.remove();
+					if (DEBUG) {
+						if (dropFrameFirst == 0)
+							dropFrameFirst = buf.sn;
+						dropFrameLast = buf.sn;
+					}
+				}
+			}
+			if (dropFrameFirst > 0 && dropFrameLast < buf.sn) {
+				errOut.println("Dropped frame" + (dropFrameFirst == dropFrameLast ? " " + dropFrameFirst : "s " + dropFrameFirst + " - " + dropFrameLast));
+				dropFrameFirst = dropFrameLast = 0; 
 			}
 			int res = buf.len = in.read(buf.b);
 			buf.sn = ++sn;
@@ -148,7 +164,7 @@ public class ImgApplet extends JApplet implements Runnable {
 
 	private static final int MAX_FRAME_SIZE = 300000;
 
-	private MultiBuffer multiBuffer = new BufferList(); // new DoubleBuffer();
+	private MultiBuffer multiBuffer = new BufferList(50); // new DoubleBuffer();
 
 	private void addButton(String label, ActionListener click) {
 		Button button = new Button();
