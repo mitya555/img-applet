@@ -37,8 +37,6 @@ script>-->
   <param name="archive" value="img-applet.jar">
   <param name="code" value="img_applet.ImgApplet">
   <param name="ffmpeg-re" value="">
-  <!--<param name="ffmpeg-muxpreload" value="10">
-  <param name="ffmpeg-muxdelay" value="10">-->
   <param name="ffmpeg-f:i" value="">
   <!--<param name="ffmpeg-i" value="rtmp://10.44.41.97/rtmp/webcam">-->
   <!--<param name="ffmpeg-i" value="rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp">-->
@@ -55,7 +53,9 @@ script>-->
     ‘-1, auto’ - Chooses between 1 and 2 depending on muxer capabilities. This is the default method.
   -->
   <param name="ffmpeg-vsync" value="0">
-  <!--<param name="ffmpeg-loglevel" value="warning">-->
+  <!--<param name="ffmpeg-muxpreload" value="10">
+  <param name="ffmpeg-muxdelay" value="10">
+  <param name="ffmpeg-loglevel" value="warning">-->
   <param name="debug" value="yes">
   <comment>
     <embed id="img-applet"
@@ -65,12 +65,27 @@ script>-->
       code="img_applet.ImgApplet"
       pluginspage="http://java.com/download/"
       ffmpeg-re=""
-      ffmpeg-i="rtmp://85.132.78.6:1935/live/muztv.stream"
-      ffmpeg-q:v="0.0"
+      ffmpeg-f:i=""
+      ffmpeg-i="rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp"
+      ffmpeg-q:v="0"
       ffmpeg-vsync="0"
       debug="yes" />
     </comment>
   </object>
+
+<!-- 
+       ffmpeg-map="0:0"
+      ffmpeg-an=""
+-->
+ 
+<!-- 
+      ffmpeg-frames:d="3"
+      ffmpeg-c:a="copy"
+      ffmpeg-c:v="copy"
+      ffmpeg-f:o="mp4"
+      ffmpeg-movflags="frag_keyframe+empty_moov"
+      ffmpeg-o="output.mp4"
+ -->
 
 <!--
 <embed id="img-applet"
@@ -82,14 +97,14 @@ script>-->
        rtmp="rtmp://localhost/rtmp/webcam"
        qscale="0.0" />-->
 
-<img id="image0" width="720" height="576" style="visibility: hidden; display: none;" />
-<img id="image1" width="720" height="576" style="visibility: hidden; display: none;" />
+<img id="image0" width="1047" height="576" style="visibility: hidden; display: none;" />
+<img id="image1" width="1047" height="576" style="visibility: hidden; display: none;" />
 <br />
-<canvas id="videoImage" width="720" height="576"></canvas>
+<canvas id="videoImage" width="1047" height="576"></canvas>
 
 <script>
 
-var width = 1024, height = 576;
+var width = 720, height = 540;
 
 // global variables
 var image, videoImage, videoImageContext, applet, applet_ie, applet_, sn = 0, last_img = -1;
@@ -134,7 +149,11 @@ function animate() {
 	render();		
 }
 
+var cnt = 0;
+
 function render() {
+	if ((++cnt) % 2 != 0)
+		return;
 	if (checkApplet()) {
 		var sn_ = applet_.getSN();
 		if ( sn_ == sn )

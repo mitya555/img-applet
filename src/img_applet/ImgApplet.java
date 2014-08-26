@@ -96,6 +96,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		private _List filledBufferList = new _List(), emptyBufferList = new _List();
 		private Buffer currentBuffer;
 		private int bufferCount;
+		private BufferedConsoleOut errOut = new BufferedConsoleOut(System.err); 
 		@Override
 		void reset() {
 			while (filledBufferList.remove() != null) {}
@@ -109,6 +110,8 @@ public class ImgApplet extends JApplet implements Runnable {
 			if (buf == null) {
 				buf = new Buffer(MAX_FRAME_SIZE);
 				bufferCount++;
+				if (DEBUG)
+					errOut.println("Buffer # " + bufferCount + " allocated.");
 			}
 			int res = buf.len = in.read(buf.b);
 			buf.sn = ++sn;
@@ -145,7 +148,7 @@ public class ImgApplet extends JApplet implements Runnable {
 
 	private static final int MAX_FRAME_SIZE = 300000;
 
-	private MultiBuffer multiBuffer = new DoubleBuffer();
+	private MultiBuffer multiBuffer = new BufferList(); // new DoubleBuffer();
 
 	private void addButton(String label, ActionListener click) {
 		Button button = new Button();
