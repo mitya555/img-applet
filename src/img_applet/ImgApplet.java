@@ -330,8 +330,11 @@ public class ImgApplet extends JApplet implements Runnable {
 					int res = 0;
 					FilterInputStream in_ = null;
 					try {
-						in_ = "mjpeg".equalsIgnoreCase(optValue.get("f:o")) && optValue.get("o").startsWith("pipe:") ? new MjpegInputStream(ffmp.getInputStream()) :
-							new BufferedInputStream(ffmp.getInputStream(), 1);
+						in_ = optValue.get("o").startsWith("pipe:") ?
+								"mjpeg".equalsIgnoreCase(optValue.get("f:o")) ? new MjpegInputStream(ffmp.getInputStream()) :
+								"mp3".equalsIgnoreCase(optValue.get("f:o")) ? new MjpegInputStream(ffmp.getInputStream()) :
+								new BufferedInputStream(ffmp.getInputStream(), 1) :
+								new BufferedInputStream(ffmp.getInputStream(), 1);
 						while (res != -1/* && !ffm_stop*/)
 							try {
 								res = multiBuffer.read(in_);

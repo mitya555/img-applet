@@ -25,30 +25,24 @@ public class MP3InputStream extends FilterInputStream {
 				if (len < 10)
 					throw new IOException("Insufficient buffer length");
 				buf.clear();
-				b[off_++] = (byte)'I';
-				b[off_++] = (byte)'D';
-				b[off_++] = (byte)'3';
-				int len_ = in.read(b, off_, 7);
+				System.arraycopy(new byte[] { 'I', 'D', '3' }, 0, b, off, 3);
+				int len_ = in.read(b, off + 3, 7);
 				if (len_ == -1 || len_ < 7)
 					return -1;
-				len_ = 0x00000000 | b[off_ + 3] << 21 | b[off_ + 4] << 14 | b[off_ + 5] << 7 | b[off_ + 6];
+				len_ = 0x00000000 | b[off + 6] << 21 | b[off + 7] << 14 | b[off + 8] << 7 | b[off + 9];
 				if (len < 10 + len_)
 					throw new IOException("Insufficient buffer length");
-				len_ = in.read(b, off_ + 7, len_);
-				return len_ == -1 ? -1 : 10 + len_;
+				int res = in.read(b, off + 10, len_);
+				return res == -1 || res < len_ ? -1 : 10 + res;
 			} else  if (buf.get(0) == 'T' && buf.get(1) == 'A' && buf.get(2) == 'G') { // TAG
 				if (off_ - off > 0)
 					return off_ - off;
 				if (len < 128)
 					throw new IOException("Insufficient buffer length");
 				buf.clear();
-				b[off_++] = (byte)'T';
-				b[off_++] = (byte)'A';
-				b[off_++] = (byte)'G';
-				int len_ = in.read(b, off_, 125);
-				if (len_ == -1 || len_ < 125)
-					return -1;
-				return 128;
+				System.arraycopy(new byte[] { 'T', 'A', 'G' }, 0, b, off, 3);
+				int res = in.read(b, off + 3, 125);
+				return res == -1 || res < 125 ? -1 : 128;
 			}
 			if (readingData)
 			{
