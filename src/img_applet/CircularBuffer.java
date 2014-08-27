@@ -1,5 +1,7 @@
 package img_applet;
 
+import java.util.Arrays;
+
 public class CircularBuffer {
 	private int len, ptr = 0;
 	private byte[] buf;
@@ -13,4 +15,5 @@ public class CircularBuffer {
 			b[off + i] = (byte)get(i);
 		return len_;
 	}
+	public void clear() { Arrays.fill(buf, (byte)0); }
 }
