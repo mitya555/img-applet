@@ -70,7 +70,7 @@ script>-->
       ffmpeg-i="rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp"
       ffmpeg-q:v="0"
       ffmpeg-vsync="0"
-      debug="yes" />
+      debug="no" />
     </comment>
   </object>
 
@@ -114,7 +114,7 @@ script>-->
   <!--<param name="ffmpeg-i" value="rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp">-->
   <!--<param name="ffmpeg-i" value="rtmp://85.132.78.6:1935/live/muztv.stream">-->
   <param name="ffmpeg-i" value="http://83.139.104.101/Content/HLS/Live/Channel(Sk_1)/index.m3u8">
-  <param name="ffmpeg-c:a" value="libmp3lame">-->
+  <param name="ffmpeg-c:a" value="libmp3lame">
   <param name="ffmpeg-f:o" value="mp3">
   <param name="ffmpeg-vn" value="">
   <param name="debug" value="yes">
@@ -131,6 +131,7 @@ script>-->
       ffmpeg-c:a="libmp3lame"
       ffmpeg-f:o="mp3"
       ffmpeg-vn=""
+      frame-buffer-size="20000"
       debug="yes" />
     </comment>
   </object>
@@ -208,17 +209,17 @@ function render() {
 		return;
 	if (checkApplet()) {
 		var sn_ = applet_.getSN();
-		if ( sn_ == sn )
-			return;
-		sn = sn_;
-		image[last_img = (last_img + 1) % 2].src = applet_.getDataURI();
+		if ( sn_ != sn ) {
+			sn = sn_;
+			image[last_img = (last_img + 1) % 2].src = applet_.getDataURI();
+		}
 	}
 	if (checkMp3Applet()) {
 		var mp3sn_ = mp3applet_.getSN();
-		if ( mp3sn_ == mp3sn )
-			return;
-		mp3sn = mp3sn_;
-		audio.src = mp3applet_.getDataURI();
+		if ( mp3sn_ != mp3sn ) {
+			mp3sn = mp3sn_;
+			audio.src = mp3applet_.getDataURI();
+		}
 	}
 }
 </script>

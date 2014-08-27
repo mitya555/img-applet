@@ -16,10 +16,10 @@ public class fMP4InputStream extends FilterInputStream {
 			if ((b_ = in.read()) == -1)
 				return -1;
 			buf.put(b_);
-			if (	(buf.get(4) == 'm' && ((buf.get(5) == 'd' && buf.get(6) == 'a' && buf.get(7) == 't') || // mdat
-					((buf.get(5) == 'o' && buf.get(6) == 'o') && (buf.get(7) == 'f' || // moof
-					buf.get(7) == 'v')))) || // moov
-					(buf.get(4) == 'f' && buf.get(5) == 't' && buf.get(6) == 'y' && buf.get(7) == 'p')) { // ftyp
+			if (	(buf.get(4) == (byte)'m' && ((buf.get(5) == (byte)'d' && buf.get(6) == (byte)'a' && buf.get(7) == (byte)'t') || // mdat
+					((buf.get(5) == (byte)'o' && buf.get(6) == (byte)'o') && (buf.get(7) == (byte)'f' || // moof
+					buf.get(7) == (byte)'v')))) || // moov
+					(buf.get(4) == (byte)'f' && buf.get(5) == (byte)'t' && buf.get(6) == (byte)'y' && buf.get(7) == (byte)'p')) { // ftyp
 				int len_ = buf.getInt(0);
 				if (len < len_)
 					throw new IOException("Insufficient buffer length");

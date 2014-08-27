@@ -28,6 +28,8 @@ import javax.swing.JApplet;
 import javax.swing.SwingUtilities;
 import javax.xml.bind.DatatypeConverter;
 
+import com.sun.org.apache.bcel.internal.classfile.Unknown;
+
 import ffmpeg.FFmpeg;
 
 @SuppressWarnings("serial")
@@ -52,7 +54,8 @@ public class ImgApplet extends JApplet implements Runnable {
 	
 	private class DoubleBuffer extends MultiBuffer
 	{
-		private Buffer b1 = new Buffer(MAX_FRAME_SIZE), b2 = new Buffer(MAX_FRAME_SIZE);
+		private Buffer b1, b2;
+		public DoubleBuffer(int bufferSize) { b1 = new Buffer(bufferSize); b2 = new Buffer(bufferSize); }
 		@Override
 		public void reset() { b1.sn = b2.sn = sn = prev_sn = 0; }
 		@Override
@@ -96,9 +99,10 @@ public class ImgApplet extends JApplet implements Runnable {
 		private _List filledBufferList = new _List(), emptyBufferList = new _List();
 		private Buffer currentBuffer;
 		private int bufferCount, maxBufferCount;
+		private int bufferSize;
 		private BufferedConsoleOut errOut = new BufferedConsoleOut(System.err);
 		private int dropFrameFirst, dropFrameLast;
-		public BufferList(int maxBufferCount) { this.maxBufferCount = maxBufferCount; }
+		public BufferList(int bufferSize, int maxBufferCount) { this.bufferSize = bufferSize; this.maxBufferCount = maxBufferCount; }
 		@Override
 		void reset() {
 			while (filledBufferList.remove() != null) {}
@@ -112,7 +116,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			Buffer buf = (Buffer)emptyBufferList.remove();
 			if (buf == null) {
 				if (bufferCount < maxBufferCount) {
-					buf = new Buffer(MAX_FRAME_SIZE);
+					buf = new Buffer(bufferSize);
 					bufferCount++;
 					if (DEBUG)
 						errOut.println("Buffer # " + bufferCount + " allocated");
@@ -162,9 +166,8 @@ public class ImgApplet extends JApplet implements Runnable {
 	private Thread ffmt;
 //	private volatile boolean ffm_stop;
 
-	private static final int MAX_FRAME_SIZE = 300000;
-
-	private MultiBuffer multiBuffer = new BufferList(50); // new DoubleBuffer();
+	private int frameBufferSize, maxBufferCount;
+	private MultiBuffer multiBuffer;
 
 	private void addButton(String label, ActionListener click) {
 		Button button = new Button();
@@ -196,12 +199,13 @@ public class ImgApplet extends JApplet implements Runnable {
 	}
 	
 //	private static boolean tryParseFloat(String val) { try { Float.parseFloat(val); return true; } catch (Throwable ex) { return false; } }
+//	private static boolean tryParseInt(String val) { try { Integer.parseInt(val); return true; } catch (Throwable ex) { return false; } }
     private static boolean strEmpty(String str) { return str == null || str.length() == 0; }
     private static boolean isNo(String str) { return str == null || "No".equalsIgnoreCase(str) || "False".equalsIgnoreCase(str); }
 
-    private static boolean DEBUG = true;
-    private static void debug(String dbg) { if (DEBUG) System.out.println(dbg); }
-    private static void debug(String dbg, String inf) { if (DEBUG) System.out.println(dbg); else System.out.println(inf); }
+    private boolean DEBUG = true;
+    private void debug(String dbg) { if (DEBUG) System.out.println(dbg); }
+    private void debug(String dbg, String inf) { if (DEBUG) System.out.println(dbg); else System.out.println(inf); }
 
     private class BufferedConsoleOut
     {
@@ -222,6 +226,17 @@ public class ImgApplet extends JApplet implements Runnable {
 		super.init();
 		
 		DEBUG = !isNo(getParameter("debug"));
+		try {
+			frameBufferSize = Integer.parseInt(getParameter("frame-buffer-size"));
+		} catch (Throwable ex) {
+			frameBufferSize = 300000;
+		}
+		try {
+			maxBufferCount = Integer.parseInt(getParameter("max-buffer-count"));
+		} catch (Throwable ex) {
+			maxBufferCount = 50;
+		}
+		multiBuffer = new BufferList(frameBufferSize, maxBufferCount); // new DoubleBuffer(frameBufferSize);
 		
 //		this.rtmp = getParameter("rtmp");
 //		this.qscale = getParameter("qscale");
@@ -263,6 +278,14 @@ public class ImgApplet extends JApplet implements Runnable {
 	private void addOptNV(String name, List<String> command) { addOptNV(name, name, command); }
 	private void addOpt_V(String name, List<String> command, String dflt) { addOptNV(name, null, command, dflt); }
 	private void addOptN_(String name, List<String> command) { if (!isNo(getParameter(PARAM_PREFIX + name))) command.add("-" + name); }
+	
+	private enum OutputFormat { none, mjpeg, mp3, unknown }
+	private OutputFormat pipeOutputFormat() {
+		return optValue.get("o").startsWith("pipe:") ?
+				"mjpeg".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.mjpeg :
+				"mp3".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.mp3 :
+				OutputFormat.unknown : OutputFormat.none;
+	}
 	
 	@Override
 	public void start() {
@@ -330,14 +353,27 @@ public class ImgApplet extends JApplet implements Runnable {
 					int res = 0;
 					FilterInputStream in_ = null;
 					try {
-						in_ = optValue.get("o").startsWith("pipe:") ?
-								"mjpeg".equalsIgnoreCase(optValue.get("f:o")) ? new MjpegInputStream(ffmp.getInputStream()) :
-								"mp3".equalsIgnoreCase(optValue.get("f:o")) ? new MjpegInputStream(ffmp.getInputStream()) :
-								new BufferedInputStream(ffmp.getInputStream(), 1) :
-								new BufferedInputStream(ffmp.getInputStream(), 1);
+						switch (pipeOutputFormat()) {
+						case mjpeg:
+							in_ = new MjpegInputStream(ffmp.getInputStream());
+							dataURIsb = new StringBuilder("data:image/jpeg;base64,");
+							dataUriPrefixLen = dataURIsb.length();
+							break;
+						case mp3:
+							in_ = new MP3InputStream(ffmp.getInputStream());
+							dataURIsb = new StringBuilder("data:audio/mpeg;base64,");
+							dataUriPrefixLen = dataURIsb.length();
+							break;
+						case unknown: case none: default:
+							in_ = new BufferedInputStream(ffmp.getInputStream(), 1);
+							dataURIsb = new StringBuilder("data:application/octet-stream;base64,");
+							dataUriPrefixLen = dataURIsb.length();
+							break; 
+						}
 						while (res != -1/* && !ffm_stop*/)
 							try {
 								res = multiBuffer.read(in_);
+//								debug("fragment of " + res + " bytes");
 							} catch (IOException e) {
 								e.printStackTrace();
 							}
@@ -405,13 +441,13 @@ public class ImgApplet extends JApplet implements Runnable {
 		this.ffmp.destroy();
 	}
 	
-	private StringBuilder sb = new StringBuilder("data:image/jpeg;base64,");
-	private int sb_len = sb.length();
+	private StringBuilder dataURIsb = new StringBuilder("data:image/jpeg;base64,");
+	private int dataUriPrefixLen = dataURIsb.length();
 	public String getDataURI() throws IOException {
 		if (multiBuffer.getSN() == 0)
 			return null;
-		sb.setLength(sb_len);
-		return sb.append(DatatypeConverter.printBase64Binary(multiBuffer.getBytes())).toString();
+		dataURIsb.setLength(dataUriPrefixLen);
+		return dataURIsb.append(DatatypeConverter.printBase64Binary(multiBuffer.getBytes())).toString();
 	}
 	
 	public int getSN() { return multiBuffer.getSN(); }
