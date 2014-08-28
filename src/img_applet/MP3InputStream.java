@@ -10,6 +10,12 @@ public class MP3InputStream extends FilterInputStream {
 
 	public MP3InputStream(InputStream in) { super(in); }
 	
+	private boolean skipTags;
+	public MP3InputStream setSkipTags() { skipTags = true; return this; }
+	
+	private int readThisManyDataFramesAtOnce = 20;
+	public MP3InputStream setNumberOfDataFramesToReadAtOnce(int num) { readThisManyDataFramesAtOnce = num; return this; } 
+	
 	private CircularBuffer buf = new CircularBuffer(3);
 	
 //	private int byteCount;
@@ -24,7 +30,7 @@ public class MP3InputStream extends FilterInputStream {
 					return off_ - off;
 				readingData++;
 			} else if (buf.get(0) == (byte)'I' && buf.get(1) == (byte)'D' && buf.get(2) == (byte)'3') { // ID3 tag
-				if (off_ - off > 0)
+				if (off_ - off > 0 && (!skipTags || readingData == 20))
 					return off_ - off;
 				if (len < 10)
 					throw new IOException("Insufficient buffer length");
