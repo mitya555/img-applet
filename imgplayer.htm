@@ -190,6 +190,36 @@ image[0].onload = image[1].onload = function() {
 	videoImageContext.drawImage( this, 0, 0, videoImage.width, videoImage.height );
 };
 
+function tns(ns) { switch (ns) { case 0: return "NETWORK_EMPTY"; case 1: return "NETWORK_IDLE"; case 2: return "NETWORK_LOADING"; case 3: return "NETWORK_NO_SOURCE"; default: return "UNKNOWN"; } }
+function trs(rs) { switch (rs) { case 0: return "HAVE_NOTHING"; case 1: return "HAVE_METADATA"; case 2: return "HAVE_CURRENT_DATA"; case 3: return "HAVE_FUTURE_DATA"; case 4: return "HAVE_ENOUGH_DATA"; default: return "UNKNOWN"; } }
+function terr(err) { switch (err) { case 1: return "MEDIA_ERR_ABORTED"; case 2: return "MEDIA_ERR_NETWORK"; case 3: return "MEDIA_ERR_DECODE"; case 4: case 5: return "MEDIA_ERR_SRC_NOT_SUPPORTED"; default: return "UNKNOWN"; } }
+function conLog(e) { return " readyState: " + e.readyState + "(" + trs(e.readyState) + "); networkState: " + e.networkState + "(" + tns(e.networkState) + "); buffered: " + e.buffered; }
+function conErr(e) { return " Error: " + e.error.code + "(" + terr(e.error.code) + ");" + conLog(e); }
+
+audio.onabort             = function() { console.log("event: abort;            " + conLog(this)); };
+audio.oncanplay           = function() { console.log("event: canplay;          " + conLog(this)); };
+audio.oncanplaythrough    = function() { console.log("event: canplaythrough;   " + conLog(this)); };
+audio.ondurationchange    = function() { console.log("event: durationchange;   " + conLog(this)); };
+audio.onemptied           = function() { console.log("event: emptied;          " + conLog(this)); };
+audio.onended             = function() { console.log("event: ended;            " + conLog(this)); };
+audio.onerror             = function() { console.error("event: error;          " + conErr(this)); };
+audio.onloadeddata        = function() { console.log("event: loadeddata;       " + conLog(this)); };
+audio.onloadedmetadata    = function() { console.log("event: loadedmetadata;   " + conLog(this)); };
+audio.onloadstart         = function() { console.log("event: loadstart;        " + conLog(this)); };
+audio.onmozaudioavailable = function() { console.log("event: mozaudioavailable;" + conLog(this)); };
+audio.onpause             = function() { console.log("event: pause;            " + conLog(this)); };
+audio.onplay              = function() { console.log("event: play;             " + conLog(this)); };
+audio.onplaying           = function() { console.log("event: playing;          " + conLog(this)); };
+audio.onprogress          = function() { console.log("event: progress;         " + conLog(this)); };
+audio.onratechange        = function() { console.log("event: ratechange;       " + conLog(this)); };
+audio.onstalled           = function() { console.log("event: stalled;          " + conLog(this)); };
+audio.onseeked            = function() { console.log("event: seeked;           " + conLog(this)); };
+audio.onseeking           = function() { console.log("event: seeking;          " + conLog(this)); };
+audio.onsuspend           = function() { console.log("event: suspend;          " + conLog(this)); };
+audio.ontimeupdate        = function() { console.log("event: timeupdate;       " + conLog(this)); };
+audio.onwaiting           = function() { console.log("event: waiting;          " + conLog(this)); };
+audio.onvolumechange      = function() { console.log("event: volumechange;     " + conLog(this)); };
+
 //window.requestAnimationFrame = function( /* function FrameRequestCallback */ callback, /* DOMElement Element */ element ) {
 //	window.setTimeout( callback, 1 );
 //};
@@ -218,7 +248,8 @@ function render() {
 		var mp3sn_ = mp3applet_.getSN();
 		if ( mp3sn_ != mp3sn ) {
 			mp3sn = mp3sn_;
-			audio.src = mp3applet_.getDataURI();
+			var src_ = audio.src = mp3applet_.getDataURI();
+			console.log("frame.sn = " + mp3sn_ + "; audio.src = " + (!src_ || src_.length < 50 ? src_ : src_.substring(0, 50) + "..."));
 		}
 	}
 }
