@@ -28,8 +28,6 @@ import javax.swing.JApplet;
 import javax.swing.SwingUtilities;
 import javax.xml.bind.DatatypeConverter;
 
-import com.sun.org.apache.bcel.internal.classfile.Unknown;
-
 import ffmpeg.FFmpeg;
 
 @SuppressWarnings("serial")
@@ -165,16 +163,20 @@ public class ImgApplet extends JApplet implements Runnable {
 	private Thread ffmt;
 //	private volatile boolean ffm_stop;
 
-	private int frameBufferSize, maxBufferCount;
+	private int frameBufferSize, maxBufferCount, mp3FramesPerChunk;
 	private MultiBuffer multiBuffer;
 
-	private void addButton(String label, ActionListener click) {
-		Button button = new Button();
+	private void setButton(Button button, String label, ActionListener click, boolean active) {
 		getContentPane().add(button);
 		button.addActionListener(click);
 		button.setLabel(label);
-		button.setEnabled(true);
+		button.setEnabled(active);
+//		button.setVisible(active);
 	}
+	
+	private Button startButton = new Button(), stopButton = new Button();
+	
+	private void setUIForPlaying(boolean playing) { stopButton.setEnabled(playing); /*stopButton.setVisible(playing);*/ startButton.setEnabled(!playing); /*startButton.setVisible(!playing);*/ }
 
 	@Override
 	public void run() {
@@ -182,15 +184,8 @@ public class ImgApplet extends JApplet implements Runnable {
 		FlowLayout cont = new FlowLayout(FlowLayout.CENTER, 10, 10);
 		getContentPane().setLayout(cont);
 		
-		addButton("Stop", new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) { stop(); }
-		});
-		
-		addButton("Start", new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) { start(); }
-		});
+		setButton(stopButton, "Stop", new ActionListener() { @Override public void actionPerformed(ActionEvent e) { stopPlayback(); } }, isPlaying());
+		setButton(startButton, "Start", new ActionListener() { @Override public void actionPerformed(ActionEvent e) { play(); } }, !isPlaying());
 		
 		getContentPane().setBackground(Color.WHITE);
 //		System.out.println(FFmpeg.exe.getAbsolutePath());
@@ -228,6 +223,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		DEBUG = !isNo(getParameter("debug"));
 		frameBufferSize = parseInt(getParameter("frame-buffer-size"), 300000);
 		maxBufferCount = parseInt(getParameter("max-buffer-count"), 50);
+		mp3FramesPerChunk = parseInt(getParameter("mp3-frames-per-chunk"), 10);
 
 		multiBuffer = new BufferList(frameBufferSize, maxBufferCount); // new DoubleBuffer(frameBufferSize);
 		
@@ -280,12 +276,11 @@ public class ImgApplet extends JApplet implements Runnable {
 				OutputFormat.unknown : OutputFormat.none;
 	}
 	
-	@Override
-	public void start() {
+	public boolean isPlaying() { return this.ffmt != null && this.ffmt.isAlive(); }
+	
+	public void play() {
 		
-		super.start();
-		
-		if (this.ffmt != null && this.ffmt.isAlive())
+		if (isPlaying())
 			return;
 		
 		List<String> command = new ArrayList<String>();
@@ -342,6 +337,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			this.ffmt = new Thread(new Runnable() {
 				@Override
 				public void run() {
+					setUIForPlaying(true);
 					multiBuffer.reset();
 					int res = 0;
 					FilterInputStream in_ = null;
@@ -353,7 +349,7 @@ public class ImgApplet extends JApplet implements Runnable {
 							dataUriPrefixLength = dataUriStringBuilder.length();
 							break;
 						case mp3:
-							in_ = new MP3InputStream(ffmp.getInputStream());
+							in_ = new MP3InputStream(ffmp.getInputStream()).setSkipTags().setDataFramesInFragment(mp3FramesPerChunk);
 							dataUriStringBuilder = new StringBuilder("data:audio/mpeg;base64,");
 							dataUriPrefixLength = dataUriStringBuilder.length();
 							break;
@@ -379,6 +375,7 @@ public class ImgApplet extends JApplet implements Runnable {
 							} catch (IOException e) {
 								e.printStackTrace();
 							}
+						setUIForPlaying(false);
 						debug("Thread processing output from ffmpeg has ended.", "FFMPEG process terminated.");
 					}
 				}
@@ -431,7 +428,8 @@ public class ImgApplet extends JApplet implements Runnable {
 //		if (this.ffmt != null)
 //			this.ffmt.interrupt();
 
-		this.ffmp.destroy();
+		if (this.ffmp != null)
+			this.ffmp.destroy();
 	}
 	
 	private StringBuilder dataUriStringBuilder = new StringBuilder("data:image/jpeg;base64,");
@@ -446,10 +444,9 @@ public class ImgApplet extends JApplet implements Runnable {
 	
 	public int getSN() { return multiBuffer.getSN(); }
 
-	@Override
-	public void stop() {
-		
-		if (this.ffmt.isAlive()) {
+	public void stopPlayback() {
+
+		if (isPlaying()) {
 			quitProcess();
 			try {
 				this.ffmt.join(200);
@@ -457,8 +454,14 @@ public class ImgApplet extends JApplet implements Runnable {
 				e.printStackTrace();
 			}
 		}
-		if (this.ffmt.isAlive())
+		if (isPlaying())
 			killProcess();
+	}
+
+	@Override
+	public void stop() {
+		
+		stopPlayback();
 		
 		super.stop();
 	}
