@@ -13,8 +13,8 @@ public class MP3InputStream extends FilterInputStream {
 	private boolean skipTags;
 	public MP3InputStream setSkipTags() { skipTags = true; return this; }
 	
-	private int readThisManyDataFramesAtOnce = 20;
-	public MP3InputStream setNumberOfDataFramesToReadAtOnce(int num) { readThisManyDataFramesAtOnce = num; return this; } 
+	private int dataFramesInFragment = 20;
+	public MP3InputStream setDataFramesInFragment(int num) { dataFramesInFragment = num; return this; } 
 	
 	private CircularBuffer buf = new CircularBuffer(3);
 	
@@ -26,36 +26,58 @@ public class MP3InputStream extends FilterInputStream {
 		int readingData = 0;
 		while (true) {
 			if (buf.get(0) == (byte)0xFF && buf.get(1) == (byte)0xFB) { // data
-				if (off_ - off > 0 && readingData == 20)
+				if (off_ - off > 0 && readingData == dataFramesInFragment)
 					return off_ - off;
 				readingData++;
 			} else if (buf.get(0) == (byte)'I' && buf.get(1) == (byte)'D' && buf.get(2) == (byte)'3') { // ID3 tag
-				if (off_ - off > 0 && (!skipTags || readingData == 20))
+				if (off_ - off > 0 && (!skipTags || readingData == dataFramesInFragment))
 					return off_ - off;
-				if (len < 10)
-					throw new IOException("Insufficient buffer length");
-				buf.clear();
-				System.arraycopy(new byte[] { (byte)'I', (byte)'D', (byte)'3' }, 0, b, off, 3);
-				int len_ = in.read(b, off + 3, 7);
-//				byteCount += len_;
-				if (len_ == -1 || len_ < 7)
-					return -1;
-				len_ = 0x00000000 | b[off + 6] << 21 | b[off + 7] << 14 | b[off + 8] << 7 | b[off + 9];
-				if (len < 10 + len_)
-					throw new IOException("Insufficient buffer length");
-				int res = in.read(b, off + 10, len_);
-//				byteCount += res;
-				return res == -1 || res < len_ ? -1 : 10 + res;
+				if (skipTags) {
+					buf.clear();
+					byte[] tmp = new byte[7];
+					int len_ = in.read(tmp, 0, 7);
+//					byteCount += len_;
+					if (len_ == -1 || len_ < 7)
+						return -1;
+					len_ = 0x00000000 | tmp[3] << 21 | tmp[4] << 14 | tmp[5] << 7 | tmp[6];
+					long res = in.skip(len_);
+//					byteCount += res;
+					if (res == -1 || res < len_)
+						return -1;
+				} else {
+					if (len < 10)
+						throw new IOException("Insufficient buffer length");
+					buf.clear();
+					System.arraycopy(new byte[] { (byte)'I', (byte)'D', (byte)'3' }, 0, b, off, 3);
+					int len_ = in.read(b, off + 3, 7);
+//					byteCount += len_;
+					if (len_ == -1 || len_ < 7)
+						return -1;
+					len_ = 0x00000000 | b[off + 6] << 21 | b[off + 7] << 14 | b[off + 8] << 7 | b[off + 9];
+					if (len < 10 + len_)
+						throw new IOException("Insufficient buffer length");
+					int res = in.read(b, off + 10, len_);
+//					byteCount += res;
+					return res == -1 || res < len_ ? -1 : 10 + res;
+				}
 			} else  if (buf.get(0) == (byte)'T' && buf.get(1) == (byte)'A' && buf.get(2) == (byte)'G') { // TAG
-				if (off_ - off > 0)
+				if (off_ - off > 0 && (!skipTags || readingData == dataFramesInFragment))
 					return off_ - off;
-				if (len < 128)
-					throw new IOException("Insufficient buffer length");
-				buf.clear();
-				System.arraycopy(new byte[] { (byte)'T', (byte)'A', (byte)'G' }, 0, b, off, 3);
-				int res = in.read(b, off + 3, 125);
-//				byteCount += res;
-				return res == -1 || res < 125 ? -1 : 128;
+				if (skipTags) {
+					buf.clear();
+					long res = in.skip(125);
+//					byteCount += res;
+					if (res == -1 || res < 125)
+						return -1;
+				} else {
+					if (len < 128)
+						throw new IOException("Insufficient buffer length");
+					buf.clear();
+					System.arraycopy(new byte[] { (byte)'T', (byte)'A', (byte)'G' }, 0, b, off, 3);
+					int res = in.read(b, off + 3, 125);
+//					byteCount += res;
+					return res == -1 || res < 125 ? -1 : 128;
+				}
 			}
 			if (readingData > 0)
 			{
