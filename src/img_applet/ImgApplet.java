@@ -174,9 +174,9 @@ public class ImgApplet extends JApplet implements Runnable {
 //		button.setVisible(active);
 	}
 	
-	private Button startButton = new Button(), stopButton = new Button();
+	private Button playButton = new Button(), stopButton = new Button();
 	
-	private void setUIForPlaying(boolean playing) { stopButton.setEnabled(playing); /*stopButton.setVisible(playing);*/ startButton.setEnabled(!playing); /*startButton.setVisible(!playing);*/ }
+	private void setUIForPlaying(boolean playing) { stopButton.setEnabled(playing); /*stopButton.setVisible(playing);*/ playButton.setEnabled(!playing); /*startButton.setVisible(!playing);*/ }
 
 	@Override
 	public void run() {
@@ -185,7 +185,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		getContentPane().setLayout(cont);
 		
 		setButton(stopButton, "Stop", new ActionListener() { @Override public void actionPerformed(ActionEvent e) { stopPlayback(); } }, isPlaying());
-		setButton(startButton, "Start", new ActionListener() { @Override public void actionPerformed(ActionEvent e) { play(); } }, !isPlaying());
+		setButton(playButton, "Play", new ActionListener() { @Override public void actionPerformed(ActionEvent e) { play(); } }, !isPlaying());
 		
 		getContentPane().setBackground(Color.WHITE);
 //		System.out.println(FFmpeg.exe.getAbsolutePath());

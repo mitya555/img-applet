@@ -139,10 +139,8 @@ script>-->
     </comment>
   </object>
 
-<audio id="audio" autoplay>
-  Your browser does not support the <code>audio</code> element.
-</audio>
-
+<audio id="audio0">Your browser does not support the <code>audio</code> element.</audio>
+<audio id="audio1" />
 <script>
 
 var width = 720, height = 540; // for the <embed> only
@@ -159,7 +157,7 @@ videoImageContext = videoImage.getContext( '2d' );
 applet = document.getElementById( 'img-applet' );
 applet_ie = document.getElementById( 'img-applet-ie' );
 
-audio = document.getElementById( 'audio' );
+audio = [ document.getElementById( 'audio0' ), document.getElementById( 'audio1' ) ];
 mp3applet = document.getElementById( 'mp3-applet' );
 mp3applet_ie = document.getElementById( 'mp3-applet-ie' );
 
@@ -193,50 +191,72 @@ image[0].onload = image[1].onload = function() {
 	videoImageContext.drawImage( this, 0, 0, videoImage.width, videoImage.height );
 };
 
-function tns(ns) { switch (ns) { case 0: return "NETWORK_EMPTY"; case 1: return "NETWORK_IDLE"; case 2: return "NETWORK_LOADING"; case 3: return "NETWORK_NO_SOURCE"; default: return "UNKNOWN"; } }
-function trs(rs) { switch (rs) { case 0: return "HAVE_NOTHING"; case 1: return "HAVE_METADATA"; case 2: return "HAVE_CURRENT_DATA"; case 3: return "HAVE_FUTURE_DATA"; case 4: return "HAVE_ENOUGH_DATA"; default: return "UNKNOWN"; } }
-function terr(err) { switch (err) { case 1: return "MEDIA_ERR_ABORTED"; case 2: return "MEDIA_ERR_NETWORK"; case 3: return "MEDIA_ERR_DECODE"; case 4: case 5: return "MEDIA_ERR_SRC_NOT_SUPPORTED"; default: return "UNKNOWN"; } }
-function conLog(e, t) {
-	var timeranges = "";
-	switch (t) {
-	case 1: // buffered
-		timeranges = " buffered:";
-		for (var i = 0; i < e.buffered.length; i++)
-			timeranges += " time range " + i + ": start=" + e.buffered.start(i) + "; end=" + e.buffered.end(i) + (i == e.buffered.length - 1 ? "" : ";");
-		break;
-	case 2: // played
-		timeranges = " played:";
-		for (var i = 0; i < e.played.length; i++)
-			timeranges += " time range " + i + ": start=" + e.played.start(i) + "; end=" + e.played.end(i) + (i == e.played.length - 1 ? "" : ";");
-		break;
-	}
-	return " readyState: " + e.readyState + "(" + trs(e.readyState) + "); networkState: " + e.networkState + "(" + tns(e.networkState) + ");" + timeranges; 
-}
-function conErr(e) { return " Error: " + e.error.code + "(" + terr(e.error.code) + ");" + conLog(e); }
+//function tns(ns) { switch (ns) { case 0: return "NETWORK_EMPTY"; case 1: return "NETWORK_IDLE"; case 2: return "NETWORK_LOADING"; case 3: return "NETWORK_NO_SOURCE"; default: return "UNKNOWN"; } }
+//function trs(rs) { switch (rs) { case 0: return "HAVE_NOTHING"; case 1: return "HAVE_METADATA"; case 2: return "HAVE_CURRENT_DATA"; case 3: return "HAVE_FUTURE_DATA"; case 4: return "HAVE_ENOUGH_DATA"; default: return "UNKNOWN"; } }
+//function terr(err) { switch (err) { case 1: return "MEDIA_ERR_ABORTED"; case 2: return "MEDIA_ERR_NETWORK"; case 3: return "MEDIA_ERR_DECODE"; case 4: case 5: return "MEDIA_ERR_SRC_NOT_SUPPORTED"; default: return "UNKNOWN"; } }
+//function conLog(e, t) {
+//	var timeranges = "";
+//	switch (t) {
+//	case 1: // buffered
+//		timeranges = " buffered:";
+//		for (var i = 0; i < e.buffered.length; i++)
+//			timeranges += " time range " + i + ": start=" + e.buffered.start(i) + "; end=" + e.buffered.end(i) + (i == e.buffered.length - 1 ? "" : ";");
+//		break;
+//	case 2: // played
+//		timeranges = " played:";
+//		for (var i = 0; i < e.played.length; i++)
+//			timeranges += " time range " + i + ": start=" + e.played.start(i) + "; end=" + e.played.end(i) + (i == e.played.length - 1 ? "" : ";");
+//		break;
+//	}
+//	return " readyState: " + e.readyState + "(" + trs(e.readyState) + "); networkState: " + e.networkState + "(" + tns(e.networkState) + ");" + timeranges; 
+//}
+//function conErr(e) { return " Error: " + e.error.code + "(" + terr(e.error.code) + ");" + conLog(e); }
 
-audio.onabort             = function() { console.log("event: abort;            " + conLog(this)); };
-audio.oncanplay           = function() { console.log("event: canplay;          " + conLog(this)); };
-audio.oncanplaythrough    = function() { console.log("event: canplaythrough;   " + conLog(this)); };
-audio.ondurationchange    = function() { console.log("event: durationchange;   " + conLog(this, 1)); }; // buffered
-audio.onemptied           = function() { console.log("event: emptied;          " + conLog(this)); };
-audio.onended             = function() { console.log("event: ended;            " + conLog(this)); loadAudio(); };
-audio.onerror             = function() { console.error("event: error;          " + conErr(this)); };
-audio.onloadeddata        = function() { console.log("event: loadeddata;       " + conLog(this)); };
-audio.onloadedmetadata    = function() { console.log("event: loadedmetadata;   " + conLog(this)); };
-audio.onloadstart         = function() { console.log("event: loadstart;        " + conLog(this)); };
-audio.onmozaudioavailable = function() { console.log("event: mozaudioavailable;" + conLog(this)); };
-audio.onpause             = function() { console.log("event: pause;            " + conLog(this)); };
-audio.onplay              = function() { console.log("event: play;             " + conLog(this)); };
-audio.onplaying           = function() { console.log("event: playing;          " + conLog(this)); };
-audio.onprogress          = function() { console.log("event: progress;         " + conLog(this, 1)); }; // buffered
-audio.onratechange        = function() { console.log("event: ratechange;       " + conLog(this)); };
-audio.onstalled           = function() { console.log("event: stalled;          " + conLog(this)); };
-audio.onseeked            = function() { console.log("event: seeked;           " + conLog(this)); };
-audio.onseeking           = function() { console.log("event: seeking;          " + conLog(this)); };
-audio.onsuspend           = function() { console.log("event: suspend;          " + conLog(this)); };
-audio.ontimeupdate        = function() { console.log("event: timeupdate;       " + conLog(this, 2)); }; // played
-audio.onwaiting           = function() { console.log("event: waiting;          " + conLog(this)); };
-audio.onvolumechange      = function() { console.log("event: volumechange;     " + conLog(this)); };
+//audio.onabort             = function() { console.log("event: abort;            " + conLog(this)); };
+//audio.oncanplay           = function() { console.log("event: canplay;          " + conLog(this)); };
+//audio.oncanplaythrough    = function() { console.log("event: canplaythrough;   " + conLog(this)); };
+//audio.ondurationchange    = function() { console.log("event: durationchange;   " + conLog(this, 1)); }; // buffered
+//audio.onemptied           = function() { console.log("event: emptied;          " + conLog(this)); };
+//audio.onended             = function() { console.log("event: ended;            " + conLog(this)); loadAudio(); };
+//audio.onerror             = function() { console.error("event: error;          " + conErr(this)); };
+//audio.onloadeddata        = function() { console.log("event: loadeddata;       " + conLog(this)); };
+//audio.onloadedmetadata    = function() { console.log("event: loadedmetadata;   " + conLog(this)); };
+//audio.onloadstart         = function() { console.log("event: loadstart;        " + conLog(this)); };
+//audio.onmozaudioavailable = function() { console.log("event: mozaudioavailable;" + conLog(this)); };
+//audio.onpause             = function() { console.log("event: pause;            " + conLog(this)); };
+//audio.onplay              = function() { console.log("event: play;             " + conLog(this)); };
+//audio.onplaying           = function() { console.log("event: playing;          " + conLog(this)); };
+//audio.onprogress          = function() { console.log("event: progress;         " + conLog(this, 1)); }; // buffered
+//audio.onratechange        = function() { console.log("event: ratechange;       " + conLog(this)); };
+//audio.onstalled           = function() { console.log("event: stalled;          " + conLog(this)); };
+//audio.onseeked            = function() { console.log("event: seeked;           " + conLog(this)); };
+//audio.onseeking           = function() { console.log("event: seeking;          " + conLog(this)); };
+//audio.onsuspend           = function() { console.log("event: suspend;          " + conLog(this)); };
+//audio.ontimeupdate        = function() { console.log("event: timeupdate;       " + conLog(this, 2)); }; // played
+//audio.onwaiting           = function() { console.log("event: waiting;          " + conLog(this)); };
+//audio.onvolumechange      = function() { console.log("event: volumechange;     " + conLog(this)); };
+
+function theOtherAudio(audio_) { return audio_ === audio[0] ? audio[1] : audio[0]; }
+
+audio[0].onended = audio[1].onended = function() {
+	if (mp3canplay[theOtherAudio(this)])
+		theOtherAudio(this).play();
+	mp3src[this] = null;
+	mp3canplay[this] = mp3playing[this] = false;
+	loadAudio(this);
+};
+
+audio[0].onplay = audio[1].onplay = function() {
+	mp3playing[this] = true;
+	if (!mp3src[theOtherAudio(this)])
+		loadAudio(theOtherAudio(this));
+}
+
+audio[0].oncanplay = audio[1].oncanplay = function() {
+	if (!mp3playing[theOtherAudio(this)])
+		this.play();
+	mp3canplay[this] = true;
+}
 
 //window.requestAnimationFrame = function( /* function FrameRequestCallback */ callback, /* DOMElement Element */ element ) {
 //	window.setTimeout( callback, 1 );
@@ -250,15 +270,15 @@ function animate() {
 	render();		
 }
 
-var cnt = 0, mp3src;
+var cnt = 0, mp3src = {}, mp3canplay = {}, mp3playing = {};
 
-function loadAudio() {
+function loadAudio(audio_) {
 	if (checkMp3Applet()) {
 		var mp3sn_ = mp3applet_.getSN();
 		if ( mp3sn_ != mp3sn && mp3sn_ > 0 ) {
 			mp3sn = mp3sn_;
-			mp3src = audio.src = mp3applet_.getDataURI();
-			console.log("frame.sn = " + mp3sn_ + "; audio.src = " + (!mp3src || mp3src.length < 50 ? mp3src : mp3src.substring(0, 50) + "..."));
+			mp3src[audio_] = audio_.src = mp3applet_.getDataURI();
+			console.log("frame.sn = " + mp3sn_ + "; audio.src = " + (!mp3src[audio_] || mp3src[audio_].length < 50 ? mp3src[audio_] : mp3src[audio_].substring(0, 50) + "..."));
 		}
 	}
 }
@@ -273,8 +293,10 @@ function render() {
 			image[last_img = (last_img + 1) % 2].src = applet_.getDataURI();
 		}
 	}
-	if (!mp3src)
-		loadAudio();
+	if (!mp3src[audio[0]])
+		loadAudio(audio[0]);
+	if (!mp3src[audio[1]])
+		loadAudio(audio[1]);
 }
 </script>
 
