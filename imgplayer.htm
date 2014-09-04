@@ -139,8 +139,9 @@ script>-->
     </comment>
   </object>
 
-<audio id="audio0" autoplay>Your browser does not support the <code>audio</code> element.</audio>
-<audio id="audio1" autoplay />
+<!-- <audio id="audio0" autoplay>Your browser does not support the <code>audio</code> element.</audio>
+<audio id="audio1" autoplay /> -->
+<audio id="audio" autoplay />
 <script>
 
 var width = 720, height = 540; // for the <embed> only
@@ -157,7 +158,7 @@ videoImageContext = videoImage.getContext( '2d' );
 applet = document.getElementById( 'img-applet' );
 applet_ie = document.getElementById( 'img-applet-ie' );
 
-audio = [ document.getElementById( 'audio0' ), document.getElementById( 'audio1' ) ];
+audio = document.getElementById( 'audio' ); // [ document.getElementById( 'audio0' ), document.getElementById( 'audio1' ) ];
 mp3applet = document.getElementById( 'mp3-applet' );
 mp3applet_ie = document.getElementById( 'mp3-applet-ie' );
 
@@ -183,19 +184,19 @@ function checkMp3Applet() {
 	return mp3applet_;
 }
 
-function loadAudio(audio_) {
-	if (checkMp3Applet()) {
-		var mp3sn_ = mp3applet_.getSN();
-		if ( mp3sn_ != mp3sn && mp3sn_ > 0 ) {
-			mp3sn = mp3sn_;
-			var src_ = audio_.src = mp3applet_.getDataURI();
-			audio_.src_set_ = true;
-			//if (!theOtherAudio(audio_).is_playing_)
-			//	audio_.play();
-			console.log("audio # " + thisAudioIndex(audio_) + ": frame.sn = " + mp3sn_ + "; audio.src = " + (!src_ || src_.length < 50 ? src_ : src_.substring(0, 50) + "..."));
-		}
-	}
-}
+//function loadAudio(audio_) {
+//	if (checkMp3Applet()) {
+//		var mp3sn_ = mp3applet_.getSN();
+//		if ( mp3sn_ != mp3sn && mp3sn_ > 0 ) {
+//			mp3sn = mp3sn_;
+//			var src_ = audio_.src = mp3applet_.getDataURI();
+//			audio_.src_set_ = true;
+//			//if (!theOtherAudio(audio_).is_playing_)
+//			//	audio_.play();
+//			console.log("audio # " + thisAudioIndex(audio_) + ": frame.sn = " + mp3sn_ + "; audio.src = " + (!src_ || src_.length < 50 ? src_ : src_.substring(0, 50) + "..."));
+//		}
+//	}
+//}
 
 // background color if no video present
 videoImageContext.fillStyle = '#005337';
@@ -250,33 +251,33 @@ image[0].onload = image[1].onload = function() {
 //audio.onwaiting           = function() { console.log("event: waiting;          " + conLog(this)); };
 //audio.onvolumechange      = function() { console.log("event: volumechange;     " + conLog(this)); };
 
-function theOtherAudio(audio_) { return audio_ === audio[0] ? audio[1] : audio[0]; }
-function thisAudioIndex(audio_) { return audio_ === audio[0] ? 0 : 1; }
+//function theOtherAudio(audio_) { return audio_ === audio[0] ? audio[1] : audio[0]; }
+//function thisAudioIndex(audio_) { return audio_ === audio[0] ? 0 : 1; }
 
-audio[0].onpause = audio[1].onpause = function() {
-	this.src_set_ = this.can_play_ = this.is_playing_ = false;
-	//this.removeAttribute("src");
-	//theOtherAudio(this).play();
-	//loadAudio(this);
-};
+//audio[0].onpause = audio[1].onpause = function() {
+//	this.src_set_ = this.can_play_ = this.is_playing_ = false;
+//	//this.removeAttribute("src");
+//	//theOtherAudio(this).play();
+//	//loadAudio(this);
+//};
 
-audio[0].onplay = audio[1].onplay = function() {
-	this.is_playing_ = true;
-	//if (!theOtherAudio(this).src_set_)
-	//	loadAudio(theOtherAudio(this));
-}
+//audio[0].onplay = audio[1].onplay = function() {
+//	this.is_playing_ = true;
+//	//if (!theOtherAudio(this).src_set_)
+//	//	loadAudio(theOtherAudio(this));
+//}
 
-audio[0].oncanplay = audio[1].oncanplay = function() {
-	this.can_play_ = true;
-	//if (!theOtherAudio(this).is_playing_)
-	//	this.play();
-}
+//audio[0].oncanplay = audio[1].oncanplay = function() {
+//	this.can_play_ = true;
+//	//if (!theOtherAudio(this).is_playing_)
+//	//	this.play();
+//}
 
 //window.requestAnimationFrame = function( /* function FrameRequestCallback */ callback, /* DOMElement Element */ element ) {
 //	window.setTimeout( callback, 1 );
 //};
 
-var cnt = 0;
+var cnt = 0, audioStarted = false;
 
 // start the loop				
 animate();
@@ -296,10 +297,14 @@ function render() {
 			image[last_img = (last_img + 1) % 2].src = applet_.getDataURI();
 		}
 	}
-	if (!audio[0].src_set_)
-		loadAudio(audio[0]);
-	if (!audio[1].src_set_)
-		loadAudio(audio[1]);
+	//if (!audio[0].src_set_)
+	//	loadAudio(audio[0]);
+	//if (!audio[1].src_set_)
+	//	loadAudio(audio[1]);
+	if (!audioStarted && checkMp3Applet()) {
+		audioStarted = true;
+		audio.src = "http://127.0.0.1:" + mp3applet_.startHttpServer();
+	}
 }
 </script>
 
