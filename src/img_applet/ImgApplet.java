@@ -16,8 +16,11 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+//import java.net.SocketAddress;
 import java.util.ArrayList;
 //import java.io.OutputStreamWriter;
 //import java.io.InputStreamReader;
@@ -39,7 +42,7 @@ import ffmpeg.FFmpeg;
 @SuppressWarnings("serial")
 public class ImgApplet extends JApplet implements Runnable {
 	
-	private class Buffer
+	static private class Buffer
 	{
 		public volatile byte[] b;
 		public volatile int sn, len;
@@ -47,7 +50,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		public Buffer(int size) { b = new byte[this.size = size]; }
 	}
 
-	private abstract class MultiBuffer
+	static private abstract class MultiBuffer
 	{
 		protected volatile int sn;
 		int getSN() { return sn; }
@@ -146,7 +149,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			}
 			int res = buf.len = in.read(buf.b);
 			buf.sn = ++sn;
-			filledBufferList.add(buf);
+			(res != -1 ? filledBufferList : emptyBufferList).add(buf);
 			return res;
 		}
 		@Override
@@ -232,7 +235,7 @@ public class ImgApplet extends JApplet implements Runnable {
     private void debug(String dbg) { if (DEBUG) System.out.println(dbg); }
     private void debug(String dbg, String inf) { if (DEBUG) System.out.println(dbg); else System.out.println(inf); }
 
-    private class BufferedConsoleOut
+    static private class BufferedConsoleOut
     {
     	public BufferedConsoleOut(OutputStream out, int len) { this.out = out; buf = new byte[len]; }
     	public BufferedConsoleOut(OutputStream out) { this(out, 500); }
@@ -375,18 +378,15 @@ public class ImgApplet extends JApplet implements Runnable {
 						switch (pipeOutputFormat()) {
 						case mjpeg:
 							in_ = new MjpegInputStream(ffmp.getInputStream());
-							dataUriStringBuilder = new StringBuilder("data:image/jpeg;base64,");
-							dataUriPrefixLength = dataUriStringBuilder.length();
+							dataOut = new DataOut("image/jpeg");
 							break;
 						case mp3:
-							in_ = new MP3InputStream(ffmp.getInputStream()).setSkipTags().setDataFramesInFragment(mp3FramesPerChunk);
-							dataUriStringBuilder = new StringBuilder("data:audio/mpeg;base64,");
-							dataUriPrefixLength = dataUriStringBuilder.length();
+							in_ = new MP3InputStream(ffmp.getInputStream())/*.setSkipTags()*/.setDataFramesInFragment(mp3FramesPerChunk);
+							dataOut = new DataOut("audio/mpeg");
 							break;
 						case unknown: case none: default:
 							in_ = new BufferedInputStream(ffmp.getInputStream(), 1);
-							dataUriStringBuilder = new StringBuilder("data:application/octet-stream;base64,");
-							dataUriPrefixLength = dataUriStringBuilder.length();
+							dataOut = new DataOut("application/octet-stream");
 							break; 
 						}
 						while (res != -1/* && !ffm_stop*/)
@@ -462,24 +462,44 @@ public class ImgApplet extends JApplet implements Runnable {
 			this.ffmp.destroy();
 	}
 	
-	private StringBuilder dataUriStringBuilder = new StringBuilder("data:image/jpeg;base64,");
-	private int dataUriPrefixLength = dataUriStringBuilder.length();
+	static private class DataOut {
+		public String contentType;
+		public StringBuilder dataUriStringBuilder;
+		private int dataUriPrefixLength;
+		public DataOut(String contentType) {
+			this.contentType = contentType;
+			dataUriStringBuilder = new StringBuilder("data:" + contentType + ";base64,");
+			dataUriPrefixLength = dataUriStringBuilder.length();
+		}
+		public void resetStringBuilder() { dataUriStringBuilder.setLength(dataUriPrefixLength); }
+	}
+	private DataOut dataOut; 
 
 	public String getDataURI() throws IOException {
 		if (multiBuffer.getSN() == 0)
 			return null;
-		dataUriStringBuilder.setLength(dataUriPrefixLength);
-		return dataUriStringBuilder.append(DatatypeConverter.printBase64Binary(multiBuffer.getBytes())).toString();
+		dataOut.resetStringBuilder();
+		return dataOut.dataUriStringBuilder.append(DatatypeConverter.printBase64Binary(multiBuffer.getBytes())).toString();
 	}
 	
 	public int getSN() { return multiBuffer.getSN(); }
 	
-	public int startHttpServer() throws IOException {
-        try (ServerSocket serverSocket = new ServerSocket(0)) {
-            serverSocket.setReuseAddress(true);
-            new Thread(new Runnable(){
-				@Override
-				public void run() {
+	private Object httpLock = new Object();
+	private volatile int httpPort;
+	
+	public int getHttpPort() { return httpPort; }
+	
+	public int startHttpServer() throws InterruptedException {
+        new Thread(new Runnable(){
+			@Override
+			public void run() {
+				try (	ServerSocket serverSocket = new ServerSocket()	) {
+					serverSocket.setReuseAddress(true);
+					serverSocket.bind(new InetSocketAddress(InetAddress.getByAddress(new byte[] { 127, 0, 0, 1 }), 0), 1);
+					httpPort = serverSocket.getLocalPort();
+					synchronized (httpLock) {
+						httpLock.notify();
+					}
 					try (	Socket clientSocket = serverSocket.accept();
 							OutputStream out = clientSocket.getOutputStream();
 							PrintWriter charOut = new PrintWriter(out);
@@ -495,7 +515,8 @@ public class ImgApplet extends JApplet implements Runnable {
 						}
 						if (DEBUG)
 							System.out.println(input.toString());
-						charOut.write("HTTP/1.1 200 OK\r\n\r\n");
+						//charOut.write("HTTP/1.1 200 OK\r\nContent-Type: " + dataOut.contentType + "\r\n\r\n");
+						charOut.write("HTTP/1.1 206 Partial Content\r\nContent-Type: " + dataOut.contentType + "\r\n\r\n");
 						charOut.flush();
 //						byte[] bytes;
 //						while ((bytes = multiBuffer.getBytes()) != null || isPlaying()) {
@@ -515,10 +536,18 @@ public class ImgApplet extends JApplet implements Runnable {
 					} catch (IOException e) {
 						e.printStackTrace();
 					}
+				} catch (IOException e) {
+					e.printStackTrace();
+				} finally {
+					httpPort = 0;
 				}
-            }).start();
-            return serverSocket.getLocalPort();
-        }
+				
+			}
+        }).start();
+		synchronized (httpLock) {
+			httpLock.wait();
+		}
+        return httpPort;
 	}
 
 	public void stopPlayback() {
