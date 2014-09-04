@@ -6,12 +6,18 @@ import java.awt.FlowLayout;
 //import java.awt.TextArea;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
 import java.io.FilterInputStream;
 import java.io.BufferedInputStream;
 //import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.util.ArrayList;
 //import java.io.OutputStreamWriter;
 //import java.io.InputStreamReader;
@@ -48,6 +54,8 @@ public class ImgApplet extends JApplet implements Runnable {
 		abstract void reset();
 		abstract int read(InputStream in) throws IOException;
 		abstract byte[] getBytes() throws IOException;
+		abstract Buffer getCurrentBuffer();
+		abstract void releaseCurrentBuffer();
 	}
 	
 	private class DoubleBuffer extends MultiBuffer
@@ -79,8 +87,15 @@ public class ImgApplet extends JApplet implements Runnable {
 				}
 				prev_sn = sn;
 			}
-			return Arrays.copyOf(b1.sn > b2.sn ? b1.b : b2.b, b1.sn > b2.sn ? b1.len : b2.len);
+			Buffer currentBuffer = getCurrentBuffer();
+			return Arrays.copyOf(currentBuffer.b, currentBuffer.len);
 		}
+		@Override
+		Buffer getCurrentBuffer() {
+			return b1.sn > b2.sn ? b1 : b2;
+		}
+		@Override
+		void releaseCurrentBuffer() {}
 	}
 	
 	private class BufferList extends MultiBuffer
@@ -136,24 +151,39 @@ public class ImgApplet extends JApplet implements Runnable {
 		}
 		@Override
 		int getSN() {
-			if (currentBuffer == null)
-				currentBuffer = (Buffer)filledBufferList.remove();
+			getCurrentBuffer();
 			if (currentBuffer != null)
 				return currentBuffer.sn; 
 			return sn;
 		}
 		@Override
 		byte[] getBytes() throws IOException {
-			if (currentBuffer == null)
-				currentBuffer = (Buffer)filledBufferList.remove();
+			getCurrentBuffer_();
 			if (currentBuffer != null) {
 				byte[] ret = Arrays.copyOf(currentBuffer.b, currentBuffer.len);
-				Buffer buf = currentBuffer;
-				currentBuffer = null;
-				emptyBufferList.add(buf);
+				releaseCurrentBuffer_();
 				return ret;
 			}
 			return null;
+		}
+		private void getCurrentBuffer_() {
+			if (currentBuffer == null)
+				currentBuffer = (Buffer)filledBufferList.remove();
+		}
+		private void releaseCurrentBuffer_() {
+			Buffer buf = currentBuffer;
+			currentBuffer = null;
+			emptyBufferList.add(buf);
+		}
+		@Override
+		Buffer getCurrentBuffer() {
+			getCurrentBuffer_();
+			return currentBuffer;
+		}
+		@Override
+		void releaseCurrentBuffer() {
+			if (currentBuffer != null)
+				releaseCurrentBuffer_();
 		}
 	}
 
@@ -443,6 +473,53 @@ public class ImgApplet extends JApplet implements Runnable {
 	}
 	
 	public int getSN() { return multiBuffer.getSN(); }
+	
+	public int startHttpServer() throws IOException {
+        try (ServerSocket serverSocket = new ServerSocket(0)) {
+            serverSocket.setReuseAddress(true);
+            new Thread(new Runnable(){
+				@Override
+				public void run() {
+					try (	Socket clientSocket = serverSocket.accept();
+							OutputStream out = clientSocket.getOutputStream();
+							PrintWriter charOut = new PrintWriter(out);
+							BufferedOutputStream byteOut = new BufferedOutputStream(out);
+							BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()))
+						) {
+						StringBuilder input = new StringBuilder();
+						String crlf = "\r\n", inputLine;
+						while ((inputLine = in.readLine()) != null) {
+					        if (inputLine.equals(""))
+					            break;
+							input.append(inputLine).append(crlf);
+						}
+						if (DEBUG)
+							System.out.println(input.toString());
+						charOut.write("HTTP/1.1 200 OK\r\n\r\n");
+						charOut.flush();
+//						byte[] bytes;
+//						while ((bytes = multiBuffer.getBytes()) != null || isPlaying()) {
+//							if (bytes != null) {
+//								byteOut.write(bytes);
+//								byteOut.flush();
+//							}
+//						}
+						Buffer buf;
+						while ((buf = multiBuffer.getCurrentBuffer()) != null || isPlaying()) {
+							if (buf != null) {
+								byteOut.write(buf.b, 0, buf.len);
+								multiBuffer.releaseCurrentBuffer();
+								byteOut.flush();
+							}
+						}
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+				}
+            }).start();
+            return serverSocket.getLocalPort();
+        }
+	}
 
 	public void stopPlayback() {
 
