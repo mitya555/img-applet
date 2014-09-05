@@ -486,17 +486,20 @@ public class ImgApplet extends JApplet implements Runnable {
 	
 	private Object httpLock = new Object();
 	private volatile int httpPort;
+	private InetAddress httpAddress;
+	private String host;
 	
 	public boolean isStreaming() { return httpPort > 0; }
 	
-	public int startHttpServer() throws InterruptedException {
+	public /*int*/String startHttpServer() throws InterruptedException {
         new Thread(new Runnable(){
 			@Override
 			public void run() {
 				try (	ServerSocket serverSocket = new ServerSocket()	) {
 					serverSocket.setReuseAddress(true);
-					serverSocket.bind(new InetSocketAddress(InetAddress.getByAddress(new byte[] { 127, 0, 0, 1 }), 0), 1);
+					serverSocket.bind(new InetSocketAddress(/*InetAddress.getByAddress(new byte[] { 127, 0, 0, 1 })*/InetAddress.getByName(host), 0), 1);
 					httpPort = serverSocket.getLocalPort();
+					httpAddress = serverSocket.getInetAddress();
 					synchronized (httpLock) {
 						httpLock.notify();
 					}
@@ -547,7 +550,9 @@ public class ImgApplet extends JApplet implements Runnable {
 		synchronized (httpLock) {
 			httpLock.wait();
 		}
-        return httpPort;
+		String res = "http://" + httpAddress.getHostAddress() + ":" + httpPort;
+        debug(res);
+		/*return httpPort;*/return res;
 	}
 
 	public void stopPlayback() {

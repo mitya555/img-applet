@@ -144,8 +144,8 @@ script>-->
  -->
  
 <!-- <audio id="audio0" autoplay>Your browser does not support the <code>audio</code> element.</audio>
-<audio id="audio1" autoplay /> -->
-<audio id="audio" autoplay="autoplay" controls="controls" />
+<audio id="audio1" autoplay></audio> -->
+<audio id="audio" autoplay="autoplay" controls="controls">Your browser does not support the <code>audio</code> element.</audio>
 <script>
 
 var width = 720, height = 540; // for the <embed> only
@@ -187,28 +187,28 @@ function checkMp3Applet() {
 	}
 	return mp3applet_;
 }
-
-//function loadAudio(audio_) {
-//	if (checkMp3Applet()) {
-//		var mp3sn_ = mp3applet_.getSN();
-//		if ( mp3sn_ != mp3sn && mp3sn_ > 0 ) {
-//			mp3sn = mp3sn_;
-//			var src_ = audio_.src = mp3applet_.getDataURI();
-//			audio_.src_set_ = true;
-//			//if (!theOtherAudio(audio_).is_playing_)
-//			//	audio_.play();
-//			console.log("audio # " + thisAudioIndex(audio_) + ": frame.sn = " + mp3sn_ + "; audio.src = " + (!src_ || src_.length < 50 ? src_ : src_.substring(0, 50) + "..."));
-//		}
-//	}
-//}
-
-// background color if no video present
+//background color if no video present
 videoImageContext.fillStyle = '#005337';
 videoImageContext.fillRect( 0, 0, videoImage.width, videoImage.height );				
 
 image[0].onload = image[1].onload = function() {
 	videoImageContext.drawImage( this, 0, 0, videoImage.width, videoImage.height );
 };
+/*
+function loadAudio(audio_) {
+	if (checkMp3Applet()) {
+		var mp3sn_ = mp3applet_.getSN();
+		if ( mp3sn_ != mp3sn && mp3sn_ > 0 ) {
+			mp3sn = mp3sn_;
+			var src_ = audio_.src = mp3applet_.getDataURI();
+			audio_.src_set_ = true;
+			//if (!theOtherAudio(audio_).is_playing_)
+			//	audio_.play();
+			console.log("audio # " + thisAudioIndex(audio_) + ": frame.sn = " + mp3sn_ + "; audio.src = " + (!src_ || src_.length < 50 ? src_ : src_.substring(0, 50) + "..."));
+		}
+	}
+}
+*/
 /*
 function tns(ns) { switch (ns) { case 0: return "NETWORK_EMPTY"; case 1: return "NETWORK_IDLE"; case 2: return "NETWORK_LOADING"; case 3: return "NETWORK_NO_SOURCE"; default: return "UNKNOWN"; } }
 function trs(rs) { switch (rs) { case 0: return "HAVE_NOTHING"; case 1: return "HAVE_METADATA"; case 2: return "HAVE_CURRENT_DATA"; case 3: return "HAVE_FUTURE_DATA"; case 4: return "HAVE_ENOUGH_DATA"; default: return "UNKNOWN"; } }
@@ -255,28 +255,29 @@ audio.ontimeupdate        = function() { console.log("event: timeupdate;       "
 audio.onwaiting           = function() { console.log("event: waiting;          " + conLog(this)); };
 audio.onvolumechange      = function() { console.log("event: volumechange;     " + conLog(this)); };
 */
-//function theOtherAudio(audio_) { return audio_ === audio[0] ? audio[1] : audio[0]; }
-//function thisAudioIndex(audio_) { return audio_ === audio[0] ? 0 : 1; }
+/*
+function theOtherAudio(audio_) { return audio_ === audio[0] ? audio[1] : audio[0]; }
+function thisAudioIndex(audio_) { return audio_ === audio[0] ? 0 : 1; }
 
-//audio[0].onpause = audio[1].onpause = function() {
-//	this.src_set_ = this.can_play_ = this.is_playing_ = false;
-//	//this.removeAttribute("src");
-//	//theOtherAudio(this).play();
-//	//loadAudio(this);
-//};
+audio[0].onpause = audio[1].onpause = function() {
+	this.src_set_ = this.can_play_ = this.is_playing_ = false;
+	//this.removeAttribute("src");
+	//theOtherAudio(this).play();
+	//loadAudio(this);
+};
 
-//audio[0].onplay = audio[1].onplay = function() {
-//	this.is_playing_ = true;
-//	//if (!theOtherAudio(this).src_set_)
-//	//	loadAudio(theOtherAudio(this));
-//}
+audio[0].onplay = audio[1].onplay = function() {
+	this.is_playing_ = true;
+	//if (!theOtherAudio(this).src_set_)
+	//	loadAudio(theOtherAudio(this));
+}
 
-//audio[0].oncanplay = audio[1].oncanplay = function() {
-//	this.can_play_ = true;
-//	//if (!theOtherAudio(this).is_playing_)
-//	//	this.play();
-//}
-
+audio[0].oncanplay = audio[1].oncanplay = function() {
+	this.can_play_ = true;
+	//if (!theOtherAudio(this).is_playing_)
+	//	this.play();
+}
+*/
 //window.requestAnimationFrame = function( /* function FrameRequestCallback */ callback, /* DOMElement Element */ element ) {
 //	window.setTimeout( callback, 1 );
 //};
@@ -301,15 +302,15 @@ function render() {
 			image[last_img = (last_img + 1) % 2].src = applet_.getDataURI();
 		}
 	}
-	//if (!audio[0].src_set_)
-	//	loadAudio(audio[0]);
-	//if (!audio[1].src_set_)
-	//	loadAudio(audio[1]);
+/*	if (!audio[0].src_set_)
+		loadAudio(audio[0]);
+	if (!audio[1].src_set_)
+		loadAudio(audio[1]);*/
 	if (mp3Playing)
 		mp3Playing = mp3applet_.isStreaming();
 	else if (checkMp3Applet() && mp3applet_.isPlaying() && mp3applet_.getSN() > 0) {
 		mp3Playing = true;
-		audio.src = "http://127.0.0.1:" + mp3applet_.startHttpServer();
+		audio.src = mp3applet_.startHttpServer();
 	}
 }
 </script>
