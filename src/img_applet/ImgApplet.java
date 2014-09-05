@@ -487,7 +487,7 @@ public class ImgApplet extends JApplet implements Runnable {
 	private Object httpLock = new Object();
 	private volatile int httpPort;
 	
-	public int getHttpPort() { return httpPort; }
+	public boolean isStreaming() { return httpPort > 0; }
 	
 	public int startHttpServer() throws InterruptedException {
         new Thread(new Runnable(){
