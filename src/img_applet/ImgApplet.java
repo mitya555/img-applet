@@ -487,7 +487,7 @@ public class ImgApplet extends JApplet implements Runnable {
 	private Object httpLock = new Object();
 	private volatile int httpPort;
 	private InetAddress httpAddress;
-	private String host;
+	/*private String host;*/
 	
 	public boolean isStreaming() { return httpPort > 0; }
 	
@@ -497,7 +497,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			public void run() {
 				try (	ServerSocket serverSocket = new ServerSocket()	) {
 					serverSocket.setReuseAddress(true);
-					serverSocket.bind(new InetSocketAddress(/*InetAddress.getByAddress(new byte[] { 127, 0, 0, 1 })*/InetAddress.getByName(host), 0), 1);
+					serverSocket.bind(new InetSocketAddress(InetAddress.getByAddress(new byte[] { 127, 0, 0, 1 })/*InetAddress.getByName(host)*/, 0), 1);
 					httpPort = serverSocket.getLocalPort();
 					httpAddress = serverSocket.getInetAddress();
 					synchronized (httpLock) {
@@ -543,6 +543,7 @@ public class ImgApplet extends JApplet implements Runnable {
 					e.printStackTrace();
 				} finally {
 					httpPort = 0;
+					stopPlayback();
 				}
 				
 			}
