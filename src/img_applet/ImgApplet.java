@@ -20,6 +20,8 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 //import java.net.SocketAddress;
 import java.util.ArrayList;
 //import java.io.OutputStreamWriter;
@@ -487,7 +489,6 @@ public class ImgApplet extends JApplet implements Runnable {
 	private Object httpLock = new Object();
 	private volatile int httpPort;
 	private InetAddress httpAddress;
-	/*private String host;*/
 	
 	public boolean isStreaming() { return httpPort > 0; }
 	
@@ -497,12 +498,15 @@ public class ImgApplet extends JApplet implements Runnable {
 			public void run() {
 				try (	ServerSocket serverSocket = new ServerSocket()	) {
 					serverSocket.setReuseAddress(true);
-					serverSocket.bind(new InetSocketAddress(InetAddress.getByAddress(new byte[] { 127, 0, 0, 1 })/*InetAddress.getByName(host)*/, 0), 1);
+					serverSocket.bind(new InetSocketAddress(InetAddress.getByAddress(new byte[] { 127, 0, 0, 1 }), 0), 1);
 					httpPort = serverSocket.getLocalPort();
 					httpAddress = serverSocket.getInetAddress();
 					synchronized (httpLock) {
 						httpLock.notify();
 					}
+AccessController.doPrivileged(new PrivilegedAction<Object>() {
+	@Override
+	public Object run() {
 					try (	Socket clientSocket = serverSocket.accept();
 							OutputStream out = clientSocket.getOutputStream();
 							PrintWriter charOut = new PrintWriter(out);
@@ -519,7 +523,7 @@ public class ImgApplet extends JApplet implements Runnable {
 						if (DEBUG)
 							System.out.println(input.toString());
 						//charOut.write("HTTP/1.1 200 OK\r\nContent-Type: " + dataOut.contentType + "\r\n\r\n");
-						charOut.write("HTTP/1.1 206 Partial Content\r\nContent-Type: " + dataOut.contentType + "\r\n\r\n");
+						charOut.write("HTTP/1.1 206 Partial Content\r\nContent-Type: " + dataOut.contentType + "\r\nAccess-Control-Allow-Origin: *\r\n\r\n");
 						charOut.flush();
 //						byte[] bytes;
 //						while ((bytes = multiBuffer.getBytes()) != null || isPlaying()) {
@@ -539,6 +543,9 @@ public class ImgApplet extends JApplet implements Runnable {
 					} catch (IOException e) {
 						e.printStackTrace();
 					}
+		return null;
+	}
+}); /* doPrivileged() */
 				} catch (IOException e) {
 					e.printStackTrace();
 				} finally {
