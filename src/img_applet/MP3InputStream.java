@@ -19,6 +19,10 @@ public class MP3InputStream extends FilterInputStream {
 	private CircularBuffer buf = new CircularBuffer(3);
 	
 //	private int byteCount;
+	
+	private static int getInt(byte[] b, int off) {
+		return b[off] << 24 >>> 3 | b[off + 1] << 24 >>> 10 | b[off + 2] << 24 >>> 17 | b[off + 3] << 24 >>> 24;
+	}
 
 	@Override
 	public int read(byte[] b, int off, int len) throws IOException {
@@ -39,7 +43,7 @@ public class MP3InputStream extends FilterInputStream {
 //					byteCount += len_;
 					if (len_ == -1 || len_ < 7)
 						return -1;
-					len_ = 0x00000000 | tmp[3] << 21 | tmp[4] << 14 | tmp[5] << 7 | tmp[6];
+					len_ = getInt(tmp, 3);
 					long res = in.skip(len_);
 //					byteCount += res;
 					if (res == -1 || res < len_)
@@ -53,7 +57,7 @@ public class MP3InputStream extends FilterInputStream {
 //					byteCount += len_;
 					if (len_ == -1 || len_ < 7)
 						return -1;
-					len_ = 0x00000000 | b[off + 6] << 21 | b[off + 7] << 14 | b[off + 8] << 7 | b[off + 9];
+					len_ = getInt(b, off + 6);
 					if (len < 10 + len_)
 						throw new IOException("Insufficient buffer length");
 					int res = in.read(b, off + 10, len_);
@@ -83,7 +87,7 @@ public class MP3InputStream extends FilterInputStream {
 			{
 				if (off_ - off == len)
 					throw new IOException("Insufficient buffer length");
-				b[off_++] = (byte)buf.get(0);
+				b[off_++] = buf.get(0);
 			}
 			b_ = in.read();
 //			byteCount++;

@@ -303,11 +303,12 @@ public class ImgApplet extends JApplet implements Runnable {
 	private void addOpt_V(String name, List<String> command, String dflt) { addOptNV(name, null, command, dflt); }
 	private void addOptN_(String name, List<String> command) { if (!isNo(getParameter(PARAM_PREFIX + name))) command.add("-" + name); }
 	
-	private enum OutputFormat { none, mjpeg, mp3, unknown }
+	private enum OutputFormat { none, mjpeg, mp3, mp4, unknown }
 	private OutputFormat pipeOutputFormat() {
 		return optValue.get("o").startsWith("pipe:") ?
 				"mjpeg".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.mjpeg :
 				"mp3".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.mp3 :
+				"mp4".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.mp4 :
 				OutputFormat.unknown : OutputFormat.none;
 	}
 	
@@ -385,6 +386,10 @@ public class ImgApplet extends JApplet implements Runnable {
 						case mp3:
 							in_ = new MP3InputStream(ffmp.getInputStream())/*.setSkipTags()*/.setDataFramesInFragment(mp3FramesPerChunk);
 							dataOut = new DataOut("audio/mpeg");
+							break;
+						case mp4:
+							in_ = new fMP4InputStream(ffmp.getInputStream());
+							dataOut = new DataOut("video/mp4");
 							break;
 						case unknown: case none: default:
 							in_ = new BufferedInputStream(ffmp.getInputStream(), 1);
