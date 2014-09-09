@@ -303,12 +303,13 @@ public class ImgApplet extends JApplet implements Runnable {
 	private void addOpt_V(String name, List<String> command, String dflt) { addOptNV(name, null, command, dflt); }
 	private void addOptN_(String name, List<String> command) { if (!isNo(getParameter(PARAM_PREFIX + name))) command.add("-" + name); }
 	
-	private enum OutputFormat { none, mjpeg, mp3, mp4, unknown }
+	private enum OutputFormat { none, mjpeg, mp3, mp4, webm, unknown }
 	private OutputFormat pipeOutputFormat() {
 		return optValue.get("o").startsWith("pipe:") ?
 				"mjpeg".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.mjpeg :
 				"mp3".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.mp3 :
 				"mp4".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.mp4 :
+				"webm".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.webm :
 				OutputFormat.unknown : OutputFormat.none;
 	}
 	
@@ -330,7 +331,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		addOptNV("analyzeduration", command);
 		addOptNV("probesize", command);
 		addOptN_("re", command);
-		addOptNV("f:i", "f", command, "flv");
+		addOptNV("f:i", "f", command/*, "flv"*/);
 		addOptNV("flv_metadata", command);
 		addOptNV("i", command);
 		addOptNV("frames:d", command);
@@ -391,6 +392,10 @@ public class ImgApplet extends JApplet implements Runnable {
 							in_ = new fMP4InputStream(ffmp.getInputStream());
 							dataOut = new DataOut("video/mp4");
 							break;
+						case webm:
+							in_ = new BufferedInputStream(ffmp.getInputStream());
+							dataOut = new DataOut("video/webm");
+							break; 
 						case unknown: case none: default:
 							in_ = new BufferedInputStream(ffmp.getInputStream(), 1);
 							dataOut = new DataOut("application/octet-stream");
@@ -501,7 +506,7 @@ public class ImgApplet extends JApplet implements Runnable {
         new Thread(new Runnable(){
 			@Override
 			public void run() {
-				try (	ServerSocket serverSocket = new ServerSocket()	) {
+				try (ServerSocket serverSocket = new ServerSocket()) {
 					serverSocket.setReuseAddress(true);
 					serverSocket.bind(new InetSocketAddress(InetAddress.getByAddress(new byte[] { 127, 0, 0, 1 }), 0), 1);
 					httpPort = serverSocket.getLocalPort();
@@ -509,48 +514,13 @@ public class ImgApplet extends JApplet implements Runnable {
 					synchronized (httpLock) {
 						httpLock.notify();
 					}
-AccessController.doPrivileged(new PrivilegedAction<Object>() {
-	@Override
-	public Object run() {
-					try (	Socket clientSocket = serverSocket.accept();
-							OutputStream out = clientSocket.getOutputStream();
-							PrintWriter charOut = new PrintWriter(out);
-							BufferedOutputStream byteOut = new BufferedOutputStream(out);
-							BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()))
-						) {
-						StringBuilder input = new StringBuilder();
-						String crlf = "\r\n", inputLine;
-						while ((inputLine = in.readLine()) != null) {
-					        if (inputLine.equals(""))
-					            break;
-							input.append(inputLine).append(crlf);
+					AccessController.doPrivileged(new PrivilegedAction<Object>() {
+						@Override
+						public Object run() {
+							runHttpServer(serverSocket);
+							return null;
 						}
-						if (DEBUG)
-							System.out.println(input.toString());
-						//charOut.write("HTTP/1.1 200 OK\r\nContent-Type: " + dataOut.contentType + "\r\n\r\n");
-						charOut.write("HTTP/1.1 206 Partial Content\r\nContent-Type: " + dataOut.contentType + "\r\nAccess-Control-Allow-Origin: *\r\n\r\n");
-						charOut.flush();
-//						byte[] bytes;
-//						while ((bytes = multiBuffer.getBytes()) != null || isPlaying()) {
-//							if (bytes != null) {
-//								byteOut.write(bytes);
-//								byteOut.flush();
-//							}
-//						}
-						Buffer buf;
-						while ((buf = multiBuffer.getCurrentBuffer()) != null || isPlaying()) {
-							if (buf != null) {
-								byteOut.write(buf.b, 0, buf.len);
-								multiBuffer.releaseCurrentBuffer();
-								byteOut.flush();
-							}
-						}
-					} catch (IOException e) {
-						e.printStackTrace();
-					}
-		return null;
-	}
-}); /* doPrivileged() */
+					}); /* doPrivileged() */
 				} catch (IOException e) {
 					e.printStackTrace();
 				} finally {
@@ -566,6 +536,45 @@ AccessController.doPrivileged(new PrivilegedAction<Object>() {
 		String res = "http://" + httpAddress.getHostAddress() + ":" + httpPort;
         debug(res);
 		/*return httpPort;*/return res;
+	}
+
+	private void runHttpServer(ServerSocket serverSocket) {
+		try (	Socket clientSocket = serverSocket.accept();
+				OutputStream out = clientSocket.getOutputStream();
+				PrintWriter charOut = new PrintWriter(out);
+				BufferedOutputStream byteOut = new BufferedOutputStream(out);
+				BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()))
+			) {
+			StringBuilder input = new StringBuilder();
+			String crlf = "\r\n", inputLine;
+			while ((inputLine = in.readLine()) != null) {
+		        if (inputLine.equals(""))
+		            break;
+				input.append(inputLine).append(crlf);
+			}
+			if (DEBUG)
+				System.out.println(input.toString());
+			//charOut.write("HTTP/1.1 200 OK\r\nContent-Type: " + dataOut.contentType + "\r\n\r\n");
+			charOut.write("HTTP/1.1 206 Partial Content\r\nContent-Type: " + dataOut.contentType + "\r\nAccess-Control-Allow-Origin: *\r\n\r\n");
+			charOut.flush();
+//			byte[] bytes;
+//			while ((bytes = multiBuffer.getBytes()) != null || isPlaying()) {
+//				if (bytes != null) {
+//					byteOut.write(bytes);
+//					byteOut.flush();
+//				}
+//			}
+			Buffer buf;
+			while ((buf = multiBuffer.getCurrentBuffer()) != null || isPlaying()) {
+				if (buf != null) {
+					byteOut.write(buf.b, 0, buf.len);
+					multiBuffer.releaseCurrentBuffer();
+					byteOut.flush();
+				}
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 
 	public void stopPlayback() {

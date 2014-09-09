@@ -1,0 +1,176 @@
+<!doctype html>
+<html>
+<head>
+<script>
+/**
+ * Provides requestAnimationFrame in a cross browser way.
+ * http://paulirish.com/2011/requestanimationframe-for-smart-animating/
+ */
+if ( !window.requestAnimationFrame ) {
+	window.requestAnimationFrame = (function() {
+		return window.webkitRequestAnimationFrame ||
+		window.mozRequestAnimationFrame ||
+		window.oRequestAnimationFrame ||
+		window.msRequestAnimationFrame ||
+		function( /* function FrameRequestCallback */ callback, /* DOMElement Element */ element ) {
+			window.setTimeout( callback, 1000 / 60 );
+		};
+	})();
+}
+</script>
+</head>
+<body>
+<object id="applet-ie"
+  classid="clsid:8AD9C840-044E-11D1-B3E9-00805F499D93"
+  width="100" height="40">
+  <param name="archive" value="img-applet.jar">
+  <param name="code" value="img_applet.ImgApplet">
+  <param name="ffmpeg-re" value="">
+  <param name="ffmpeg-f:i" value="">
+  <!--<param name="ffmpeg-i" value="rtmp://10.44.41.97/rtmp/webcam">-->
+  <!--<param name="ffmpeg-i" value="rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp">-->
+  <!--<param name="ffmpeg-i" value="rtmp://85.132.78.6:1935/live/muztv.stream">-->
+  <param name="ffmpeg-i" value="http://83.139.104.101/Content/HLS/Live/Channel(Sk_1)/index.m3u8">
+  <param name="ffmpeg-c:a" value="copy">
+  <param name="ffmpeg-c:v" value="copy">
+  <param name="ffmpeg-f:o" value="mp4">
+  <param name="ffmpeg-movflags" value="frag_keyframe+empty_moov">
+  <param name="frame-buffer-size" value="5000">
+  <param name="debug" value="yes">
+  <comment>
+    <embed id="applet"
+      type="application/x-java-applet"
+      width="100" height="40" 
+      archive="img-applet.jar"
+      code="img_applet.ImgApplet"
+      pluginspage="http://java.com/download/"
+      ffmpeg-re=""
+      ffmpeg-i="rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp"
+      ffmpeg-c:a="libvorbis"
+      ffmpeg-c:v="libvpx"
+      ffmpeg-f:o="webm"
+      frame-buffer-size="1000000"
+      max-buffer-count="5"
+      debug="yes" />
+  </comment>
+</object>
+<!-- 
+      ffmpeg-c:a="copy"
+      ffmpeg-c:v="copy"
+      ffmpeg-f:o="mp4"
+      ffmpeg-movflags="frag_keyframe+empty_moov"
+      ffmpeg-o="output.mp4"
+ -->
+<video id="video" autoplay="autoplay" controls="controls" crossorigin="anonymous" 
+	width="1047" height="576">Your browser does not support the <code>video</code> element.</video>
+<canvas id="videoImage" width="1047" height="576" style="display:none;"></canvas>
+<script>
+
+var width = 720, height = 540; // for the <embed> only
+
+// global variables
+var videoImage, videoImageContext;
+
+var video, applet, applet_ie, applet_, sn = 0;
+
+// assign variables to HTML elements
+videoImage = document.getElementById( 'videoImage' );
+videoImageContext = videoImage.getContext( '2d' );
+
+video = document.getElementById( 'video' );
+applet = document.getElementById( 'applet' );
+applet_ie = document.getElementById( 'applet-ie' );
+
+function checkApplet() {
+	if (!applet_) {
+		if (applet && applet.getSN) {
+			applet_ = applet;
+			video.width /*= videoImage.width*/ = width;
+			video.height /*= videoImage.height*/ = height;
+		} else if (applet_ie && typeof(applet_ie.getSN) === "unknown")
+			applet_ = applet_ie;
+	}
+	return applet_;
+}
+//background color if no video present
+videoImageContext.fillStyle = '#005337';
+videoImageContext.fillRect( 0, 0, videoImage.width, videoImage.height );				
+/*
+image[0].onload = image[1].onload = function() {
+	videoImageContext.drawImage( this, 0, 0, videoImage.width, videoImage.height );
+};
+*/
+/*
+function tns(ns) { switch (ns) { case 0: return "NETWORK_EMPTY"; case 1: return "NETWORK_IDLE"; case 2: return "NETWORK_LOADING"; case 3: return "NETWORK_NO_SOURCE"; default: return "UNKNOWN"; } }
+function trs(rs) { switch (rs) { case 0: return "HAVE_NOTHING"; case 1: return "HAVE_METADATA"; case 2: return "HAVE_CURRENT_DATA"; case 3: return "HAVE_FUTURE_DATA"; case 4: return "HAVE_ENOUGH_DATA"; default: return "UNKNOWN"; } }
+function terr(err) { switch (err) { case 1: return "MEDIA_ERR_ABORTED"; case 2: return "MEDIA_ERR_NETWORK"; case 3: return "MEDIA_ERR_DECODE"; case 4: case 5: return "MEDIA_ERR_SRC_NOT_SUPPORTED"; default: return "UNKNOWN"; } }
+function conLog(e, t) {
+	var timeranges = "";
+	switch (t) {
+	case 1: // buffered
+		timeranges = " buffered:";
+		for (var i = 0; i < e.buffered.length; i++)
+			timeranges += " time range " + i + ": start=" + e.buffered.start(i) + "; end=" + e.buffered.end(i) + (i == e.buffered.length - 1 ? "" : ";");
+		break;
+	case 2: // played
+		timeranges = " played:";
+		for (var i = 0; i < e.played.length; i++)
+			timeranges += " time range " + i + ": start=" + e.played.start(i) + "; end=" + e.played.end(i) + (i == e.played.length - 1 ? "" : ";");
+		break;
+	}
+	return " readyState: " + e.readyState + "(" + trs(e.readyState) + "); networkState: " + e.networkState + "(" + tns(e.networkState) + ");" + timeranges; 
+}
+function conErr(e) { return " Error: " + e.error.code + "(" + terr(e.error.code) + ");" + conLog(e); }
+
+video.onabort             = function() { console.log("event: abort;            " + conLog(this)); };
+video.oncanplay           = function() { console.log("event: canplay;          " + conLog(this)); };
+video.oncanplaythrough    = function() { console.log("event: canplaythrough;   " + conLog(this)); };
+video.ondurationchange    = function() { console.log("event: durationchange;   " + conLog(this, 1)); }; // buffered
+video.onemptied           = function() { console.log("event: emptied;          " + conLog(this)); };
+video.onended             = function() { console.log("event: ended;            " + conLog(this)); };
+video.onerror             = function() { console.error("event: error;          " + conErr(this)); };
+video.onloadeddata        = function() { console.log("event: loadeddata;       " + conLog(this)); };
+video.onloadedmetadata    = function() { console.log("event: loadedmetadata;   " + conLog(this)); };
+video.onloadstart         = function() { console.log("event: loadstart;        " + conLog(this)); };
+video.onmozvideoavailable = function() { console.log("event: mozvideoavailable;" + conLog(this)); };
+video.onpause             = function() { console.log("event: pause;            " + conLog(this)); };
+video.onplay              = function() { console.log("event: play;             " + conLog(this)); };
+video.onplaying           = function() { console.log("event: playing;          " + conLog(this)); };
+video.onprogress          = function() { console.log("event: progress;         " + conLog(this, 1)); }; // buffered
+video.onratechange        = function() { console.log("event: ratechange;       " + conLog(this)); };
+video.onstalled           = function() { console.log("event: stalled;          " + conLog(this)); };
+video.onseeked            = function() { console.log("event: seeked;           " + conLog(this)); };
+video.onseeking           = function() { console.log("event: seeking;          " + conLog(this)); };
+video.onsuspend           = function() { console.log("event: suspend;          " + conLog(this)); };
+video.ontimeupdate        = function() { console.log("event: timeupdate;       " + conLog(this, 2)); }; // played
+video.onwaiting           = function() { console.log("event: waiting;          " + conLog(this)); };
+video.onvolumechange      = function() { console.log("event: volumechange;     " + conLog(this)); };
+*/
+//window.requestAnimationFrame = function( /* function FrameRequestCallback */ callback, /* DOMElement Element */ element ) {
+//	window.setTimeout( callback, 1 );
+//};
+
+var cnt = 0, playing = false;
+
+// start the loop				
+animate();
+
+function animate() {
+	requestAnimationFrame( animate );
+	render();
+}
+
+function render() {
+	if ((++cnt) % 2 != 0)
+		return;
+	if (playing)
+		playing = applet_.isStreaming();
+	else if (checkApplet() && applet_.isPlaying() && applet_.getSN() > 0) {
+		playing = true;
+		video.src = applet_.startHttpServer();
+	}
+}
+</script>
+
+</body>
+</html>
