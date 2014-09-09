@@ -404,6 +404,9 @@ public class ImgApplet extends JApplet implements Runnable {
 						while (res != -1/* && !ffm_stop*/)
 							try {
 								res = multiBuffer.read(in_);
+								synchronized (httpLock) {
+									httpLock.notify();
+								}
 //								debug("fragment of " + res + " bytes");
 							} catch (IOException e) {
 								e.printStackTrace();
@@ -419,6 +422,9 @@ public class ImgApplet extends JApplet implements Runnable {
 							}
 						setUIForPlaying(false);
 						debug("Thread processing output from ffmpeg has ended.", "FFMPEG process terminated.");
+						synchronized (httpLock) {
+							httpLock.notify();
+						}
 					}
 				}
 			});
@@ -570,9 +576,12 @@ public class ImgApplet extends JApplet implements Runnable {
 					byteOut.write(buf.b, 0, buf.len);
 					multiBuffer.releaseCurrentBuffer();
 					byteOut.flush();
-				}
+				} else if (isPlaying())
+					synchronized (httpLock) {
+						httpLock.wait();
+					}
 			}
-		} catch (IOException e) {
+		} catch (IOException | InterruptedException e) {
 			e.printStackTrace();
 		}
 	}
