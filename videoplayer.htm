@@ -44,24 +44,39 @@ if ( !window.requestAnimationFrame ) {
       archive="img-applet.jar"
       code="img_applet.ImgApplet"
       pluginspage="http://java.com/download/"
-      ffmpeg-re=""
+      ffmpeg-re="no"
       ffmpeg-i="rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp"
-      ffmpeg-c:a="libvorbis"
-      ffmpeg-c:v="libvpx"
-      ffmpeg-f:o="webm"
-      frame-buffer-size="1000000"
-      max-buffer-count="5"
+      ffmpeg-c:a="libmp3lame"
+      ffmpeg-c:v="mjpeg"
+      ffmpeg-q:v="0"
+      ffmpeg-y=""
+      ffmpeg-o="outputz.mov"
+      frame-buffer-size="200000"
+      max-buffer-count="25"
       debug="yes" />
   </comment>
 </object>
 <!-- 
+      ffmpeg-c:a="libvorbis"
+      ffmpeg-c:v="libvpx"
+      ffmpeg-f:o="webm"
+      
       ffmpeg-c:a="copy"
       ffmpeg-c:v="copy"
       ffmpeg-f:o="mp4"
       ffmpeg-movflags="frag_keyframe+empty_moov"
+      
+      ffmpeg-y=""
       ffmpeg-o="output.mp4"
- -->
+
+      ffmpeg-c:a="libmp3lame"
+      ffmpeg-c:v="mjpeg"
+      ffmpeg-q:v="0"
+      ffmpeg-y=""
+      ffmpeg-o="outputz.avi"
+-->
 <video id="video" autoplay="autoplay" controls="controls" crossorigin="anonymous" 
+	preload="auto" 
 	width="1047" height="576">Your browser does not support the <code>video</code> element.</video>
 <canvas id="videoImage" width="1047" height="576" style="display:none;"></canvas>
 <script>

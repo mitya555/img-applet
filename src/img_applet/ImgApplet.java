@@ -343,13 +343,14 @@ public class ImgApplet extends JApplet implements Runnable {
 		addOptNV("q:a", command);
 		addOptNV("b:a", command);
 		addOptN_("vn", command);
-		addOptNV("c:v", command, "mjpeg");
+		addOptNV("c:v", command/*, "mjpeg"*/);
 		addOptNV("q:v", command);
 		addOptNV("b:v", command);
 		addOptNV("g", command);
 		addOptNV("vsync", command);
-		addOptNV("f:o", "f", command, "mjpeg");
+		addOptNV("f:o", "f", command/*, "mjpeg"*/);
 		addOptNV("movflags", command);
+		addOptN_("y", command);
 		addOpt_V("o", command, "pipe:1");
 		addOptNV("muxdelay", command);
 		addOptNV("muxpreload", command);

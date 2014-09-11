@@ -66,10 +66,12 @@ script>-->
       code="img_applet.ImgApplet"
       pluginspage="http://java.com/download/"
       ffmpeg-re=""
-      ffmpeg-f:i=""
       ffmpeg-i="rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp"
+      ffmpeg-c:v="mjpeg"
       ffmpeg-q:v="0"
       ffmpeg-vsync="0"
+      ffmpeg-f:o="mjpeg"
+      ffmpeg-an=""
       debug="no" />
     </comment>
   </object>
@@ -127,8 +129,7 @@ script>-->
       archive="img-applet.jar"
       code="img_applet.ImgApplet"
       pluginspage="http://java.com/download/"
-      ffmpeg-re=""
-      ffmpeg-f:i=""
+      ffmpeg-re="no"
       ffmpeg-i="rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp"
       ffmpeg-c:a="libmp3lame"
       ffmpeg-f:o="mp3"
