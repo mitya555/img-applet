@@ -405,9 +405,7 @@ public class ImgApplet extends JApplet implements Runnable {
 						while (res != -1/* && !ffm_stop*/)
 							try {
 								res = multiBuffer.read(in_);
-								synchronized (httpLock) {
-									httpLock.notify();
-								}
+								synchronized (httpLock) { httpLock.notify(); }
 //								debug("fragment of " + res + " bytes");
 							} catch (IOException e) {
 								e.printStackTrace();
@@ -423,9 +421,7 @@ public class ImgApplet extends JApplet implements Runnable {
 							}
 						setUIForPlaying(false);
 						debug("Thread processing output from ffmpeg has ended.", "FFMPEG process terminated.");
-						synchronized (httpLock) {
-							httpLock.notify();
-						}
+						synchronized (httpLock) { httpLock.notify(); }
 					}
 				}
 			});
@@ -510,7 +506,7 @@ public class ImgApplet extends JApplet implements Runnable {
 	public boolean isStreaming() { return httpPort > 0; }
 	
 	public /*int*/String startHttpServer() throws InterruptedException {
-        new Thread(new Runnable(){
+        new Thread(new Runnable() {
 			@Override
 			public void run() {
 				try (ServerSocket serverSocket = new ServerSocket()) {
@@ -518,9 +514,7 @@ public class ImgApplet extends JApplet implements Runnable {
 					serverSocket.bind(new InetSocketAddress(InetAddress.getByAddress(new byte[] { 127, 0, 0, 1 }), 0), 1);
 					httpPort = serverSocket.getLocalPort();
 					httpAddress = serverSocket.getInetAddress();
-					synchronized (httpLock) {
-						httpLock.notify();
-					}
+					synchronized (httpLock) { httpLock.notify(); }
 					AccessController.doPrivileged(new PrivilegedAction<Object>() {
 						@Override
 						public Object run() {
@@ -534,12 +528,9 @@ public class ImgApplet extends JApplet implements Runnable {
 					httpPort = 0;
 					stopPlayback();
 				}
-				
 			}
         }).start();
-		synchronized (httpLock) {
-			httpLock.wait();
-		}
+		synchronized (httpLock) { httpLock.wait(); }
 		String res = "http://" + httpAddress.getHostAddress() + ":" + httpPort;
         debug(res);
 		/*return httpPort;*/return res;
@@ -578,9 +569,7 @@ public class ImgApplet extends JApplet implements Runnable {
 					multiBuffer.releaseCurrentBuffer();
 					byteOut.flush();
 				} else if (isPlaying())
-					synchronized (httpLock) {
-						httpLock.wait();
-					}
+					synchronized (httpLock) { httpLock.wait(); }
 			}
 		} catch (IOException | InterruptedException e) {
 			e.printStackTrace();
@@ -599,6 +588,8 @@ public class ImgApplet extends JApplet implements Runnable {
 		}
 		if (isPlaying())
 			killProcess();
+
+		synchronized (httpLock) { httpLock.notify(); }
 	}
 
 	@Override
@@ -613,6 +604,8 @@ public class ImgApplet extends JApplet implements Runnable {
 	public void destroy() {
 		
 		killProcess();
+
+		synchronized (httpLock) { httpLock.notify(); }
 		
 		super.destroy();
 	}
