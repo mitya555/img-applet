@@ -52,7 +52,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		public Buffer(int size) { b = new byte[this.size = size]; }
 	}
 
-	static private abstract class MultiBuffer
+	static public abstract class MultiBuffer
 	{
 		protected volatile int sn;
 		int getSN() { return sn; }
