@@ -44,12 +44,12 @@ import ffmpeg.FFmpeg;
 @SuppressWarnings("serial")
 public class ImgApplet extends JApplet implements Runnable {
 	
-	static private class Buffer
+	static class Buffer
 	{
 		public volatile byte[] b;
 		public volatile int sn, len;
-		public final int size;
-		public Buffer(int size) { b = new byte[this.size = size]; }
+		public int size;
+		int alloc(int size) { b = new byte[this.size = size * 4 / 3]; return this.size; }
 	}
 
 	static public abstract class MultiBuffer
@@ -57,7 +57,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		protected volatile int sn;
 		int getSN() { return sn; }
 		abstract void reset();
-		abstract int read(InputStream in) throws IOException;
+		abstract int read(BufferWriter in) throws IOException;
 		abstract byte[] getBytes() throws IOException;
 		abstract Buffer getCurrentBuffer();
 		abstract void releaseCurrentBuffer();
@@ -66,18 +66,18 @@ public class ImgApplet extends JApplet implements Runnable {
 	private class DoubleBuffer extends MultiBuffer
 	{
 		private Buffer b1, b2;
-		public DoubleBuffer(int bufferSize) { b1 = new Buffer(bufferSize); b2 = new Buffer(bufferSize); }
+		public DoubleBuffer() { b1 = new Buffer(); b2 = new Buffer(); }
 		@Override
 		public void reset() { b1.sn = b2.sn = sn = prev_sn = 0; }
 		@Override
-		public int read(InputStream in) throws IOException {
+		public int read(BufferWriter in) throws IOException {
 			int res;
 			if (b1.sn <= b2.sn) {
-				res = b1.len = in.read(b1.b);
+				res = b1.len = in.read(b1);
 				b1.sn = ++sn;
 			}
 			else {
-				res = b2.len = in.read(b2.b);
+				res = b2.len = in.read(b2);
 				b2.sn = ++sn;
 			}
 			return res;
@@ -115,10 +115,9 @@ public class ImgApplet extends JApplet implements Runnable {
 		private _List filledBufferList = new _List(), emptyBufferList = new _List();
 		private volatile Buffer currentBuffer;
 		private int bufferCount, maxBufferCount;
-		private int bufferSize;
 		private BufferedConsoleOut errOut = new BufferedConsoleOut(System.err);
 		private int dropFrameFirst, dropFrameLast;
-		public BufferList(int bufferSize, int maxBufferCount) { this.bufferSize = bufferSize; this.maxBufferCount = maxBufferCount; }
+		public BufferList(int maxBufferCount) { this.maxBufferCount = maxBufferCount; }
 		@Override
 		void reset() {
 			while (filledBufferList.remove() != null) {}
@@ -128,11 +127,11 @@ public class ImgApplet extends JApplet implements Runnable {
 			dropFrameFirst = dropFrameLast = 0; 
 		}
 		@Override
-		int read(InputStream in) throws IOException {
+		int read(BufferWriter in) throws IOException {
 			Buffer buf = (Buffer)emptyBufferList.remove();
 			if (buf == null) {
 				if (bufferCount < maxBufferCount) {
-					buf = new Buffer(bufferSize);
+					buf = new Buffer();
 					bufferCount++;
 					if (DEBUG)
 						errOut.println("Buffer # " + bufferCount + " allocated");
@@ -149,7 +148,7 @@ public class ImgApplet extends JApplet implements Runnable {
 				errOut.println("Dropped frame" + (dropFrameFirst == dropFrameLast ? " " + dropFrameFirst : "s " + dropFrameFirst + " - " + dropFrameLast));
 				dropFrameFirst = dropFrameLast = 0; 
 			}
-			int res = buf.len = in.read(buf.b);
+			int res = buf.len = in.read(buf);
 			buf.sn = ++sn;
 			(res != -1 ? filledBufferList : emptyBufferList).add(buf);
 			return res;
@@ -198,7 +197,7 @@ public class ImgApplet extends JApplet implements Runnable {
 	private Thread ffmt;
 //	private volatile boolean ffm_stop;
 
-	private int frameBufferSize, maxBufferCount, mp3FramesPerChunk;
+	private int bufferSize, maxBufferCount, mp3FramesPerChunk;
 	private MultiBuffer multiBuffer;
 
 	private void setButton(Button button, String label, ActionListener click, boolean active) {
@@ -256,11 +255,11 @@ public class ImgApplet extends JApplet implements Runnable {
 		super.init();
 		
 		DEBUG = !isNo(getParameter("debug"));
-		frameBufferSize = parseInt(getParameter("frame-buffer-size"), 300000);
+		bufferSize = parseInt(getParameter("buffer-size"), 300000);
 		maxBufferCount = parseInt(getParameter("max-buffer-count"), 50);
 		mp3FramesPerChunk = parseInt(getParameter("mp3-frames-per-chunk"), 10);
 
-		multiBuffer = new BufferList(frameBufferSize, maxBufferCount); // new DoubleBuffer(frameBufferSize);
+		multiBuffer = new BufferList(maxBufferCount); // new DoubleBuffer();
 		
 //		this.rtmp = getParameter("rtmp");
 //		this.qscale = getParameter("qscale");
@@ -394,17 +393,17 @@ public class ImgApplet extends JApplet implements Runnable {
 							dataOut = new DataOut("video/mp4");
 							break;
 						case webm:
-							in_ = new BufferedInputStream(ffmp.getInputStream());
+							in_ = new GenericBufferWriter(ffmp.getInputStream(), bufferSize);
 							dataOut = new DataOut("video/webm");
 							break; 
 						case unknown: case none: default:
-							in_ = new BufferedInputStream(ffmp.getInputStream(), 1);
+							in_ = new GenericBufferWriter(ffmp.getInputStream(), bufferSize);
 							dataOut = new DataOut("application/octet-stream");
 							break; 
 						}
 						while (res != -1/* && !ffm_stop*/)
 							try {
-								res = multiBuffer.read(in_);
+								res = multiBuffer.read((BufferWriter)in_);
 								synchronized (httpLock) { httpLock.notify(); }
 //								debug("fragment of " + res + " bytes");
 							} catch (IOException e) {

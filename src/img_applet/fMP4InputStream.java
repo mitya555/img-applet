@@ -6,32 +6,32 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-public class fMP4InputStream extends FilterInputStream {
+public class fMP4InputStream extends FilterInputStream implements BufferWriter {
 
 	public fMP4InputStream(InputStream in) { super(in); }
 
 //	private int byteCount;
 	
 	@Override
-	public int read(byte[] b, int off, int len) throws IOException {
+	public int read(ImgApplet.Buffer buf) throws IOException {
 		int b_;
-		CircularBuffer buf = new CircularBuffer(8);
+		CircularBuffer cb = new CircularBuffer(8);
 		while (true) {
 			if ((b_ = in.read()) == -1)
 				return -1;
 //			byteCount++;
-			buf.put(b_);
-			if (	(buf.get(4) == (byte)'m' && ((buf.get(5) == (byte)'d' && buf.get(6) == (byte)'a' && buf.get(7) == (byte)'t') || // mdat
-					((buf.get(5) == (byte)'o' && buf.get(6) == (byte)'o') && (buf.get(7) == (byte)'f' || // moof
-					buf.get(7) == (byte)'v')))) || // moov
-					(buf.get(4) == (byte)'f' && buf.get(5) == (byte)'t' && buf.get(6) == (byte)'y' && buf.get(7) == (byte)'p')) { // ftyp
-				int len_ = buf.getInt(0);
-				if (len_ < 0)
-					throw new IOException("Negative length: " + len_);
-				if (len < len_)
-					throw new IOException("Insufficient buffer length");
-				buf.read(b, off, 8);
-				int res = in.read(b, off + 8, len_ - 8);
+			cb.put(b_);
+			if (	(cb.get(4) == (byte)'m' && ((cb.get(5) == (byte)'d' && cb.get(6) == (byte)'a' && cb.get(7) == (byte)'t') || // mdat
+					((cb.get(5) == (byte)'o' && cb.get(6) == (byte)'o') && (cb.get(7) == (byte)'f' || // moof
+					cb.get(7) == (byte)'v')))) || // moov
+					(cb.get(4) == (byte)'f' && cb.get(5) == (byte)'t' && cb.get(6) == (byte)'y' && cb.get(7) == (byte)'p')) { // ftyp
+				int len_ = cb.getInt(0);
+				if (len_ < 8)
+					throw new IOException("Improper box size: " + len_);
+				if (buf.size < len_)
+					buf.alloc(len_);
+				cb.read(buf.b, 0, 8);
+				int res = in.read(buf.b, 8, len_ - 8);
 //				if (res > 0)
 //					byteCount += res;
 				return res == -1 || res < len_ - 8 ? -1 : len_;

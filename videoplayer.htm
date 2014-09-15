@@ -35,7 +35,7 @@ if ( !window.requestAnimationFrame ) {
   <param name="ffmpeg-c:v" value="copy">
   <param name="ffmpeg-f:o" value="mp4">
   <param name="ffmpeg-movflags" value="frag_keyframe+empty_moov">
-  <param name="frame-buffer-size" value="5000">
+  <param name="buffer-size" value="5000">
   <param name="debug" value="yes">
   <comment>
     <embed id="applet"
@@ -46,12 +46,11 @@ if ( !window.requestAnimationFrame ) {
       pluginspage="http://java.com/download/"
       ffmpeg-re="no"
       ffmpeg-i="rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp"
-      ffmpeg-c:a="libmp3lame"
-      ffmpeg-c:v="mjpeg"
+      ffmpeg-c:a="libvorbis"
+      ffmpeg-c:v="libvpx"
       ffmpeg-q:v="0"
-      ffmpeg-y=""
-      ffmpeg-o="outputz.mov"
-      frame-buffer-size="200000"
+      ffmpeg-f:o="webm"
+      buffer-size="200000"
       max-buffer-count="25"
       debug="yes" />
   </comment>
@@ -176,8 +175,8 @@ function animate() {
 }
 
 function render() {
-	if ((++cnt) % 2 != 0)
-		return;
+	//if ((++cnt) % 2 != 0)
+	//	return;
 	if (playing)
 		playing = applet_.isStreaming();
 	else if (checkApplet() && applet_.isPlaying() && applet_.getSN() > 0) {

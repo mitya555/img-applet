@@ -119,7 +119,6 @@ script>-->
   <param name="ffmpeg-c:a" value="libmp3lame">
   <param name="ffmpeg-f:o" value="mp3">
   <param name="ffmpeg-vn" value="">
-  <param name="frame-buffer-size" value="5000">
   <param name="mp3-frames-per-chunk" value="5">
   <param name="debug" value="yes">
   <comment>
@@ -134,7 +133,6 @@ script>-->
       ffmpeg-c:a="libmp3lame"
       ffmpeg-f:o="mp3"
       ffmpeg-vn=""
-      frame-buffer-size="100000"
       mp3-frames-per-chunk="100"
       debug="yes" />
     </comment>
@@ -294,8 +292,8 @@ function animate() {
 }
 
 function render() {
-	if ((++cnt) % 2 != 0)
-		return;
+	//if ((++cnt) % 2 != 0)
+	//	return;
 	if (checkApplet()) {
 		var sn_ = applet_.getSN();
 		if ( sn_ != sn && sn_ > 0 ) {
