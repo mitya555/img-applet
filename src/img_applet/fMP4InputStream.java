@@ -8,7 +8,12 @@ import java.io.InputStream;
 
 public class fMP4InputStream extends FilterInputStream implements BufferWriter {
 
-	public fMP4InputStream(InputStream in) { super(in); }
+	public fMP4InputStream(InputStream in, double growFactor) {
+		super(in);
+		this.growFactor = growFactor;
+	}
+	
+	protected double growFactor;
 
 //	private int byteCount;
 	
@@ -28,8 +33,7 @@ public class fMP4InputStream extends FilterInputStream implements BufferWriter {
 				int len_ = cb.getInt(0);
 				if (len_ < 8)
 					throw new IOException("Improper box size: " + len_);
-				if (buf.size < len_)
-					buf.alloc(len_);
+				if (buf.size < len_) { buf.grow(len_, growFactor); }
 				cb.read(buf.b, 0, 8);
 				int res = in.read(buf.b, 8, len_ - 8);
 //				if (res > 0)
@@ -38,9 +42,6 @@ public class fMP4InputStream extends FilterInputStream implements BufferWriter {
 			}
 		}
 	}
-
-	@Override
-	public int read(byte[] b) throws IOException { return read(b, 0, b.length); }
 	
 //	public static void main(String[] args) throws IOException {
 //		final int BUFLEN = 3000000;

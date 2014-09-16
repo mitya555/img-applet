@@ -6,7 +6,14 @@ import java.io.InputStream;
 
 public class MjpegInputStream extends FilterInputStream implements BufferWriter {
 
-	public MjpegInputStream(InputStream in) { super(in); }
+	public MjpegInputStream(InputStream in, int initBufferSize, double growFactor) {
+		super(in);
+		this.initBufferSize = initBufferSize > 0 ? initBufferSize  : 5000;
+		this.growFactor = growFactor;
+	}
+	
+	protected int initBufferSize;
+	protected double growFactor;
 	
 	@Override
 	public int read(ImgApplet.Buffer buf) throws IOException {
@@ -19,17 +26,17 @@ public class MjpegInputStream extends FilterInputStream implements BufferWriter 
 		}
 		int len = buf.size;
 		byte[] b = buf.b;
-		if (len < 2) { len = buf.alloc(5000); b = buf.b; }
+		if (len < 2) { len = buf.alloc(initBufferSize); b = buf.b; }
 		b[off_++] = (byte)0xFF;
 		b[off_++] = (byte)0xD8;
 		b_prev = b_;
 		while ((b_ = in.read()) != 0xD9 || b_prev != 0xFF) {
 			if (b_ == -1)
 				return -1;
-			if (len < off_ + 1) { len = buf.alloc(off_ + 1); System.arraycopy(b, 0, buf.b, 0, off_); b = buf.b; }
+			if (len < off_ + 1) { len = buf.grow(off_ + 1, growFactor); System.arraycopy(b, 0, buf.b, 0, off_); b = buf.b; }
 			b[off_++] = (byte)(b_prev = b_);
 		}
-		if (len < off_ + 1) { len = buf.alloc(off_ + 1); System.arraycopy(b, 0, buf.b, 0, off_); b = buf.b; }
+		if (len < off_ + 1) { len = buf.grow(off_ + 1, growFactor); System.arraycopy(b, 0, buf.b, 0, off_); b = buf.b; }
 		b[off_++] = (byte)0xD9;
 		return off_;
 	}

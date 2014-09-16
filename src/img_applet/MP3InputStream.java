@@ -8,13 +8,20 @@ import java.io.InputStream;
 
 public class MP3InputStream extends FilterInputStream implements BufferWriter {
 
-	public MP3InputStream(InputStream in) { super(in); }
+	public MP3InputStream(InputStream in, int initBufferSize, int dataFramesInFragment, double growFactor) {
+		super(in);
+		if (dataFramesInFragment > 0) this.dataFramesInFragment = dataFramesInFragment;
+		this.initBufferSize = initBufferSize > 0 ? initBufferSize  : 400 * this.dataFramesInFragment;
+		this.growFactor = growFactor;
+	}
+	
+	protected int initBufferSize;
+	protected double growFactor;
 	
 	private boolean skipTags;
 	public MP3InputStream setSkipTags() { skipTags = true; return this; }
 	
 	private int dataFramesInFragment = 20;
-	public MP3InputStream setDataFramesInFragment(int num) { dataFramesInFragment = num; return this; } 
 	
 	private CircularBuffer cb = new CircularBuffer(3);
 	
@@ -51,7 +58,7 @@ public class MP3InputStream extends FilterInputStream implements BufferWriter {
 					if (res == -1 || res < len_)
 						return -1;
 				} else {
-					if (len < 10) { len = buf.alloc(400 * dataFramesInFragment); b = buf.b; }
+					if (len < 10) { len = buf.alloc(initBufferSize); b = buf.b; }
 					cb.clear();
 					System.arraycopy(new byte[] { (byte)'I', (byte)'D', (byte)'3' }, 0, b, 0, 3);
 					int len_ = in.read(b, 3, 7);
@@ -59,7 +66,7 @@ public class MP3InputStream extends FilterInputStream implements BufferWriter {
 					if (len_ == -1 || len_ < 7)
 						return -1;
 					len_ = getInt(b, 6);
-					if (len < 10 + len_) { len = buf.alloc(10 + len_); System.arraycopy(b, 0, buf.b, 0, 10); b = buf.b; }
+					if (len < 10 + len_) { len = buf.grow(10 + len_, growFactor); System.arraycopy(b, 0, buf.b, 0, 10); b = buf.b; }
 					int res = in.read(b, 10, len_);
 //					byteCount += res;
 					return res == -1 || res < len_ ? -1 : 10 + res;
@@ -74,7 +81,7 @@ public class MP3InputStream extends FilterInputStream implements BufferWriter {
 					if (res == -1 || res < 125)
 						return -1;
 				} else {
-					if (len < 128) { len = buf.alloc(400 * dataFramesInFragment); b = buf.b; }
+					if (len < 128) { len = buf.alloc(initBufferSize > 128 ? initBufferSize : 128); b = buf.b; }
 					cb.clear();
 					System.arraycopy(new byte[] { (byte)'T', (byte)'A', (byte)'G' }, 0, b, 0, 3);
 					int res = in.read(b, 3, 125);
@@ -84,7 +91,7 @@ public class MP3InputStream extends FilterInputStream implements BufferWriter {
 			}
 			if (readingData > 0)
 			{
-				if (off_ == len) { len = buf.alloc(off_ + 1); if (off_ > 0) System.arraycopy(b, 0, buf.b, 0, off_); b = buf.b; }
+				if (off_ == len) { if (off_ == 0) len = buf.alloc(initBufferSize); else { len = buf.grow(off_ + 1, growFactor); System.arraycopy(b, 0, buf.b, 0, off_); } b = buf.b; }
 				b[off_++] = cb.get(0);
 			}
 			b_ = in.read();
