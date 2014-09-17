@@ -50,9 +50,15 @@ public class ImgApplet extends JApplet implements Runnable {
 		public volatile int sn, len;
 		public int size;
 		int alloc(int size) { b = new byte[this.size = size]; return this.size; }
-		int grow(int size, double factor) throws IOException { if (factor < 1.0) throw new IOException("Buffer won't grow"); b = new byte[this.size = (int) (size * factor)]; return this.size; }
+		int grow(int size, double factor) throws IOException { if (factor < 1.0) throw new IOException("Grow factor < 1.0: Buffer won't grow"); b = new byte[this.size = (int) (size * factor)]; return this.size; }
 	}
 
+	static class VideoBuffer extends Buffer { public volatile long timestamp; }
+	
+	static public interface BufferFactory {
+		Buffer newBuffer();
+	}
+	
 	static public interface ReaderToBuffer {
 		int read(Buffer b) throws IOException;
 	}
@@ -134,6 +140,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		private int bufferCount, maxBufferCount;
 		private BufferedConsoleOut errOut = new BufferedConsoleOut(System.err);
 		private int dropFrameFirst, dropFrameLast;
+		private BufferFactory bufferFactory = new BufferFactory() { @Override public Buffer newBuffer() { return new Buffer(); } };
 		@Override
 		void reset(int maxBufferCount) {
 			while (filledBufferList.remove() != null) {}
@@ -148,7 +155,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			Buffer buf = (Buffer)emptyBufferList.remove();
 			if (buf == null) {
 				if (bufferCount < maxBufferCount) {
-					buf = new Buffer();
+					buf = bufferFactory.newBuffer();
 					bufferCount++;
 					if (DEBUG)
 						errOut.println("Buffer # " + bufferCount + " allocated");
@@ -408,7 +415,7 @@ public class ImgApplet extends JApplet implements Runnable {
 					setUIForPlaying(true);
 					multiBuffer.reset(maxBufferCount);
 					int res = 0;
-					FilterInputStream in_ = null;
+					MediaReader in_ = null;
 					try {
 						switch (pipeOutputFormat()) {
 						case mjpeg:
@@ -434,7 +441,7 @@ public class ImgApplet extends JApplet implements Runnable {
 						}
 						while (res != -1/* && !ffm_stop*/)
 							try {
-								res = multiBuffer.read((ReaderToBuffer)in_);
+								res = multiBuffer.read(in_);
 								synchronized (httpLock) { httpLock.notify(); }
 //								debug("fragment of " + res + " bytes");
 							} catch (IOException e) {

@@ -1,6 +1,9 @@
 package img_applet;
 
+import img_applet.ImgApplet.Buffer;
 import img_applet.ImgApplet.MultiBuffer;
+import img_applet.ImgApplet.VideoBuffer;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
@@ -10,7 +13,12 @@ import java.util.Map;
 
 public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 
-	public fMP4DemuxerInputStream(InputStream in) { super(in); }
+	public fMP4DemuxerInputStream(InputStream in, double growFactor) {
+		super(in);
+		this.growFactor = growFactor;
+	}
+
+	protected double growFactor;
 
 	private long pos;
 	private CircularBuffer buf = new CircularBuffer(8);
@@ -33,14 +41,17 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 //	private boolean check_(int i, char ... cs) { return buf.check(i, cs); }
 	private boolean check4_(int i, char c0, char c1, char c2, char c3) { return buf.check4(i, c0, c1, c2, c3); }
 	private boolean check4box_(char c0, char c1, char c2, char c3) { return (dirty = buf.check4(4, c0, c1, c2, c3)); }
+	private int read_(byte[] b, int nRead) throws IOException {
+		int res = in.read(b, 0, nRead);
+		if (res > 0) pos += res;
+		dirty = true;
+		return res < nRead ? -1 : res;
+	}
 	private int read_(int nSkip, int nRead) throws IOException {
 		if (nSkip < 0) throw new IOException("Negative skip");
 		else if (nSkip > 0) if (skip_(nSkip) == -1) return -1;
 		buf.ptr = 0;
-		int res = in.read(buf.buf, 0, nRead);
-		if (res > 0) pos += res;
-		dirty = true;
-		return res < nRead ? -1 : res;
+		return read_(buf.buf, nRead);
 	}
 	private int readNext() throws IOException {
 		if (dirty) {
@@ -61,6 +72,7 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 	private class Trak extends Box {
 		TrakType type = TrakType.unknown;
 		int id, width, height, timeScale;
+		long duration = 0L; // in 1.0/timeScale sec. 
 		boolean done() { return type == TrakType.other || ((type == TrakType.video || type == TrakType.audio) && (traksByType.containsKey(type) || (id > 0 && timeScale > 0))); }
 		long finish(Box moov) throws IOException {
 			if ((type == TrakType.video || type == TrakType.audio) && !traksByType.containsKey(type)) {
@@ -74,19 +86,41 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 	}
 	private Map<Integer,Trak> traksById = new HashMap<Integer,Trak>();
 	private Map<TrakType,Trak> traksByType = new HashMap<TrakType,Trak>();
-	private class Traf extends Box { int trakId, dfltSampleDuration, dfltSampleSize, dataOffset, duration, size; long baseDataOffset; }
-	private class Moof extends Box { int sn; Traf[] trafs = new Traf[2]; }
+	private class Traf extends Box implements ImgApplet.ReaderToBuffer {
+		int trakId, dfltSampleDuration, dfltSampleSize, dataOffset, duration, size;
+		long baseDataOffset;
+		Trak trak;
+		@Override
+		public int read(Buffer b) throws IOException {
+			if (trak.type == TrakType.video)
+				((VideoBuffer)b).timestamp = trak.duration;
+			trak.duration += duration;
+			if (skip_(baseDataOffset + dataOffset - pos) == -1) return -1;
+			if (b.size < size) b.grow(size, growFactor);
+			return read_(b.b, size);
+		}
+	}
+	private class Moof extends Box {
+		int sn;
+		Traf[] trafs = new Traf[2];
+	}
 
 	@Override
 	public int read(MultiBuffer video, MultiBuffer audio) throws IOException {
-		Moof moof;
+		Moof moof = null;
 		while (true) {
 			if (readNext() == -1) return -1;
 			if (check4box_('m', 'o', 'o', 'f')) { // moof
 				if (read_moof(moof = new Moof()) == -1) return -1;
 			} else if (check4box_('m', 'd', 'a', 't')) { // mdat
 				Box mdat = new Box();
-				// read MultiBuffers using moof
+				if (moof.trafs[0].trak.type == TrakType.video) { 
+					if (video.read(moof.trafs[0]) == -1) return -1;
+					if (audio.read(moof.trafs[1]) == -1) return -1;
+				} else {
+					if (audio.read(moof.trafs[0]) == -1) return -1;
+					if (video.read(moof.trafs[1]) == -1) return -1;
+				}
 				if (mdat.skip() == -1) return -1;
 				return 0;
 			} else if (check4box_('m', 'o', 'o', 'v')) { // moov
@@ -126,10 +160,11 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 			if (check4box_('t', 'f', 'h', 'd')) { // tfhd
 				Box tfhd = new Box();
 				if (read_(0, 8) == -1) return -1;
-				int flags = int_(0);
-				if (traksById.containsKey(traf.trakId = int_(4)))
+				int flags = int_(0), trakId = int_(4);
+				if (traksById.containsKey(traf.trakId = trakId)) {
+					traf.trak = traksById.get(trakId);
 					moof.trafs[moof.trafs[0] == null ? 0 : 1] = traf;
-				else {
+				} else {
 					if (traf.skip() == -1) return -1;
 					return 0;
 				}
