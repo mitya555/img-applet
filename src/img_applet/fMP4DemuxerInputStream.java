@@ -8,6 +8,8 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -78,14 +80,20 @@ public class fMP4DemuxerInputStream extends FilterInputStream implements Demuxer
 	private Map<Integer,Trak> traksById = new HashMap<Integer,Trak>();
 	private Map<TrakType,Trak> traksByType = new HashMap<TrakType,Trak>();
 	private class Traf extends Box { int trakId, dfltSampleDuration, dfltSampleSize, dataOffset, duration, size; long baseDataOffset; }
-	private class Moof extends Box { int sn; Traf traf0, traf1; }
+	private class Moof extends Box { int sn; Traf[] trafs = new Traf[2]; }
 
 	@Override
 	public int read(MultiBuffer video, MultiBuffer audio) throws IOException {
+		Moof moof;
 		while (true) {
 			if (readNext() == -1) return -1;
 			if (check4box_('m', 'o', 'o', 'f')) { // moof
-				if (read_moof(new Moof()) == -1) return -1;
+				if (read_moof(moof = new Moof()) == -1) return -1;
+			} else if (check4box_('m', 'd', 'a', 't')) { // mdat
+				Box mdat = new Box();
+				// read MultiBuffers using moof
+				if (mdat.skip() == -1) return -1;
+				return 0;
 			} else if (check4box_('m', 'o', 'o', 'v')) { // moov
 				if (read_moov(new Box()) == -1) return -1;
 			} else { // skip all other boxes
@@ -107,6 +115,15 @@ public class fMP4DemuxerInputStream extends FilterInputStream implements Demuxer
 			} else { // skip all other boxes
 				if (new Box().skip() == -1) return -1;
 			}
+			if (moof.sn > 0 && moof.trafs[0] != null && moof.trafs[1] != null) {
+				Arrays.sort(moof.trafs, new Comparator<Traf>() {
+					@Override
+					public int compare(Traf o1, Traf o2) {
+						return (int) ((o1.baseDataOffset + o1.dataOffset) - (o2.baseDataOffset + o2.dataOffset));
+					}
+				});
+				if (moof.skip() == -1) return -1;
+			}
 			if (pos >= moof.start + moof.size)
 				return (int) (pos - (moof.start + moof.size));
 		}
@@ -119,7 +136,12 @@ public class fMP4DemuxerInputStream extends FilterInputStream implements Demuxer
 				Box tfhd = new Box();
 				if (read_(0, 8) == -1) return -1;
 				int flags = int_(0);
-				traf.trakId = int_(4);
+				if (traksById.containsKey(traf.trakId = int_(4)))
+					moof.trafs[moof.trafs[0] == null ? 0 : 1] = traf;
+				else {
+					if (traf.skip() == -1) return -1;
+					break;
+				}
 				if ((flags & 0x000001) != 0) {
 					if (read_(0, 8) == -1) return -1;
 					traf.baseDataOffset = long_();
@@ -173,8 +195,9 @@ public class fMP4DemuxerInputStream extends FilterInputStream implements Demuxer
 				if (new Box().skip() == -1) return -1;
 			}
 			if (pos >= traf.start + traf.size)
-				return (int) (pos - (traf.start + traf.size));
+				break;
 		}
+		return (int) (pos - (traf.start + traf.size));
 	}
 
 	public int read_moov(Box moov) throws IOException {
