@@ -53,17 +53,33 @@ public class ImgApplet extends JApplet implements Runnable {
 		int grow(int size, double factor) throws IOException { if (factor < 1.0) throw new IOException("Buffer won't grow"); b = new byte[this.size = (int) (size * factor)]; return this.size; }
 	}
 
+	static public interface ReaderToBuffer {
+		int read(Buffer b) throws IOException;
+	}
+	
+	static public abstract class MediaReader extends FilterInputStream implements ReaderToBuffer {
+		protected MediaReader(InputStream in) { super(in); }
+	}
+
 	static public abstract class MultiBuffer
 	{
 		protected volatile int sn;
 		int getSN() { return sn; }
 		abstract void reset(int maxBufferCount);
-		abstract int read(BufferWriter in) throws IOException;
+		abstract int read(ReaderToBuffer in) throws IOException;
 		abstract byte[] getBytes() throws IOException;
 		abstract Buffer getCurrentBuffer();
 		abstract void releaseCurrentBuffer();
 	}
+
+	static public interface Demuxer {
+		int read(MultiBuffer video, MultiBuffer audio) throws IOException;
+	}
 	
+	static public abstract class MediaDemuxer extends FilterInputStream implements Demuxer {
+		protected MediaDemuxer(InputStream in) { super(in); }
+	}
+
 	private class DoubleBuffer extends MultiBuffer
 	{
 		private Buffer b1, b2;
@@ -71,7 +87,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		@Override
 		public void reset(int maxBufferCount) { b1.sn = b2.sn = sn = prev_sn = 0; }
 		@Override
-		public int read(BufferWriter in) throws IOException {
+		public int read(ReaderToBuffer in) throws IOException {
 			int res;
 			if (b1.sn <= b2.sn) {
 				res = b1.len = in.read(b1);
@@ -128,7 +144,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			this.maxBufferCount = maxBufferCount;
 		}
 		@Override
-		int read(BufferWriter in) throws IOException {
+		int read(ReaderToBuffer in) throws IOException {
 			Buffer buf = (Buffer)emptyBufferList.remove();
 			if (buf == null) {
 				if (bufferCount < maxBufferCount) {
@@ -418,7 +434,7 @@ public class ImgApplet extends JApplet implements Runnable {
 						}
 						while (res != -1/* && !ffm_stop*/)
 							try {
-								res = multiBuffer.read((BufferWriter)in_);
+								res = multiBuffer.read((ReaderToBuffer)in_);
 								synchronized (httpLock) { httpLock.notify(); }
 //								debug("fragment of " + res + " bytes");
 							} catch (IOException e) {

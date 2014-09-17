@@ -1,12 +1,9 @@
 package img_applet;
 
-//import java.io.File;
-//import java.io.FileInputStream;
-import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-public class fMP4InputStream extends FilterInputStream implements BufferWriter {
+public class fMP4InputStream extends ImgApplet.MediaReader {
 
 	public fMP4InputStream(InputStream in, double growFactor) {
 		super(in);

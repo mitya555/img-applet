@@ -1,12 +1,9 @@
 package img_applet;
 
-//import java.io.File;
-//import java.io.FileInputStream;
-import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-public class MP3InputStream extends FilterInputStream implements BufferWriter {
+public class MP3InputStream extends ImgApplet.MediaReader {
 
 	public MP3InputStream(InputStream in, int initBufferSize, int dataFramesInFragment, double growFactor) {
 		super(in);

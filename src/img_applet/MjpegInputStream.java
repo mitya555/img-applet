@@ -1,10 +1,9 @@
 package img_applet;
 
-import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-public class MjpegInputStream extends FilterInputStream implements BufferWriter {
+public class MjpegInputStream extends ImgApplet.MediaReader {
 
 	public MjpegInputStream(InputStream in, int initBufferSize, double growFactor) {
 		super(in);

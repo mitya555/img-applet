@@ -1,19 +1,14 @@
 package img_applet;
 
-//import java.io.File;
-//import java.io.FileInputStream;
 import img_applet.ImgApplet.MultiBuffer;
-
-import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 
-public class fMP4DemuxerInputStream extends FilterInputStream implements Demuxer {
+public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 
 	public fMP4DemuxerInputStream(InputStream in) { super(in); }
 
@@ -116,12 +111,8 @@ public class fMP4DemuxerInputStream extends FilterInputStream implements Demuxer
 				if (new Box().skip() == -1) return -1;
 			}
 			if (moof.sn > 0 && moof.trafs[0] != null && moof.trafs[1] != null) {
-				Arrays.sort(moof.trafs, new Comparator<Traf>() {
-					@Override
-					public int compare(Traf o1, Traf o2) {
-						return (int) ((o1.baseDataOffset + o1.dataOffset) - (o2.baseDataOffset + o2.dataOffset));
-					}
-				});
+				Arrays.sort(moof.trafs, new Comparator<Traf>() { @Override public int compare(Traf o1, Traf o2) {
+					return (int) ((o1.baseDataOffset + o1.dataOffset) - (o2.baseDataOffset + o2.dataOffset)); } });
 				if (moof.skip() == -1) return -1;
 			}
 			if (pos >= moof.start + moof.size)
@@ -140,7 +131,7 @@ public class fMP4DemuxerInputStream extends FilterInputStream implements Demuxer
 					moof.trafs[moof.trafs[0] == null ? 0 : 1] = traf;
 				else {
 					if (traf.skip() == -1) return -1;
-					break;
+					return 0;
 				}
 				if ((flags & 0x000001) != 0) {
 					if (read_(0, 8) == -1) return -1;
@@ -195,9 +186,8 @@ public class fMP4DemuxerInputStream extends FilterInputStream implements Demuxer
 				if (new Box().skip() == -1) return -1;
 			}
 			if (pos >= traf.start + traf.size)
-				break;
+				return (int) (pos - (traf.start + traf.size));
 		}
-		return (int) (pos - (traf.start + traf.size));
 	}
 
 	public int read_moov(Box moov) throws IOException {
