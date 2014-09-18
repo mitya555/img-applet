@@ -13,8 +13,8 @@ import java.util.Map;
 
 public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 
-	public fMP4DemuxerInputStream(InputStream in, double growFactor) {
-		super(in);
+	public fMP4DemuxerInputStream(InputStream in, double growFactor, MultiBuffer video, MultiBuffer audio, Runnable afterVideoCallback, Runnable afterAudioCallback) {
+		super(in, video, audio, afterVideoCallback, afterAudioCallback);
 		this.growFactor = growFactor;
 	}
 
@@ -106,7 +106,7 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 	}
 
 	@Override
-	public int read(MultiBuffer video, MultiBuffer audio) throws IOException {
+	public int readFragment() throws IOException {
 		Moof moof = null;
 		while (true) {
 			if (readNext() == -1) return -1;
@@ -115,11 +115,15 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 			} else if (check4box_('m', 'd', 'a', 't')) { // mdat
 				Box mdat = new Box();
 				if (moof.trafs[0].trak.type == TrakType.video) { 
-					if (video.read(moof.trafs[0]) == -1) return -1;
-					if (audio.read(moof.trafs[1]) == -1) return -1;
+					if (video.readToBuffer(moof.trafs[0]) == -1) return -1;
+					if (afterVideoCallback != null) afterVideoCallback.run(); 
+					if (audio.readToBuffer(moof.trafs[1]) == -1) return -1;
+					if (afterAudioCallback != null) afterAudioCallback.run(); 
 				} else {
-					if (audio.read(moof.trafs[0]) == -1) return -1;
-					if (video.read(moof.trafs[1]) == -1) return -1;
+					if (audio.readToBuffer(moof.trafs[0]) == -1) return -1;
+					if (afterAudioCallback != null) afterAudioCallback.run(); 
+					if (video.readToBuffer(moof.trafs[1]) == -1) return -1;
+					if (afterVideoCallback != null) afterVideoCallback.run(); 
 				}
 				if (mdat.skip() == -1) return -1;
 				return 0;
