@@ -4,6 +4,8 @@ import img_applet.ImgApplet.Buffer;
 import img_applet.ImgApplet.MultiBuffer;
 import img_applet.ImgApplet.VideoBuffer;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
@@ -63,10 +65,10 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 	}
 	
 	private class Box {
-		long start;
-		int size;
-		public Box() { start = pos - 8; size = int_(0); }
-		public long skip() throws IOException { return skip_(start + size - pos); }
+		long boxStart;
+		int boxSize;
+		public Box() { boxStart = pos - 8; boxSize = int_(0); }
+		public long skip() throws IOException { return skip_(boxStart + boxSize - pos); }
 	}
 	private enum TrakType { unknown, video, audio, other }
 	private class Trak extends Box {
@@ -153,8 +155,8 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 					return (int) ((o1.baseDataOffset + o1.dataOffset) - (o2.baseDataOffset + o2.dataOffset)); } });
 				if (moof.skip() == -1) return -1;
 			}
-			if (pos >= moof.start + moof.size)
-				return (int) (pos - (moof.start + moof.size));
+			if (pos >= moof.boxStart + moof.boxSize)
+				return (int) (pos - (moof.boxStart + moof.boxSize));
 		}
 	}
 
@@ -224,8 +226,8 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 			} else { // skip all other boxes
 				if (new Box().skip() == -1) return -1;
 			}
-			if (pos >= traf.start + traf.size)
-				return (int) (pos - (traf.start + traf.size));
+			if (pos >= traf.boxStart + traf.size)
+				return (int) (pos - (traf.boxStart + traf.size));
 		}
 	}
 
@@ -237,8 +239,8 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 			} else { // skip all other boxes
 				if (new Box().skip() == -1) return -1;
 			}
-			if (pos >= moov.start + moov.size)
-				return (int) (pos - (moov.start + moov.size));
+			if (pos >= moov.boxStart + moov.boxSize)
+				return (int) (pos - (moov.boxStart + moov.boxSize));
 		}
 	}
 
@@ -259,8 +261,8 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 			} else { // skip all other boxes
 				if (new Box().skip() == -1) return -1;
 			}
-			if (pos >= trak.start + trak.size)
-				return (int) (pos - (trak.start + trak.size));
+			if (pos >= trak.boxStart + trak.boxSize)
+				return (int) (pos - (trak.boxStart + trak.boxSize));
 		}
 	}
 
@@ -282,22 +284,22 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 			} else { // skip all other boxes
 				if (new Box().skip() == -1) return -1;
 			}
-			if (pos >= mdia.start + mdia.size)
-				return (int) (pos - (mdia.start + mdia.size));
+			if (pos >= mdia.boxStart + mdia.boxSize)
+				return (int) (pos - (mdia.boxStart + mdia.boxSize));
 		}
 	}
 	
-//	public static void main(String[] args) throws IOException {
-//		final int BUFLEN = 3000000;
-//		byte[] buf = new byte[BUFLEN];
-//		File file = new File("C:\\Users\\dmitriy.mukhin\\AppData\\Local\\Temp\\img_applet\\output.mp4");
-//		FileInputStream reader = new FileInputStream(file);
-//		fMP4InputStream mp4reader = new fMP4InputStream(reader);
-//		int res;
-//		while ((res = mp4reader.read(buf, 0, BUFLEN)) != -1)
-//			System.out.println("Frame: " + res + " bytes; Total: " + mp4reader.byteCount + " bytes");
-//		System.out.println("Total: " + mp4reader.byteCount + " bytes");
-//		mp4reader.close();
-//	}
+	public static void main(String[] args) throws IOException {
+		File file = new File("C:\\Documents and Settings\\Mitya\\Local Settings\\Temp\\img_applet\\output1.mp4"); // "C:\\Users\\dmitriy.mukhin\\AppData\\Local\\Temp\\img_applet\\output.mp4");
+		FileInputStream reader = new FileInputStream(file);
+		MultiBuffer videoMultiBuffer = new ImgApplet.BufferList(new ImgApplet.BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, 20, true),
+				audioMultiBuffer = new ImgApplet.BufferList(20, true);
+		fMP4DemuxerInputStream mp4reader = new fMP4DemuxerInputStream(reader, 1.33333, videoMultiBuffer, audioMultiBuffer, null, null);
+		int res;
+		while ((res = mp4reader.readFragment()) != -1)
+			System.out.println("Fragment result: " + res);
+		System.out.println("Fragment result: " + res);
+		mp4reader.close();
+	}
 
 }

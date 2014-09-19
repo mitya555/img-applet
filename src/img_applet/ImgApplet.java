@@ -77,8 +77,10 @@ public class ImgApplet extends JApplet implements Runnable {
 		protected volatile int sn;
 		int getSN() { return sn; }
 		protected BufferFactory bufferFactory;
-		protected MultiBuffer(BufferFactory bufferFactory) { this.bufferFactory = bufferFactory; }
-		protected MultiBuffer() { this(new BufferFactory() { @Override public Buffer newBuffer() { return new Buffer(); } }); }
+		protected boolean DEBUG;
+	    protected void debug(String dbg) { if (DEBUG) System.out.println(dbg); }
+		protected MultiBuffer(BufferFactory bufferFactory, boolean debug) { this.bufferFactory = bufferFactory; DEBUG = debug; }
+		protected MultiBuffer(boolean debug) { this(new BufferFactory() { @Override public Buffer newBuffer() { return new Buffer(); } }, debug); }
 		abstract int readToBuffer(ReaderToBuffer in) throws IOException;
 		abstract byte[] getBytes() throws IOException;
 		abstract Buffer getCurrentBuffer();
@@ -97,10 +99,10 @@ public class ImgApplet extends JApplet implements Runnable {
 		}
 	}
 
-	private class DoubleBuffer extends MultiBuffer
+	static class DoubleBuffer extends MultiBuffer
 	{
 		private Buffer b1, b2;
-		public DoubleBuffer() { super(); b1 = new Buffer(); b2 = new Buffer(); }
+		public DoubleBuffer(boolean debug) { super(debug); b1 = new Buffer(); b2 = new Buffer(); }
 		@Override
 		public int readToBuffer(ReaderToBuffer in) throws IOException {
 			int res;
@@ -135,7 +137,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		void releaseCurrentBuffer() {}
 	}
 	
-	private class BufferList extends MultiBuffer
+	static class BufferList extends MultiBuffer
 	{
 		private class _List
 		{
@@ -149,8 +151,8 @@ public class ImgApplet extends JApplet implements Runnable {
 		private int bufferCount, maxBufferCount;
 		private BufferedConsoleOut errOut = new BufferedConsoleOut(System.err);
 		private int dropFrameFirst, dropFrameLast;
-		public BufferList(BufferFactory bufferFactory, int maxBufferCount) { super(bufferFactory); this.maxBufferCount = maxBufferCount; }
-		public BufferList(int maxBufferCount) { super(); this.maxBufferCount = maxBufferCount; }
+		public BufferList(BufferFactory bufferFactory, int maxBufferCount, boolean debug) { super(bufferFactory, debug); this.maxBufferCount = maxBufferCount; }
+		public BufferList(int maxBufferCount, boolean debug) { super(debug); this.maxBufferCount = maxBufferCount; }
 		@Override
 		int readToBuffer(ReaderToBuffer in) throws IOException {
 			Buffer buf = (Buffer)emptyBufferList.remove();
@@ -585,7 +587,7 @@ public class ImgApplet extends JApplet implements Runnable {
 				contentType = "application/octet-stream";
 				break; 
 			}
-			dataStream = new DataStream(contentType, new BufferList(maxBufferCount));
+			dataStream = new DataStream(contentType, new BufferList(maxBufferCount, DEBUG));
 			demuxVideoDataStream = null;
 			int res = 0;
 			while (res != -1/* && !ffm_stop*/)
@@ -615,8 +617,9 @@ public class ImgApplet extends JApplet implements Runnable {
 		setUIForPlaying(true);
 		MediaDemuxer in_ = null;
 		try {
-			dataStream = new DataStream("audio/mpeg", new BufferList(maxBufferCount));
-			demuxVideoDataStream = new DataStream("image/jpeg", new BufferList(new BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, maxBufferCount));
+			dataStream = new DataStream("audio/mpeg", new BufferList(maxBufferCount, DEBUG));
+			demuxVideoDataStream = new DataStream("image/jpeg", new BufferList(
+					new BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, maxBufferCount, DEBUG));
 			in_ = new fMP4DemuxerInputStream(ffmp.getInputStream(), bufferGrowFactor, demuxVideoDataStream.multiBuffer, dataStream.multiBuffer, null,
 					new Runnable() { @Override public void run() { dataStream.httpLockNotify(); } });
 			int res = 0;
@@ -670,6 +673,10 @@ public class ImgApplet extends JApplet implements Runnable {
 	public boolean isStreaming() { return dataStream.isStreaming(); }
 	
 	public String startHttpServer() throws InterruptedException { return dataStream.startHttpServer(); } 
+
+	public String getVideoDataURI() throws IOException { return demuxVideoDataStream.getDataURI(); }
+	
+	public int getVideoSN() { return demuxVideoDataStream.multiBuffer.getSN(); }
 
 	public void stopPlayback() {
 
