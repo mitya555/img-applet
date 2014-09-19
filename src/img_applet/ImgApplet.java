@@ -85,6 +85,9 @@ public class ImgApplet extends JApplet implements Runnable {
 		abstract byte[] getBytes() throws IOException;
 		abstract Buffer getCurrentBuffer();
 		abstract void releaseCurrentBuffer();
+		// for video only:
+		abstract long getTimestamp();
+		abstract int getTimescale();
 	}
 
 	static interface Demuxer {
@@ -94,8 +97,10 @@ public class ImgApplet extends JApplet implements Runnable {
 	static abstract class MediaDemuxer extends FilterInputStream implements Demuxer {
 		protected MultiBuffer video, audio;
 		protected Runnable afterVideoCallback, afterAudioCallback;
-		protected MediaDemuxer(InputStream in, MultiBuffer video, MultiBuffer audio, Runnable afterVideoCallback, Runnable afterAudioCallback) {
-			super(in); this.video = video; this.audio = audio; this.afterVideoCallback = afterVideoCallback; this.afterAudioCallback = afterAudioCallback;
+		protected boolean DEBUG;
+	    protected void debug(String dbg) { if (DEBUG) System.out.println(dbg); }
+		protected MediaDemuxer(InputStream in, MultiBuffer video, MultiBuffer audio, Runnable afterVideoCallback, Runnable afterAudioCallback, boolean debug) {
+			super(in); this.video = video; this.audio = audio; this.afterVideoCallback = afterVideoCallback; this.afterAudioCallback = afterAudioCallback; DEBUG = debug;
 		}
 	}
 
@@ -135,6 +140,14 @@ public class ImgApplet extends JApplet implements Runnable {
 		}
 		@Override
 		void releaseCurrentBuffer() {}
+		@Override
+		long getTimestamp() {
+			return ((VideoBuffer)getCurrentBuffer()).timestamp;
+		}
+		@Override
+		int getTimescale() {
+			return 0;
+		}
 	}
 	
 	static class BufferList extends MultiBuffer
@@ -215,6 +228,17 @@ public class ImgApplet extends JApplet implements Runnable {
 		void releaseCurrentBuffer() {
 			if (currentBuffer != null)
 				releaseCurrentBuffer_();
+		}
+		@Override
+		long getTimestamp() {
+			getCurrentBuffer();
+			if (currentBuffer != null)
+				return ((VideoBuffer)currentBuffer).timestamp; 
+			return 0L;
+		}
+		@Override
+		int getTimescale() {
+			return 0;
 		}
 	}
 
@@ -620,12 +644,13 @@ public class ImgApplet extends JApplet implements Runnable {
 			dataStream = new DataStream("audio/mpeg", new BufferList(maxBufferCount, DEBUG));
 			demuxVideoDataStream = new DataStream("image/jpeg", new BufferList(
 					new BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, maxBufferCount, DEBUG));
-			in_ = new fMP4DemuxerInputStream(ffmp.getInputStream(), bufferGrowFactor, demuxVideoDataStream.multiBuffer, dataStream.multiBuffer, null,
-					new Runnable() { @Override public void run() { dataStream.httpLockNotify(); } });
+			in_ = new fMP4DemuxerInputStream(ffmp.getInputStream(), bufferGrowFactor, demuxVideoDataStream.multiBuffer, dataStream.multiBuffer,
+					null, new Runnable() { @Override public void run() { dataStream.httpLockNotify(); } }, DEBUG);
 			int res = 0;
 			while (res != -1/* && !ffm_stop*/)
 				try {
 					res = in_.readFragment();
+//					debug("readFragment() result: " + res);
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
@@ -678,6 +703,8 @@ public class ImgApplet extends JApplet implements Runnable {
 	
 	public int getVideoSN() { return demuxVideoDataStream.multiBuffer.getSN(); }
 
+	public long getVideoTimestamp() { return demuxVideoDataStream.multiBuffer.getTimestamp(); }
+
 	public void stopPlayback() {
 
 		if (isPlaying()) {
@@ -713,7 +740,6 @@ public class ImgApplet extends JApplet implements Runnable {
 	}
 
 //	public static void main(String[] args) {
-//		// TODO Auto-generated method stub
 //
 //	}
 

@@ -15,8 +15,8 @@ import java.util.Map;
 
 public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 
-	public fMP4DemuxerInputStream(InputStream in, double growFactor, MultiBuffer video, MultiBuffer audio, Runnable afterVideoCallback, Runnable afterAudioCallback) {
-		super(in, video, audio, afterVideoCallback, afterAudioCallback);
+	public fMP4DemuxerInputStream(InputStream in, double growFactor, MultiBuffer video, MultiBuffer audio, Runnable afterVideoCallback, Runnable afterAudioCallback, boolean debug) {
+		super(in, video, audio, afterVideoCallback, afterAudioCallback, debug);
 		this.growFactor = growFactor;
 	}
 
@@ -44,10 +44,20 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 	private boolean check4_(int i, char c0, char c1, char c2, char c3) { return buf.check4(i, c0, c1, c2, c3); }
 	private boolean check4box_(char c0, char c1, char c2, char c3) { return (dirty = buf.check4(4, c0, c1, c2, c3)); }
 	private int read_(byte[] b, int nRead) throws IOException {
-		int res = in.read(b, 0, nRead);
-		if (res > 0) pos += res;
+		int res = 0, nRes = 0;
+		while (nRes < nRead && (res = in.read(b, nRes, nRead - nRes)) != -1)
+			if (res > 0)
+				nRes += res;
+			else {
+				res = in.read();
+				if (res == -1)
+					break;
+				b[nRes++] = (byte)res;
+			}
+		if (nRes > 0)
+			pos += nRes;
 		dirty = true;
-		return res < nRead ? -1 : res;
+		return nRes < nRead ? -1 : nRes;
 	}
 	private int read_(int nSkip, int nRead) throws IOException {
 		if (nSkip < 0) throw new IOException("Negative skip");
@@ -67,8 +77,23 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 	private class Box {
 		long boxStart;
 		int boxSize;
-		public Box() { boxStart = pos - 8; boxSize = int_(0); }
-		public long skip() throws IOException { return skip_(boxStart + boxSize - pos); }
+//		char[] boxName;
+		public Box() {
+			boxStart = pos - 8;
+			boxSize = int_(0);
+//			if (DEBUG) {
+//				System.out.print("Begin ");
+//				System.out.println(boxName = new char[] { (char)buf.get(4), (char)buf.get(5), (char)buf.get(6), (char)buf.get(7) });
+//			}
+		}
+		public long skip() throws IOException {
+//			if (DEBUG) {
+//				System.out.print("End ");
+//				System.out.println(boxName);
+//			}
+			return skip_(boxStart + boxSize - pos);
+		}
+		public long nextBoxStart() { return boxStart + boxSize; }
 	}
 	private enum TrakType { unknown, video, audio, other }
 	private class Trak extends Box {
@@ -155,8 +180,8 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 					return (int) ((o1.baseDataOffset + o1.dataOffset) - (o2.baseDataOffset + o2.dataOffset)); } });
 				if (moof.skip() == -1) return -1;
 			}
-			if (pos >= moof.boxStart + moof.boxSize)
-				return (int) (pos - (moof.boxStart + moof.boxSize));
+			if (pos >= moof.nextBoxStart())
+				return (int) (pos - moof.nextBoxStart());
 		}
 	}
 
@@ -226,8 +251,8 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 			} else { // skip all other boxes
 				if (new Box().skip() == -1) return -1;
 			}
-			if (pos >= traf.boxStart + traf.size)
-				return (int) (pos - (traf.boxStart + traf.size));
+			if (pos >= traf.nextBoxStart())
+				return (int) (pos - traf.nextBoxStart());
 		}
 	}
 
@@ -239,8 +264,8 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 			} else { // skip all other boxes
 				if (new Box().skip() == -1) return -1;
 			}
-			if (pos >= moov.boxStart + moov.boxSize)
-				return (int) (pos - (moov.boxStart + moov.boxSize));
+			if (pos >= moov.nextBoxStart())
+				return (int) (pos - moov.nextBoxStart());
 		}
 	}
 
@@ -261,8 +286,8 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 			} else { // skip all other boxes
 				if (new Box().skip() == -1) return -1;
 			}
-			if (pos >= trak.boxStart + trak.boxSize)
-				return (int) (pos - (trak.boxStart + trak.boxSize));
+			if (pos >= trak.nextBoxStart())
+				return (int) (pos - trak.nextBoxStart());
 		}
 	}
 
@@ -284,17 +309,17 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 			} else { // skip all other boxes
 				if (new Box().skip() == -1) return -1;
 			}
-			if (pos >= mdia.boxStart + mdia.boxSize)
-				return (int) (pos - (mdia.boxStart + mdia.boxSize));
+			if (pos >= mdia.nextBoxStart())
+				return (int) (pos - mdia.nextBoxStart());
 		}
 	}
 	
 	public static void main(String[] args) throws IOException {
-		File file = new File("C:\\Documents and Settings\\Mitya\\Local Settings\\Temp\\img_applet\\output1.mp4"); // "C:\\Users\\dmitriy.mukhin\\AppData\\Local\\Temp\\img_applet\\output.mp4");
+		File file = new File("C:\\Users\\dmitriy.mukhin\\AppData\\Local\\Temp\\img_applet\\out_frag_keyframe_empty_moov.mp4"); // "C:\\Documents and Settings\\Mitya\\Local Settings\\Temp\\img_applet\\output1.mp4");
 		FileInputStream reader = new FileInputStream(file);
 		MultiBuffer videoMultiBuffer = new ImgApplet.BufferList(new ImgApplet.BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, 20, true),
 				audioMultiBuffer = new ImgApplet.BufferList(20, true);
-		fMP4DemuxerInputStream mp4reader = new fMP4DemuxerInputStream(reader, 1.33333, videoMultiBuffer, audioMultiBuffer, null, null);
+		fMP4DemuxerInputStream mp4reader = new fMP4DemuxerInputStream(reader, 1.33333, videoMultiBuffer, audioMultiBuffer, null, null, true);
 		int res;
 		while ((res = mp4reader.readFragment()) != -1)
 			System.out.println("Fragment result: " + res);
