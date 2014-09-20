@@ -15,8 +15,14 @@ import java.util.Map;
 
 public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 
-	public fMP4DemuxerInputStream(InputStream in, double growFactor, MultiBuffer video, MultiBuffer audio, Runnable afterVideoCallback, Runnable afterAudioCallback, boolean debug) {
-		super(in, video, audio, afterVideoCallback, afterAudioCallback, debug);
+	public fMP4DemuxerInputStream(InputStream in, double growFactor, MultiBuffer video, MultiBuffer audio,
+			Gettable videoInfoCreatedCallback, Gettable audioInfoCreatedCallback,
+			Runnable videoReadCallback, Runnable audioReadCallback,
+			boolean debug) {
+		super(in, video, audio,
+				videoInfoCreatedCallback, audioInfoCreatedCallback,
+				videoReadCallback, audioReadCallback,
+				debug);
 		this.growFactor = growFactor;
 	}
 
@@ -96,7 +102,7 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 		public long nextBoxStart() { return boxStart + boxSize; }
 	}
 	private enum TrakType { unknown, video, audio, other }
-	private class Trak extends Box {
+	class Trak extends Box {
 		TrakType type = TrakType.unknown;
 		int id, width, height, timeScale;
 		long duration = 0L; // in 1.0/timeScale sec. 
@@ -105,6 +111,10 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 			if ((type == TrakType.video || type == TrakType.audio) && !traksByType.containsKey(type)) {
 				traksById.put(id, this);
 				traksByType.put(type, this);
+				switch (type) {
+				case video: if (videoInfoCreatedCallback != null) videoInfoCreatedCallback.get(this); break;
+				case audio: if (audioInfoCreatedCallback != null) audioInfoCreatedCallback.get(this); break;
+				}
 				if (traksByType.size() == 2)
 					return moov.skip();
 			}			
@@ -143,14 +153,14 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 				Box mdat = new Box();
 				if (moof.trafs[0].trak.type == TrakType.video) { 
 					if (video.readToBuffer(moof.trafs[0]) == -1) return -1;
-					if (afterVideoCallback != null) afterVideoCallback.run(); 
+					if (videoReadCallback != null) videoReadCallback.run(); 
 					if (audio.readToBuffer(moof.trafs[1]) == -1) return -1;
-					if (afterAudioCallback != null) afterAudioCallback.run(); 
+					if (audioReadCallback != null) audioReadCallback.run(); 
 				} else {
 					if (audio.readToBuffer(moof.trafs[0]) == -1) return -1;
-					if (afterAudioCallback != null) afterAudioCallback.run(); 
+					if (audioReadCallback != null) audioReadCallback.run(); 
 					if (video.readToBuffer(moof.trafs[1]) == -1) return -1;
-					if (afterVideoCallback != null) afterVideoCallback.run(); 
+					if (videoReadCallback != null) videoReadCallback.run(); 
 				}
 				if (mdat.skip() == -1) return -1;
 				return 0;
@@ -319,7 +329,7 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 		FileInputStream reader = new FileInputStream(file);
 		MultiBuffer videoMultiBuffer = new ImgApplet.BufferList(new ImgApplet.BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, 20, true),
 				audioMultiBuffer = new ImgApplet.BufferList(20, true);
-		fMP4DemuxerInputStream mp4reader = new fMP4DemuxerInputStream(reader, 1.33333, videoMultiBuffer, audioMultiBuffer, null, null, true);
+		fMP4DemuxerInputStream mp4reader = new fMP4DemuxerInputStream(reader, 1.33333, videoMultiBuffer, audioMultiBuffer, null, null, null, null, true);
 		int res;
 		while ((res = mp4reader.readFragment()) != -1)
 			System.out.println("Fragment result: " + res);

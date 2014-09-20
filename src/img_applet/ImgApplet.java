@@ -1,5 +1,7 @@
 package img_applet;
 
+import img_applet.ImgApplet.MediaDemuxer.Gettable;
+
 import java.awt.Button;
 import java.awt.Color;
 import java.awt.FlowLayout;
@@ -85,9 +87,6 @@ public class ImgApplet extends JApplet implements Runnable {
 		abstract byte[] getBytes() throws IOException;
 		abstract Buffer getCurrentBuffer();
 		abstract void releaseCurrentBuffer();
-		// for video only:
-		abstract long getTimestamp();
-		abstract int getTimescale();
 	}
 
 	static interface Demuxer {
@@ -96,11 +95,19 @@ public class ImgApplet extends JApplet implements Runnable {
 	
 	static abstract class MediaDemuxer extends FilterInputStream implements Demuxer {
 		protected MultiBuffer video, audio;
-		protected Runnable afterVideoCallback, afterAudioCallback;
+		protected Runnable videoReadCallback, audioReadCallback;
+		static interface Gettable { void get(Object info); }
+		protected Gettable videoInfoCreatedCallback, audioInfoCreatedCallback;
 		protected boolean DEBUG;
 	    protected void debug(String dbg) { if (DEBUG) System.out.println(dbg); }
-		protected MediaDemuxer(InputStream in, MultiBuffer video, MultiBuffer audio, Runnable afterVideoCallback, Runnable afterAudioCallback, boolean debug) {
-			super(in); this.video = video; this.audio = audio; this.afterVideoCallback = afterVideoCallback; this.afterAudioCallback = afterAudioCallback; DEBUG = debug;
+		protected MediaDemuxer(InputStream in, MultiBuffer video, MultiBuffer audio,
+				Gettable videoInfoCreatedCallback, Gettable audioInfoCreatedCallback,
+				Runnable videoReadCallback, Runnable audioReadCallback,
+				boolean debug) {
+			super(in); this.video = video; this.audio = audio;
+			this.videoInfoCreatedCallback = videoInfoCreatedCallback; this.audioInfoCreatedCallback = audioInfoCreatedCallback;
+			this.videoReadCallback = videoReadCallback; this.audioReadCallback = audioReadCallback;
+			DEBUG = debug;
 		}
 	}
 
@@ -140,14 +147,6 @@ public class ImgApplet extends JApplet implements Runnable {
 		}
 		@Override
 		void releaseCurrentBuffer() {}
-		@Override
-		long getTimestamp() {
-			return ((VideoBuffer)getCurrentBuffer()).timestamp;
-		}
-		@Override
-		int getTimescale() {
-			return 0;
-		}
 	}
 	
 	static class BufferList extends MultiBuffer
@@ -195,7 +194,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		}
 		@Override
 		int getSN() {
-			getCurrentBuffer();
+			getCurrentBuffer_();
 			if (currentBuffer != null)
 				return currentBuffer.sn; 
 			return sn;
@@ -229,17 +228,6 @@ public class ImgApplet extends JApplet implements Runnable {
 			if (currentBuffer != null)
 				releaseCurrentBuffer_();
 		}
-		@Override
-		long getTimestamp() {
-			getCurrentBuffer();
-			if (currentBuffer != null)
-				return ((VideoBuffer)currentBuffer).timestamp; 
-			return 0L;
-		}
-		@Override
-		int getTimescale() {
-			return 0;
-		}
 	}
 
 	static private class DataOut {
@@ -261,6 +249,8 @@ public class ImgApplet extends JApplet implements Runnable {
 		private MultiBuffer multiBuffer;
 		private DataOut dataOut; 
 
+		private int timeScale;
+		
 		public String getDataURI() throws IOException {
 			if (multiBuffer.getSN() == 0)
 				return null;
@@ -645,7 +635,9 @@ public class ImgApplet extends JApplet implements Runnable {
 			demuxVideoDataStream = new DataStream("image/jpeg", new BufferList(
 					new BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, maxBufferCount, DEBUG));
 			in_ = new fMP4DemuxerInputStream(ffmp.getInputStream(), bufferGrowFactor, demuxVideoDataStream.multiBuffer, dataStream.multiBuffer,
-					null, new Runnable() { @Override public void run() { dataStream.httpLockNotify(); } }, DEBUG);
+					new Gettable() { @Override public void get(Object info) { demuxVideoDataStream.timeScale = ((fMP4DemuxerInputStream.Trak)info).timeScale; } }, null,
+					null, new Runnable() { @Override public void run() { dataStream.httpLockNotify(); } },
+					DEBUG);
 			int res = 0;
 			while (res != -1/* && !ffm_stop*/)
 				try {
@@ -691,19 +683,21 @@ public class ImgApplet extends JApplet implements Runnable {
 			this.ffmp.destroy();
 	}
 
-	public String getDataURI() throws IOException { return dataStream.getDataURI(); }
+	public String getDataURI() throws IOException { return dataStream != null ? dataStream.getDataURI() : null; }
 	
-	public int getSN() { return dataStream.multiBuffer.getSN(); }
+	public int getSN() { return dataStream != null ? dataStream.multiBuffer.getSN() : 0; }
 	
-	public boolean isStreaming() { return dataStream.isStreaming(); }
+	public boolean isStreaming() { return dataStream != null ? dataStream.isStreaming() : false; }
 	
-	public String startHttpServer() throws InterruptedException { return dataStream.startHttpServer(); } 
+	public String startHttpServer() throws InterruptedException { return dataStream != null ? dataStream.startHttpServer() : null; } 
 
-	public String getVideoDataURI() throws IOException { return demuxVideoDataStream.getDataURI(); }
+	public String getVideoDataURI() throws IOException { return demuxVideoDataStream != null ? demuxVideoDataStream.getDataURI() : null; }
 	
-	public int getVideoSN() { return demuxVideoDataStream.multiBuffer.getSN(); }
+	public int getVideoSN() { return demuxVideoDataStream != null ? demuxVideoDataStream.multiBuffer.getSN() : 0; }
 
-	public long getVideoTimestamp() { return demuxVideoDataStream.multiBuffer.getTimestamp(); }
+	public long getVideoTimestamp() { return demuxVideoDataStream != null ? ((VideoBuffer)demuxVideoDataStream.multiBuffer.getCurrentBuffer()).timestamp : 0L; }
+
+	public long getVideoTimeScale() { return demuxVideoDataStream != null ? demuxVideoDataStream.timeScale : 0; }
 
 	public void stopPlayback() {
 
