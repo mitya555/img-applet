@@ -73,6 +73,8 @@ script>-->
       ffmpeg-movflags="frag_keyframe+empty_moov"
       ffmpeg-f:o="mp4"
       demux-fMP4="yes"
+      buffer-grow-factor="1.0"
+      max-buffer-count="60"
       debug="yes" />
     </comment>
   </object>
@@ -83,10 +85,12 @@ script>-->
 -->
  
 <!-- 
+      ffmpeg-re=""
       ffmpeg-frames:d="3"
       ffmpeg-c:a="copy"
       ffmpeg-c:v="copy"
       ffmpeg-f:o="mp4"
+      ffmpeg-y=""
       ffmpeg-o="output.mp4"
  -->
 
@@ -98,14 +102,16 @@ script>-->
 <!-- <audio id="audio0" autoplay>Your browser does not support the <code>audio</code> element.</audio>
 <audio id="audio1" autoplay></audio> -->
 <audio id="audio" autoplay="autoplay" controls="controls" crossorigin="anonymous">Your browser does not support the <code>audio</code> element.</audio>
+
+<div id="msg" style="font-family:Courier New;"></div>
+
 <script>
 
 var width = 720, height = 540; // for the <embed> only
 
 // global variables
 var image, videoImage, videoImageContext, applet, applet_ie, applet_, sn = 0, last_img = -1;
-
-var audio, mp3sn = 0;
+var audio;
 
 // assign variables to HTML elements
 image = [ document.getElementById( 'image0' ), document.getElementById( 'image1' ) ];
@@ -187,7 +193,20 @@ audio.onvolumechange      = function() { console.log("event: volumechange;     "
 //	window.setTimeout( callback, 1 );
 //};
 
-var cnt = 0, mp3Playing = false;
+var cnt = 0, playing = false, timeScale = 0, timeLine = 0, initial_ts = 0/*, time_chunk_cnt = 0*/;
+
+var perf_prev = 0, perf_msg = document.getElementById("msg"), perf_msg_lines = 10;
+function add_perf_msg(txt) {
+	if (perf_msg.childNodes.length >= perf_msg_lines)
+		perf_msg.removeChild(perf_msg.firstChild);
+	perf_msg.insertAdjacentHTML('beforeend', "<div>" + txt + "</div>");
+}
+function check_performance() {
+	var perf_now = performance.now();
+	if (perf_prev > 0 && perf_now - perf_prev > 20)
+		add_perf_msg("# " + cnt + "; " + (perf_now - perf_prev).toFixed(2));
+	perf_prev = perf_now;
+}
 
 // start the loop				
 animate();
@@ -198,19 +217,33 @@ function animate() {
 }
 
 function render() {
-	//if ((++cnt) % 2 != 0)
-	//	return;
+	cnt++;
+	//check_performance();
 	if (checkApplet()) {
 		var sn_ = applet_.getVideoSN();
-		if ( sn_ != sn && sn_ > 0 ) {
-			sn = sn_;
-			image[last_img = (last_img + 1) % 2].src = applet_.getVideoDataURI();
-		}
+		if (sn_ != sn && sn_ > 0) {
+			if (timeScale == 0)
+				timeScale = applet_.getVideoTimeScale();
+			var ts_ = applet_.getVideoTimestamp(), tl_ = performance.now(), dt_ = (ts_ - initial_ts) * 1000 / timeScale;
+			//if (dt_ > 100)
+			//	add_perf_msg("sn = " + sn_ + "; ts = " + (ts_ - initial_ts));
+			if (timeScale > 0 && (ts_ == 0 || timeLine == 0 || dt_ <= tl_ - timeLine /*|| time_chunk_cnt++ < 2*/)) {
+				//if (ts_ == 0 || timeLine == 0) {
+					timeLine = tl_;
+					initial_ts = ts_;
+				//}
+				sn = sn_;
+				//time_chunk_cnt = 0;
+				//add_perf_msg("sn = " + sn_ + "; ts = " + ts_);
+				image[last_img = (last_img + 1) % 2].src = applet_.getVideoDataURI();
+			}
+		} else
+			timeScale = timeLine = initial_ts = 0;
 	}
-	if (mp3Playing)
-		mp3Playing = applet_.isStreaming();
+	if (playing)
+		playing = applet_.isStreaming();
 	else if (checkApplet() && applet_.isPlaying() && applet_.getSN() > 0) {
-		mp3Playing = true;
+		playing = true;
 		audio.src = applet_.startHttpServer();
 	}
 }

@@ -143,7 +143,7 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 	}
 
 	@Override
-	public int readFragment() throws IOException {
+	public int readFragment() throws IOException, InterruptedException {
 		Moof moof = null;
 		while (true) {
 			if (readNext() == -1) return -1;
@@ -151,16 +151,20 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 				if (read_moof(moof = new Moof()) == -1) return -1;
 			} else if (check4box_('m', 'd', 'a', 't')) { // mdat
 				Box mdat = new Box();
+//				if (moof.trafs[0].duration > moof.trafs[0].trak.timeScale || moof.trafs[1].duration > moof.trafs[1].trak.timeScale) { // drop big fragments ( > 1 sec.)
+//					if (mdat.skip() == -1) return -1;
+//					continue;
+//				}
 				if (moof.trafs[0].trak.type == TrakType.video) { 
 					if (video.readToBuffer(moof.trafs[0]) == -1) return -1;
-					if (videoReadCallback != null) videoReadCallback.run(); 
+					if (videoReadCallback != null) videoReadCallback.run();
 					if (audio.readToBuffer(moof.trafs[1]) == -1) return -1;
-					if (audioReadCallback != null) audioReadCallback.run(); 
+					if (audioReadCallback != null) audioReadCallback.run();
 				} else {
 					if (audio.readToBuffer(moof.trafs[0]) == -1) return -1;
-					if (audioReadCallback != null) audioReadCallback.run(); 
+					if (audioReadCallback != null) audioReadCallback.run();
 					if (video.readToBuffer(moof.trafs[1]) == -1) return -1;
-					if (videoReadCallback != null) videoReadCallback.run(); 
+					if (videoReadCallback != null) videoReadCallback.run();
 				}
 				if (mdat.skip() == -1) return -1;
 				return 0;
@@ -324,8 +328,8 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 		}
 	}
 	
-	public static void main(String[] args) throws IOException {
-		File file = new File("C:\\Users\\dmitriy.mukhin\\AppData\\Local\\Temp\\img_applet\\out_frag_keyframe_empty_moov.mp4"); // "C:\\Documents and Settings\\Mitya\\Local Settings\\Temp\\img_applet\\output1.mp4");
+	public static void main(String[] args) throws IOException, InterruptedException {
+		File file = new File("C:\\Users\\dmitriy.mukhin\\AppData\\Local\\Temp\\img_applet\\output.mp4"); // "C:\\Documents and Settings\\Mitya\\Local Settings\\Temp\\img_applet\\output1.mp4");
 		FileInputStream reader = new FileInputStream(file);
 		MultiBuffer videoMultiBuffer = new ImgApplet.BufferList(new ImgApplet.BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, 20, true),
 				audioMultiBuffer = new ImgApplet.BufferList(20, true);
