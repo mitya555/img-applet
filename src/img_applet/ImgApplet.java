@@ -83,14 +83,14 @@ public class ImgApplet extends JApplet implements Runnable {
 	    protected void debug(String dbg) { if (DEBUG) System.out.println(dbg); }
 		protected MultiBuffer(BufferFactory bufferFactory, boolean debug) { this.bufferFactory = bufferFactory; DEBUG = debug; }
 		protected MultiBuffer(boolean debug) { this(new BufferFactory() { @Override public Buffer newBuffer() { return new Buffer(); } }, debug); }
-		abstract int readToBuffer(ReaderToBuffer in) throws IOException;
+		abstract int readToBuffer(ReaderToBuffer in) throws IOException, InterruptedException;
 		abstract byte[] getBytes() throws IOException;
 		abstract Buffer getCurrentBuffer();
 		abstract void releaseCurrentBuffer();
 	}
 
 	static interface Demuxer {
-		int readFragment() throws IOException;
+		int readFragment() throws IOException, InterruptedException;
 	}
 	
 	static abstract class MediaDemuxer extends FilterInputStream implements Demuxer {
@@ -165,8 +165,9 @@ public class ImgApplet extends JApplet implements Runnable {
 		private int dropFrameFirst, dropFrameLast;
 		public BufferList(BufferFactory bufferFactory, int maxBufferCount, boolean debug) { super(bufferFactory, debug); this.maxBufferCount = maxBufferCount; }
 		public BufferList(int maxBufferCount, boolean debug) { super(debug); this.maxBufferCount = maxBufferCount; }
+		private Object bufLock = new Object();
 		@Override
-		int readToBuffer(ReaderToBuffer in) throws IOException {
+		int readToBuffer(ReaderToBuffer in) throws IOException, InterruptedException {
 			Buffer buf = (Buffer)emptyBufferList.remove();
 			if (buf == null) {
 				if (bufferCount < maxBufferCount) {
@@ -175,12 +176,14 @@ public class ImgApplet extends JApplet implements Runnable {
 					if (DEBUG)
 						errOut.println("Buffer # " + bufferCount + " allocated");
 				} else {
-					buf = (Buffer)filledBufferList.remove();
-					if (DEBUG) {
-						if (dropFrameFirst == 0)
-							dropFrameFirst = buf.sn;
-						dropFrameLast = buf.sn;
-					}
+//					buf = (Buffer)filledBufferList.remove();
+//					if (DEBUG) {
+//						if (dropFrameFirst == 0)
+//							dropFrameFirst = buf.sn;
+//						dropFrameLast = buf.sn;
+//					}
+					synchronized (bufLock) { bufLock.wait(); }
+					buf = (Buffer)emptyBufferList.remove();
 				}
 			}
 			if (dropFrameFirst > 0 && dropFrameLast < buf.sn) {
@@ -217,6 +220,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			Buffer buf = currentBuffer;
 			currentBuffer = null;
 			emptyBufferList.add(buf);
+			synchronized (bufLock) { bufLock.notify(); }
 		}
 		@Override
 		Buffer getCurrentBuffer() {
@@ -538,10 +542,14 @@ public class ImgApplet extends JApplet implements Runnable {
 			this.ffmt = new Thread(new Runnable() {
 				@Override
 				public void run() {
-					if (demux_fMP4)
-						playMediaDemuxer();
-					else
-						playMediaReader();
+					try {
+						if (demux_fMP4)
+							playMediaDemuxer();
+						else
+							playMediaReader();
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
 				}
 			});
 			this.ffmt.start();
@@ -574,7 +582,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			}).start();
 	}
 
-	private void playMediaReader() {
+	private void playMediaReader() throws InterruptedException {
 		setUIForPlaying(true);
 		MediaReader in_ = null;
 		try {
@@ -627,7 +635,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		}
 	}
 
-	private void playMediaDemuxer() {
+	private void playMediaDemuxer() throws InterruptedException {
 		setUIForPlaying(true);
 		MediaDemuxer in_ = null;
 		try {
@@ -695,7 +703,7 @@ public class ImgApplet extends JApplet implements Runnable {
 	
 	public int getVideoSN() { return demuxVideoDataStream != null ? demuxVideoDataStream.multiBuffer.getSN() : 0; }
 
-	public long getVideoTimestamp() { return demuxVideoDataStream != null ? ((VideoBuffer)demuxVideoDataStream.multiBuffer.getCurrentBuffer()).timestamp : 0L; }
+	public long getVideoTimestamp() { VideoBuffer cvb; return demuxVideoDataStream != null && (cvb = (VideoBuffer)demuxVideoDataStream.multiBuffer.getCurrentBuffer()) != null ? cvb.timestamp : 0L; }
 
 	public long getVideoTimeScale() { return demuxVideoDataStream != null ? demuxVideoDataStream.timeScale : 0; }
 
