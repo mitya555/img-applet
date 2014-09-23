@@ -703,7 +703,7 @@ public class ImgApplet extends JApplet implements Runnable {
 	
 	public int getVideoSN() { return demuxVideoDataStream != null ? demuxVideoDataStream.multiBuffer.getSN() : 0; }
 
-	public long getVideoTimestamp() { VideoBuffer cvb; return demuxVideoDataStream != null && (cvb = (VideoBuffer)demuxVideoDataStream.multiBuffer.getCurrentBuffer()) != null ? cvb.timestamp : 0L; }
+	public long getVideoTimestamp() { VideoBuffer cvb = demuxVideoDataStream != null ? (VideoBuffer)demuxVideoDataStream.multiBuffer.getCurrentBuffer() : null; return cvb != null ? cvb.timestamp : 0L; }
 
 	public long getVideoTimeScale() { return demuxVideoDataStream != null ? demuxVideoDataStream.timeScale : 0; }
 
