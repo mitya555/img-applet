@@ -151,9 +151,9 @@ public class ImgApplet extends JApplet implements Runnable {
 	
 	static class BufferList extends MultiBuffer
 	{
-		private class _List
+		static private class _List
 		{
-			private class _ListItem { public volatile _ListItem next; public Object obj; public _ListItem(Object obj) { this.obj = obj; } }
+			static private class _ListItem { public volatile _ListItem next; public Object obj; public _ListItem(Object obj) { this.obj = obj; } }
 			private _ListItem head, tail;
 			public synchronized void add(Object o) { if (head == null) head = tail = new _ListItem(o); else { tail.next = new _ListItem(o); tail = tail.next;  } }
 			public synchronized Object remove() { Object ret = null; if (head != null) { ret = head.obj; head = head.next; } return ret; }
