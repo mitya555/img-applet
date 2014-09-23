@@ -370,7 +370,7 @@ public class ImgApplet extends JApplet implements Runnable {
 	
 //	private static boolean tryParseFloat(String val) { try { Float.parseFloat(val); return true; } catch (Throwable ex) { return false; } }
 //	private static boolean tryParseInt(String val) { try { Integer.parseInt(val); return true; } catch (Throwable ex) { return false; } }
-	private static int parseInt(String val) { try { return Integer.parseInt(val); } catch (Throwable ex) { return 0; } }
+	private static int parseInt(String val) { try { return Integer.parseInt(val); } catch (Throwable ex) { return -1; } }
 	private static double parseDouble(String val) { try { return Double.parseDouble(val); } catch (Throwable ex) { return -1.0; } }
     private static boolean strEmpty(String str) { return str == null || str.length() == 0; }
     private static boolean isNo(String str) { return str == null || "No".equalsIgnoreCase(str) || "False".equalsIgnoreCase(str); }
@@ -400,7 +400,7 @@ public class ImgApplet extends JApplet implements Runnable {
 
 	private boolean demux_fMP4;
 	private int bufferSize, vBufferSize, aBufferSize, maxBufferCount, mp3FramesPerChunk;
-	private double bufferGrowFactor;
+	private double bufferGrowFactor, bufferShrinkThresholdFactor;
 	private DataStream dataStream, demuxVideoDataStream;
 
 	@Override
@@ -416,16 +416,14 @@ public class ImgApplet extends JApplet implements Runnable {
 		aBufferSize = parseInt(getParameter("audio-buffer-size"));
 		
 		bufferGrowFactor = parseDouble(getParameter("buffer-grow-factor"));
-		if (bufferGrowFactor < 0.0) bufferGrowFactor = 1.333333333;
+		bufferShrinkThresholdFactor = parseDouble(getParameter("buffer-shrink-threshold-factor"));
 		
 		bufferSize = parseInt(getParameter("buffer-size"));
-		if (bufferSize <= 0) bufferSize = 200000;
 		
 		maxBufferCount = parseInt(getParameter("max-buffer-count"));
-		if (maxBufferCount <= 0) maxBufferCount = 30;
+		if (maxBufferCount < 0) maxBufferCount = 30;
 		
 		mp3FramesPerChunk = parseInt(getParameter("mp3-frames-per-chunk"));
-		if (mp3FramesPerChunk <= 0) mp3FramesPerChunk = 10;
 		
 //		this.rtmp = getParameter("rtmp");
 //		this.qscale = getParameter("qscale");
@@ -642,7 +640,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			dataStream = new DataStream("audio/mpeg", new BufferList(maxBufferCount, DEBUG));
 			demuxVideoDataStream = new DataStream("image/jpeg", new BufferList(
 					new BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, maxBufferCount, DEBUG));
-			in_ = new fMP4DemuxerInputStream(ffmp.getInputStream(), bufferGrowFactor, demuxVideoDataStream.multiBuffer, dataStream.multiBuffer,
+			in_ = new fMP4DemuxerInputStream(ffmp.getInputStream(), bufferGrowFactor, bufferShrinkThresholdFactor, demuxVideoDataStream.multiBuffer, dataStream.multiBuffer,
 					new Gettable() { @Override public void get(Object info) { demuxVideoDataStream.timeScale = ((fMP4DemuxerInputStream.Trak)info).timeScale; } }, null,
 					null, new Runnable() { @Override public void run() { dataStream.httpLockNotify(); } },
 					DEBUG);

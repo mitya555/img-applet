@@ -7,7 +7,7 @@ public class fMP4InputStream extends ImgApplet.MediaReader {
 
 	public fMP4InputStream(InputStream in, double growFactor) {
 		super(in);
-		this.growFactor = growFactor;
+		this.growFactor = growFactor < 1.0 ? 1.0 : growFactor;
 	}
 	
 	protected double growFactor;

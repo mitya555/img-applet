@@ -9,7 +9,7 @@ public class GenericBufferWriter extends ImgApplet.MediaReader {
 
 	protected GenericBufferWriter(InputStream in, int bufferSize) {
 		super(in);
-		this.bufferSize = bufferSize;
+		this.bufferSize = bufferSize > 0 ? bufferSize : 100000;
 	}
 
 	protected int bufferSize;

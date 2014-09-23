@@ -15,7 +15,9 @@ import java.util.Map;
 
 public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 
-	public fMP4DemuxerInputStream(InputStream in, double growFactor, MultiBuffer video, MultiBuffer audio,
+	public fMP4DemuxerInputStream(InputStream in,
+			double growFactor, double shrinkThresholdFactor,
+			MultiBuffer video, MultiBuffer audio,
 			Gettable videoInfoCreatedCallback, Gettable audioInfoCreatedCallback,
 			Runnable videoReadCallback, Runnable audioReadCallback,
 			boolean debug) {
@@ -23,10 +25,11 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 				videoInfoCreatedCallback, audioInfoCreatedCallback,
 				videoReadCallback, audioReadCallback,
 				debug);
-		this.growFactor = growFactor;
+		this.growFactor = growFactor < 1.0 ? 1.0 : growFactor;
+		this.shrinkThresholdFactor = shrinkThresholdFactor < 1.0 ? 1.5 : shrinkThresholdFactor;
 	}
 
-	protected double growFactor;
+	protected double growFactor, shrinkThresholdFactor;
 
 	private long pos;
 	private CircularBuffer buf = new CircularBuffer(8);
@@ -133,7 +136,7 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 				((VideoBuffer)b).timestamp = trak.duration;
 			trak.duration += duration;
 			if (skip_(baseDataOffset + dataOffset - pos) == -1) return -1;
-			if (b.size < size) b.grow(size, growFactor);
+			if (b.size < size || b.size > size * shrinkThresholdFactor) b.grow(size, growFactor);
 			return read_(b.b, size);
 		}
 	}
@@ -333,7 +336,7 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 		FileInputStream reader = new FileInputStream(file);
 		MultiBuffer videoMultiBuffer = new ImgApplet.BufferList(new ImgApplet.BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, 20, true),
 				audioMultiBuffer = new ImgApplet.BufferList(20, true);
-		fMP4DemuxerInputStream mp4reader = new fMP4DemuxerInputStream(reader, 1.33333, videoMultiBuffer, audioMultiBuffer, null, null, null, null, true);
+		fMP4DemuxerInputStream mp4reader = new fMP4DemuxerInputStream(reader, 1.0, 1.5, videoMultiBuffer, audioMultiBuffer, null, null, null, null, true);
 		int res;
 		while ((res = mp4reader.readFragment()) != -1)
 			System.out.println("Fragment result: " + res);

@@ -8,7 +8,7 @@ public class MjpegInputStream extends ImgApplet.MediaReader {
 	public MjpegInputStream(InputStream in, int initBufferSize, double growFactor) {
 		super(in);
 		this.initBufferSize = initBufferSize > 0 ? initBufferSize  : 5000;
-		this.growFactor = growFactor;
+		this.growFactor = growFactor < 1.0 ? 1.333333333 : growFactor;
 	}
 	
 	protected int initBufferSize;

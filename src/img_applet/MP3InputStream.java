@@ -7,9 +7,9 @@ public class MP3InputStream extends ImgApplet.MediaReader {
 
 	public MP3InputStream(InputStream in, int initBufferSize, int dataFramesInFragment, double growFactor) {
 		super(in);
-		if (dataFramesInFragment > 0) this.dataFramesInFragment = dataFramesInFragment;
+		this.dataFramesInFragment = dataFramesInFragment > 0 ? dataFramesInFragment : 10;
 		this.initBufferSize = initBufferSize > 0 ? initBufferSize  : 400 * this.dataFramesInFragment;
-		this.growFactor = growFactor;
+		this.growFactor = growFactor < 1.0 ? 1.333333333 : growFactor;
 	}
 	
 	protected int initBufferSize;
@@ -18,7 +18,7 @@ public class MP3InputStream extends ImgApplet.MediaReader {
 	private boolean skipTags;
 	public MP3InputStream setSkipTags() { skipTags = true; return this; }
 	
-	private int dataFramesInFragment = 20;
+	private int dataFramesInFragment;
 	
 	private CircularBuffer cb = new CircularBuffer(3);
 	
