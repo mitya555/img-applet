@@ -66,7 +66,11 @@ public class FileBackedAutoReadingInputStream extends FilterInputStream {
 	}
 	
 	static private class _BufList {
-		static class _Item { volatile _Item next; _Buf buf; _Item(_Buf buf) { this.buf = buf; } }
+		static class _Item {
+			volatile _Item next;
+			_Buf buf;
+			_Item(_Buf buf) { this.buf = buf; }
+		}
 		volatile _Item beforeRead, write;
 		synchronized void addAfterWrite(_Buf buf) {
 			_Item _i = new _Item(buf);
@@ -87,24 +91,26 @@ public class FileBackedAutoReadingInputStream extends FilterInputStream {
 			}
 		}
 		synchronized void advanceWrite() throws IOException { if (write == beforeRead) addAfterWrite(new _File()); write = write.next; }
+		Object startLock = new Object();
 		void write(byte[] b, int off, int len) throws IOException {
-			if (write == null) { addAfterWrite(new _Mem()); addAfterWrite(new _Mem()); synchronized (this) { this.notify(); } } // 2 memory buffers at the beginning
+			if (write == null) { addAfterWrite(new _Mem()); addAfterWrite(new _Mem()); synchronized (startLock) { startLock.notify(); } } // 2 memory buffers at the beginning
 			else if (write.buf.isFile() && write != beforeRead && write.next.buf.isMem()) write = write.next;
 			else if (write.buf.atEndForWrite()) advanceWrite();
 			int res = 0;
-			boolean notified = false;
+			boolean readLockNotified = false;
 			while ((res += write.buf.write(b, off + res, len - res)) < len) {
-				if (res > 0 && !notified) { synchronized (this) { this.notify(); } notified = true; }
+				if (res > 0 && !readLockNotified) { synchronized (readLock) { readLock.notify(); } readLockNotified = true; }
 				advanceWrite();
 			}
-			if (res > 0 && !notified) { synchronized (this) { this.notify(); } }
+			if (res > 0 && !readLockNotified) { synchronized (readLock) { readLock.notify(); } }
 			if (write.buf.atEndForWrite()) advanceWrite();
 		}
+		Object readLock = new Object();
 		int read() throws InterruptedException {
 			while (!beforeRead.next.buf.hasData() && beforeRead.next != write)
 				moveReadToWrite();
 			_Buf buf = beforeRead.next.buf;
-			synchronized (this) { if (!buf.hasData()) { if (readingThread.isAlive()) this.wait(); else return -1; } }
+			synchronized (readLock) { if (!buf.hasData()) { if (readingThread.isAlive()) readLock.wait(); else return -1; } }
 			int res = buf.read();
 			if (!buf.hasData() && beforeRead.next != write)
 				moveReadToWrite();
@@ -126,7 +132,9 @@ public class FileBackedAutoReadingInputStream extends FilterInputStream {
 				} catch (IOException e) {
 					e.printStackTrace();
 				} finally {
-					synchronized (bufList) { bufList.notify(); }
+					if (bufList.startLock != null)
+						synchronized (bufList.startLock) { bufList.startLock.notify(); }
+					synchronized (bufList.readLock) { bufList.readLock.notify(); }
 					try {
 						in.close();
 					} catch (IOException e) {
@@ -135,15 +143,14 @@ public class FileBackedAutoReadingInputStream extends FilterInputStream {
 				}
 			}
 		});
-	private boolean neverStarted = true;
 	
 	@Override
 	public int read() throws IOException {
-		if (neverStarted)
-			synchronized (bufList) { 
+		if (bufList.startLock != null)
+			synchronized (bufList.startLock) { 
 				bufList.readingThread.start();
-				neverStarted = false;
-				try { bufList.wait(); } catch (InterruptedException e) { throw new IOException(e); }
+				try { bufList.startLock.wait(); } catch (InterruptedException e) { throw new IOException(e); }
+				bufList.startLock = null;
 			}
 		try { return bufList.read(); } catch (InterruptedException e) { throw new IOException(e); }
 	}
