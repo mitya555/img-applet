@@ -334,8 +334,8 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 	public static void main(String[] args) throws IOException, InterruptedException {
 		File file = new File("C:\\Users\\dmitriy.mukhin\\AppData\\Local\\Temp\\img_applet\\output.mp4"); // "C:\\Documents and Settings\\Mitya\\Local Settings\\Temp\\img_applet\\output1.mp4");
 		FileInputStream reader = new FileInputStream(file);
-		MultiBuffer videoMultiBuffer = new ImgApplet.BufferList(new ImgApplet.BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, 20, true),
-				audioMultiBuffer = new ImgApplet.BufferList(20, true);
+		MultiBuffer videoMultiBuffer = new ImgApplet.BufferList(new ImgApplet.BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, 20, true, "Video"),
+				audioMultiBuffer = new ImgApplet.BufferList(20, true, "Audio");
 		fMP4DemuxerInputStream mp4reader = new fMP4DemuxerInputStream(reader, 1.0, 1.5, videoMultiBuffer, audioMultiBuffer, null, null, null, null, true);
 		int res;
 		while ((res = mp4reader.readFragment()) != -1)

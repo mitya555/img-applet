@@ -81,12 +81,15 @@ public class ImgApplet extends JApplet implements Runnable {
 		protected BufferFactory bufferFactory;
 		protected boolean DEBUG;
 	    protected void debug(String dbg) { if (DEBUG) System.out.println(dbg); }
-		protected MultiBuffer(BufferFactory bufferFactory, boolean debug) { this.bufferFactory = bufferFactory; DEBUG = debug; }
-		protected MultiBuffer(boolean debug) { this(new BufferFactory() { @Override public Buffer newBuffer() { return new Buffer(); } }, debug); }
+	    protected String name;
+		protected MultiBuffer(BufferFactory bufferFactory, boolean debug, String name) { this.bufferFactory = bufferFactory; DEBUG = debug; this.name = name; }
+		protected MultiBuffer(boolean debug, String name) { this(new BufferFactory() { @Override public Buffer newBuffer() { return new Buffer(); } }, debug, name); }
 		abstract int readToBuffer(ReaderToBuffer in) throws IOException, InterruptedException;
 		abstract byte[] getBytes() throws IOException;
 		abstract Buffer getCurrentBuffer();
 		abstract void releaseCurrentBuffer();
+		abstract Buffer getCurrentBufferWait() throws InterruptedException;
+		abstract void getCurrentBufferNotify();
 	}
 
 	static interface Demuxer {
@@ -114,7 +117,7 @@ public class ImgApplet extends JApplet implements Runnable {
 	static class DoubleBuffer extends MultiBuffer
 	{
 		private Buffer b1, b2;
-		public DoubleBuffer(boolean debug) { super(debug); b1 = new Buffer(); b2 = new Buffer(); }
+		public DoubleBuffer(boolean debug, String name) { super(debug, name); b1 = new Buffer(); b2 = new Buffer(); }
 		@Override
 		public int readToBuffer(ReaderToBuffer in) throws IOException {
 			int res;
@@ -147,6 +150,12 @@ public class ImgApplet extends JApplet implements Runnable {
 		}
 		@Override
 		void releaseCurrentBuffer() {}
+		@Override
+		Buffer getCurrentBufferWait() {
+			return getCurrentBuffer();
+		}
+		@Override
+		void getCurrentBufferNotify() {}
 	}
 	
 	static class BufferList extends MultiBuffer
@@ -155,17 +164,19 @@ public class ImgApplet extends JApplet implements Runnable {
 		{
 			static private class _ListItem { public volatile _ListItem next; public Object obj; public _ListItem(Object obj) { this.obj = obj; } }
 			private _ListItem head, tail;
-			public synchronized void add(Object o) { if (head == null) head = tail = new _ListItem(o); else { tail.next = new _ListItem(o); tail = tail.next;  } }
-			public synchronized Object remove() { Object ret = null; if (head != null) { ret = head.obj; head = head.next; } return ret; }
+			public synchronized void add(Object o) { if (head == null) head = tail = new _ListItem(o); else { tail.next = new _ListItem(o); tail = tail.next; } count++; this.notify(); }
+			public synchronized Object remove() { Object ret = null; if (head != null) { ret = head.obj; head = head.next; count--; } return ret; }
+			public synchronized Object removeWait() throws InterruptedException { Object ret = remove(); if (ret == null) { this.wait(); ret = remove(); } return ret; }
+			public int count;
 		}
 		private _List filledBufferList = new _List(), emptyBufferList = new _List();
 		private volatile Buffer currentBuffer;
 		private int bufferCount, maxBufferCount;
 		private BufferedConsoleOut errOut = new BufferedConsoleOut(System.err);
 		private int dropFrameFirst, dropFrameLast;
-		public BufferList(BufferFactory bufferFactory, int maxBufferCount, boolean debug) { super(bufferFactory, debug); this.maxBufferCount = maxBufferCount; }
-		public BufferList(int maxBufferCount, boolean debug) { super(debug); this.maxBufferCount = maxBufferCount; }
-		private Object bufLock = new Object();
+		public BufferList(BufferFactory bufferFactory, int maxBufferCount, boolean debug, String name) { super(bufferFactory, debug, name); this.maxBufferCount = maxBufferCount; }
+		public BufferList(int maxBufferCount, boolean debug, String name) { super(debug, name); this.maxBufferCount = maxBufferCount; }
+		private Object filledBufLock = new Object();
 		@Override
 		int readToBuffer(ReaderToBuffer in) throws IOException, InterruptedException {
 			Buffer buf = (Buffer)emptyBufferList.remove();
@@ -174,7 +185,7 @@ public class ImgApplet extends JApplet implements Runnable {
 					buf = bufferFactory.newBuffer();
 					bufferCount++;
 					if (DEBUG)
-						errOut.println("Buffer # " + bufferCount + " allocated");
+						errOut.println(name + " buffer # " + bufferCount + " allocated");
 				} else {
 //					buf = (Buffer)filledBufferList.remove();
 //					if (DEBUG) {
@@ -182,8 +193,7 @@ public class ImgApplet extends JApplet implements Runnable {
 //							dropFrameFirst = buf.sn;
 //						dropFrameLast = buf.sn;
 //					}
-					synchronized (bufLock) { bufLock.wait(); }
-					buf = (Buffer)emptyBufferList.remove();
+					buf = (Buffer)emptyBufferList.removeWait();
 				}
 			}
 			if (dropFrameFirst > 0 && dropFrameLast < buf.sn) {
@@ -216,11 +226,20 @@ public class ImgApplet extends JApplet implements Runnable {
 			if (currentBuffer == null)
 				currentBuffer = (Buffer)filledBufferList.remove();
 		}
+		private void getCurrentBufferWait_() throws InterruptedException {
+			if (currentBuffer == null)
+				currentBuffer = (Buffer)filledBufferList.removeWait();
+		}
 		private void releaseCurrentBuffer_() {
 			Buffer buf = currentBuffer;
 			currentBuffer = null;
+			if (bufferCount > maxBufferCount / 2 && emptyBufferList.count > maxBufferCount / 2) {
+				if (DEBUG)
+					try { errOut.println(name + " buffer # " + bufferCount + " discarded"); } catch (IOException e) { e.printStackTrace(); }
+				bufferCount--;
+				return;
+			}
 			emptyBufferList.add(buf);
-			synchronized (bufLock) { bufLock.notify(); }
 		}
 		@Override
 		Buffer getCurrentBuffer() {
@@ -231,6 +250,15 @@ public class ImgApplet extends JApplet implements Runnable {
 		void releaseCurrentBuffer() {
 			if (currentBuffer != null)
 				releaseCurrentBuffer_();
+		}
+		@Override
+		Buffer getCurrentBufferWait() throws InterruptedException {
+			getCurrentBufferWait_();
+			return currentBuffer;
+		}
+		@Override
+		void getCurrentBufferNotify() {
+			synchronized (filledBufferList) { filledBufferList.notify(); }
 		}
 	}
 
@@ -262,16 +290,16 @@ public class ImgApplet extends JApplet implements Runnable {
 			return dataOut.dataUriStringBuilder.append(DatatypeConverter.printBase64Binary(multiBuffer.getBytes())).toString();
 		}
 		
-		private Object httpLock = new Object();
-		public void httpLockNotify() { synchronized (httpLock) { httpLock.notify(); } }
+		public void httpLockNotify() { multiBuffer.getCurrentBufferNotify(); }
 		
 		private volatile int httpPort;
 		private InetAddress httpAddress;
 		
 		public boolean isStreaming() { return httpPort > 0; }
 		
+		private Object startLock = new Object();
 		public /*int*/String startHttpServer() throws InterruptedException {
-	        new Thread(new Runnable() {
+	        Thread httpThread = new Thread(new Runnable() {
 				@Override
 				public void run() {
 					try (ServerSocket serverSocket = new ServerSocket()) {
@@ -279,7 +307,7 @@ public class ImgApplet extends JApplet implements Runnable {
 						serverSocket.bind(new InetSocketAddress(InetAddress.getByAddress(new byte[] { 127, 0, 0, 1 }), 0), 1);
 						httpPort = serverSocket.getLocalPort();
 						httpAddress = serverSocket.getInetAddress();
-						synchronized (httpLock) { httpLock.notify(); }
+						synchronized (startLock) { startLock.notify(); }
 						AccessController.doPrivileged(new PrivilegedAction<Object>() {
 							@Override
 							public Object run() {
@@ -294,8 +322,11 @@ public class ImgApplet extends JApplet implements Runnable {
 						stopPlayback();
 					}
 				}
-	        }).start();
-			synchronized (httpLock) { httpLock.wait(); }
+	        });
+			synchronized (startLock) {
+				httpThread.start();
+				startLock.wait();
+			}
 			String res = "http://" + httpAddress.getHostAddress() + ":" + httpPort;
 	        debug(res);
 			/*return httpPort;*/return res;
@@ -328,13 +359,12 @@ public class ImgApplet extends JApplet implements Runnable {
 //					}
 //				}
 				Buffer buf;
-				while ((buf = multiBuffer.getCurrentBuffer()) != null || isPlaying()) {
+				while ((buf = multiBuffer.getCurrentBufferWait()) != null || isPlaying()) {
 					if (buf != null) {
 						byteOut.write(buf.b, 0, buf.len);
 						multiBuffer.releaseCurrentBuffer();
 						byteOut.flush();
-					} else if (isPlaying())
-						synchronized (httpLock) { httpLock.wait(); }
+					}
 				}
 			} catch (IOException | InterruptedException e) {
 				e.printStackTrace();
@@ -607,13 +637,12 @@ public class ImgApplet extends JApplet implements Runnable {
 				contentType = "application/octet-stream";
 				break; 
 			}
-			dataStream = new DataStream(contentType, new BufferList(maxBufferCount, DEBUG));
+			dataStream = new DataStream(contentType, new BufferList(maxBufferCount, DEBUG, "Frame"));
 			demuxVideoDataStream = null;
 			int res = 0;
 			while (res != -1/* && !ffm_stop*/)
 				try {
 					res = dataStream.multiBuffer.readToBuffer(in_);
-					dataStream.httpLockNotify();
 //					debug("fragment of " + res + " bytes");
 				} catch (IOException e) {
 					e.printStackTrace();
@@ -637,10 +666,12 @@ public class ImgApplet extends JApplet implements Runnable {
 		setUIForPlaying(true);
 		MediaDemuxer in_ = null;
 		try {
-			dataStream = new DataStream("audio/mpeg", new BufferList(maxBufferCount, DEBUG));
+			dataStream = new DataStream("audio/mpeg", new BufferList(maxBufferCount, DEBUG, "Audio"));
 			demuxVideoDataStream = new DataStream("image/jpeg", new BufferList(
-					new BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, maxBufferCount, DEBUG));
-			in_ = new fMP4DemuxerInputStream(ffmp.getInputStream(), bufferGrowFactor, bufferShrinkThresholdFactor, demuxVideoDataStream.multiBuffer, dataStream.multiBuffer,
+					new BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, maxBufferCount, DEBUG, "Video"));
+			in_ = new fMP4DemuxerInputStream(/*new FileBackedAutoReadingInputStream(*/ffmp.getInputStream()/*)*/,
+					bufferGrowFactor, bufferShrinkThresholdFactor,
+					demuxVideoDataStream.multiBuffer, dataStream.multiBuffer,
 					new Gettable() { @Override public void get(Object info) { demuxVideoDataStream.timeScale = ((fMP4DemuxerInputStream.Trak)info).timeScale; } }, null,
 					null, new Runnable() { @Override public void run() { dataStream.httpLockNotify(); } },
 					DEBUG);
@@ -669,6 +700,7 @@ public class ImgApplet extends JApplet implements Runnable {
 
 	private void quitProcess() {
 		try {
+			debug("quitProcess() call...");
 			OutputStream out_ = ffmp.getOutputStream();
 			if (out_ != null) {
 				out_.write('q');
@@ -680,6 +712,8 @@ public class ImgApplet extends JApplet implements Runnable {
 	}
 
 	private void killProcess() {
+
+		debug("killProcess() call...");
 		
 //		this.ffm_stop = true;
 //		if (this.ffmt != null)
