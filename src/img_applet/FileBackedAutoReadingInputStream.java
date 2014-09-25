@@ -53,7 +53,7 @@ public class FileBackedAutoReadingInputStream extends FilterInputStream {
 		RandomAccessFile file;
 		ByteBuffer bb;
 		_File() throws IOException {
-			File temp = File.createTempFile("img_applet_", null);
+			File temp = File.createTempFile("img_applet_", null, JarLib.tmpdir);
 			temp.deleteOnExit();
 			file = new RandomAccessFile(temp, "rw");
 			file.setLength(1024 * 1024);

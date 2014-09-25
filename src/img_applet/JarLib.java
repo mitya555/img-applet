@@ -53,6 +53,8 @@ public class JarLib{
     return tmp;
   }
 
+  static final File tmpdir = new File(System.getProperty("java.io.tmpdir"),"img_applet");
+  
   static private File getFile(URL url, String filename, boolean shared)throws IOException, UnsatisfiedLinkError{
     try{
       URI uri = new URI(url.toString());    
@@ -64,7 +66,7 @@ public class JarLib{
       }else if( scheme.equals("jar")                              // make copy in tmp folder on local file system
             ||  scheme.equals("nbjcl")                            // netbeans: 2009-03-05 jmrunge
         ){
-        File   dir    = new File(System.getProperty("java.io.tmpdir"),"img_applet");
+        File   dir    = tmpdir;
         dir.mkdirs();
         File   tmp;
         if (shared) {

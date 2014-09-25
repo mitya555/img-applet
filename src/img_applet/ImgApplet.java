@@ -10,6 +10,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FilterInputStream;
 //import java.io.BufferedInputStream;
 //import java.io.File;
@@ -18,10 +19,13 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.io.RandomAccessFile;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel.MapMode;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 //import java.net.SocketAddress;
@@ -160,26 +164,73 @@ public class ImgApplet extends JApplet implements Runnable {
 	
 	static class BufferList extends MultiBuffer
 	{
-		static private class _List
+		static private class _List<T>
 		{
-			static private class _ListItem { public volatile _ListItem next; public Object obj; public _ListItem(Object obj) { this.obj = obj; } }
-			private _ListItem head, tail;
-			public synchronized void add(Object o) { if (head == null) head = tail = new _ListItem(o); else { tail.next = new _ListItem(o); tail = tail.next; } count++; this.notify(); }
-			public synchronized Object remove() { Object ret = null; if (head != null) { ret = head.obj; head = head.next; count--; } return ret; }
-			public synchronized Object removeWait() throws InterruptedException { Object ret = remove(); if (ret == null) { this.wait(); ret = remove(); } return ret; }
-			public int count;
+			static protected class _Item<T> { public volatile _Item<T> next; public T obj; public _Item(T obj) { this.obj = obj; } }
+			protected _Item<T> head, tail;
+			protected int count;
+			synchronized void add(T o) { if (head == null) head = tail = new _Item<T>(o); else tail = tail.next = new _Item<T>(o); count++; this.notify(); }
+			synchronized T remove() { T ret = null; if (head != null) { ret = head.obj; head = head.next; count--; } return ret; }
+			synchronized T removeWait() throws InterruptedException { T ret = remove(); if (ret == null) { this.wait(); ret = remove(); } return ret; }
 		}
-		private _List filledBufferList = new _List(), emptyBufferList = new _List();
+		static private class _File {
+			int read, write;
+			RandomAccessFile file;
+			ByteBuffer bb;
+			_File() throws IOException {
+				File temp = File.createTempFile("img_applet_", null, JarLib.tmpdir);
+				temp.deleteOnExit();
+				file = new RandomAccessFile(temp, "rw");
+				file.setLength(1024 * 1024);
+				bb = file.getChannel().map(MapMode.READ_WRITE, 0, file.length());
+			}
+			_File reset() { read = write = 0; return this; }
+			boolean atEndForWrite() throws IOException { return write == file.length(); }
+			synchronized int write(byte[] b, int off, int len) throws IOException {
+				int res = (int) Math.min(len, file.length() - write);
+				if (res > 0) {
+					bb.position(write);
+					bb.put(b, off, res);
+					write = bb.position();
+				}
+				return res;
+			}
+			synchronized int read() { return read < write ? bb.get(read++) << 24 >>> 24 : -1; }
+			synchronized int read(byte[] b, int off, int len) {
+				int res = (int) Math.min(len, write - read);
+				if (res > 0) {
+					bb.position(read);
+					bb.get(b, off, res);
+					read = bb.position();
+				}
+				return res;
+			}
+		}
+		static private class _FileBuffer extends _List<_File> {
+			_FileBuffer() throws IOException { super(); this.add(new _File()); write = head; }
+			volatile _Item<_File> write;
+			void write(byte[] b, int off, int len) {
+				int res = 0;
+//				boolean readLockNotified = false;
+				while ((res += write.obj.write(b, off + res, len - res)) < len) {
+//					if (res > 0 && !readLockNotified) { synchronized (readLock) { readLock.notify(); } readLockNotified = true; }
+					advanceWrite();
+				}
+				if (res > 0 && !readLockNotified) { synchronized (readLock) { readLock.notify(); } }
+				if (write.buf.atEndForWrite()) advanceWrite();
+			}
+
+		}
+		private _List<Buffer> filledBufferList = new _List<Buffer>(), emptyBufferList = new _List<Buffer>();
 		private volatile Buffer currentBuffer;
 		private int bufferCount, maxBufferCount;
 		private BufferedConsoleOut errOut = new BufferedConsoleOut(System.err);
 		private int dropFrameFirst, dropFrameLast;
 		public BufferList(BufferFactory bufferFactory, int maxBufferCount, boolean debug, String name) { super(bufferFactory, debug, name); this.maxBufferCount = maxBufferCount; }
 		public BufferList(int maxBufferCount, boolean debug, String name) { super(debug, name); this.maxBufferCount = maxBufferCount; }
-		private Object filledBufLock = new Object();
 		@Override
 		int readToBuffer(ReaderToBuffer in) throws IOException, InterruptedException {
-			Buffer buf = (Buffer)emptyBufferList.remove();
+			Buffer buf = emptyBufferList.remove();
 			if (buf == null) {
 				if (bufferCount < maxBufferCount) {
 					buf = bufferFactory.newBuffer();
@@ -187,13 +238,13 @@ public class ImgApplet extends JApplet implements Runnable {
 					if (DEBUG)
 						errOut.println(name + " buffer # " + bufferCount + " allocated");
 				} else {
-//					buf = (Buffer)filledBufferList.remove();
+//					buf = filledBufferList.remove();
 //					if (DEBUG) {
 //						if (dropFrameFirst == 0)
 //							dropFrameFirst = buf.sn;
 //						dropFrameLast = buf.sn;
 //					}
-					buf = (Buffer)emptyBufferList.removeWait();
+					buf = emptyBufferList.removeWait();
 				}
 			}
 			if (dropFrameFirst > 0 && dropFrameLast < buf.sn) {
@@ -224,11 +275,11 @@ public class ImgApplet extends JApplet implements Runnable {
 		}
 		private void getCurrentBuffer_() {
 			if (currentBuffer == null)
-				currentBuffer = (Buffer)filledBufferList.remove();
+				currentBuffer = filledBufferList.remove();
 		}
 		private void getCurrentBufferWait_() throws InterruptedException {
 			if (currentBuffer == null)
-				currentBuffer = (Buffer)filledBufferList.removeWait();
+				currentBuffer = filledBufferList.removeWait();
 		}
 		private void releaseCurrentBuffer_() {
 			Buffer buf = currentBuffer;
@@ -658,7 +709,6 @@ public class ImgApplet extends JApplet implements Runnable {
 				}
 			setUIForPlaying(false);
 			debug("Thread processing output from ffmpeg has ended.", "FFMPEG process terminated.");
-			dataStream.httpLockNotify();
 		}
 	}
 
@@ -673,7 +723,7 @@ public class ImgApplet extends JApplet implements Runnable {
 					bufferGrowFactor, bufferShrinkThresholdFactor,
 					demuxVideoDataStream.multiBuffer, dataStream.multiBuffer,
 					new Gettable() { @Override public void get(Object info) { demuxVideoDataStream.timeScale = ((fMP4DemuxerInputStream.Trak)info).timeScale; } }, null,
-					null, new Runnable() { @Override public void run() { dataStream.httpLockNotify(); } },
+					null, null,
 					DEBUG);
 			int res = 0;
 			while (res != -1/* && !ffm_stop*/)
@@ -694,7 +744,6 @@ public class ImgApplet extends JApplet implements Runnable {
 				}
 			setUIForPlaying(false);
 			debug("Thread processing output from ffmpeg has ended.", "FFMPEG process terminated.");
-			dataStream.httpLockNotify();
 		}
 	}
 
