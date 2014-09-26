@@ -228,10 +228,10 @@ function render() {
 			//if (dt_ > 100)
 			//	add_perf_msg("sn = " + sn_ + "; ts = " + (ts_ - initial_ts));
 			if (timeScale > 0 && (ts_ == 0 || timeLine == 0 || dt_ <= tl_ - timeLine)) {
-				//if (ts_ == 0 || timeLine == 0) {
+				if (ts_ == 0 || timeLine == 0) {
 					timeLine = tl_;
 					initial_ts = ts_;
-				//}
+				}
 				sn = sn_;
 				//add_perf_msg("sn = " + sn_ + "; ts = " + ts_);
 				image[last_img = (last_img + 1) % 2].src = applet_.getVideoDataURI();

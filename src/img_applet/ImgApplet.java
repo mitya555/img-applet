@@ -90,11 +90,13 @@ public class ImgApplet extends JApplet implements Runnable {
 		protected MultiBuffer(BufferFactory bufferFactory, boolean debug, String name) { this.bufferFactory = bufferFactory; DEBUG = debug; this.name = name; }
 		protected MultiBuffer(boolean debug, String name) { this(new BufferFactory() { @Override public Buffer newBuffer() { return new Buffer(); } }, debug, name); }
 		abstract int readToBuffer(ReaderToBuffer in) throws IOException, InterruptedException;
-		abstract byte[] getBytes() throws IOException;
+		abstract byte[] getBytes(Buffer b) throws IOException;
+		abstract byte[] getCurrentBytes() throws IOException;
 		abstract Buffer getCurrentBuffer();
 		abstract void releaseCurrentBuffer();
 		abstract Buffer getCurrentBufferWait() throws InterruptedException;
 		abstract void getCurrentBufferNotify();
+		abstract int getQueueLength();
 	}
 
 	static interface Demuxer {
@@ -139,7 +141,9 @@ public class ImgApplet extends JApplet implements Runnable {
 		private int prev_sn;
 		private BufferedConsoleOut errOut = new BufferedConsoleOut(System.err); 
 		@Override
-		public byte[] getBytes() throws IOException {
+		byte[] getBytes(Buffer b) throws IOException { return Arrays.copyOf(b.b, b.len); }
+		@Override
+		byte[] getCurrentBytes() throws IOException {
 			if (DEBUG) {
 				if (sn - prev_sn > 1) {
 					errOut.println("Dropped frame" + (sn - prev_sn == 2 ? " " + (sn - 1) : "s " + (prev_sn + 1) + " - " + (sn - 1)));
@@ -147,7 +151,7 @@ public class ImgApplet extends JApplet implements Runnable {
 				prev_sn = sn;
 			}
 			Buffer currentBuffer = getCurrentBuffer();
-			return Arrays.copyOf(currentBuffer.b, currentBuffer.len);
+			return getBytes(currentBuffer);
 		}
 		@Override
 		Buffer getCurrentBuffer() {
@@ -156,11 +160,11 @@ public class ImgApplet extends JApplet implements Runnable {
 		@Override
 		void releaseCurrentBuffer() {}
 		@Override
-		Buffer getCurrentBufferWait() {
-			return getCurrentBuffer();
-		}
+		Buffer getCurrentBufferWait() { return getCurrentBuffer(); }
 		@Override
 		void getCurrentBufferNotify() {}
+		@Override
+		int getQueueLength() { return 2; }
 	}
 	
 	static class BufferList extends MultiBuffer
@@ -272,16 +276,20 @@ public class ImgApplet extends JApplet implements Runnable {
 				return currentBuffer.sn; 
 			return sn;
 		}
+		byte[] getBytes(Buffer b) throws IOException {
+			byte[] ret = null;
+			if (b.persistent) {
+				ret = new byte[b.len];
+				fileBuffer.read(ret, 0, b.len);
+			} else
+				ret = Arrays.copyOf(b.b, b.len);
+			return ret;
+		}
 		@Override
-		byte[] getBytes() throws IOException {
+		byte[] getCurrentBytes() throws IOException {
 			getCurrentBuffer_();
 			if (currentBuffer != null) {
-				byte[] ret = null;
-				if (currentBuffer.persistent) {
-					ret = new byte[currentBuffer.len];
-					fileBuffer.read(ret, 0, currentBuffer.len);
-				} else
-					ret = Arrays.copyOf(currentBuffer.b, currentBuffer.len);
+				byte[] ret = getBytes(currentBuffer);
 				releaseCurrentBuffer_();
 				return ret;
 			}
@@ -329,6 +337,10 @@ public class ImgApplet extends JApplet implements Runnable {
 		void getCurrentBufferNotify() {
 			synchronized (filledBufferList) { filledBufferList.notify(); }
 		}
+		@Override
+		int getQueueLength() {
+			return filledBufferList.count;
+		}
 	}
 
 	static private class DataOut {
@@ -356,7 +368,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			if (multiBuffer.getSN() == 0)
 				return null;
 			dataOut.resetStringBuilder();
-			return dataOut.dataUriStringBuilder.append(DatatypeConverter.printBase64Binary(multiBuffer.getBytes())).toString();
+			return dataOut.dataUriStringBuilder.append(DatatypeConverter.printBase64Binary(multiBuffer.getCurrentBytes())).toString();
 		}
 		
 		public void httpLockNotify() { multiBuffer.getCurrentBufferNotify(); }
@@ -430,7 +442,8 @@ public class ImgApplet extends JApplet implements Runnable {
 				Buffer buf;
 				while ((buf = multiBuffer.getCurrentBufferWait()) != null || isPlaying()) {
 					if (buf != null) {
-						byteOut.write(buf.b, 0, buf.len);
+						byte[] res = buf.persistent ? multiBuffer.getBytes(buf) : buf.b;
+						byteOut.write(res, 0, buf.len);
 						multiBuffer.releaseCurrentBuffer();
 						byteOut.flush();
 					}
@@ -794,6 +807,8 @@ public class ImgApplet extends JApplet implements Runnable {
 	
 	public int getSN() { return dataStream != null ? dataStream.multiBuffer.getSN() : 0; }
 	
+	int getQueueLength() { return dataStream != null ? dataStream.multiBuffer.getQueueLength() : 0; }
+	
 	public boolean isStreaming() { return dataStream != null ? dataStream.isStreaming() : false; }
 	
 	public String startHttpServer() throws InterruptedException { return dataStream != null ? dataStream.startHttpServer() : null; } 
@@ -801,6 +816,8 @@ public class ImgApplet extends JApplet implements Runnable {
 	public String getVideoDataURI() throws IOException { return demuxVideoDataStream != null ? demuxVideoDataStream.getDataURI() : null; }
 	
 	public int getVideoSN() { return demuxVideoDataStream != null ? demuxVideoDataStream.multiBuffer.getSN() : 0; }
+
+	public int getVideoQueueLength() { return demuxVideoDataStream != null ? demuxVideoDataStream.multiBuffer.getQueueLength() : 0; }
 
 	public long getVideoTimestamp() { VideoBuffer cvb = demuxVideoDataStream != null ? (VideoBuffer)demuxVideoDataStream.multiBuffer.getCurrentBuffer() : null; return cvb != null ? cvb.timestamp : 0L; }
 
