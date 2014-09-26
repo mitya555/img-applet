@@ -62,6 +62,7 @@ public class ImgApplet extends JApplet implements Runnable {
 //			System.out.println("Buffer grew to " + this.size);
 			return this.size;
 		}
+		public boolean persistent;
 	}
 
 	static class VideoBuffer extends Buffer { public volatile long timestamp; }
@@ -184,76 +185,84 @@ public class ImgApplet extends JApplet implements Runnable {
 				file.setLength(1024 * 1024);
 				bb = file.getChannel().map(MapMode.READ_WRITE, 0, file.length());
 			}
-			_File reset() { read = write = 0; return this; }
-			boolean atEndForWrite() throws IOException { return write == file.length(); }
-			synchronized int write(byte[] b, int off, int len) throws IOException {
+			int write(byte[] b, int off, int len) throws IOException {
 				int res = (int) Math.min(len, file.length() - write);
-				if (res > 0) {
-					bb.position(write);
-					bb.put(b, off, res);
-					write = bb.position();
-				}
+				if (res > 0)
+					synchronized (this) {
+						bb.position(write);
+						bb.put(b, off, res);
+						write = bb.position();
+					}
 				return res;
 			}
-			synchronized int read() { return read < write ? bb.get(read++) << 24 >>> 24 : -1; }
 			synchronized int read(byte[] b, int off, int len) {
 				int res = (int) Math.min(len, write - read);
-				if (res > 0) {
-					bb.position(read);
-					bb.get(b, off, res);
-					read = bb.position();
-				}
+				if (res > 0)
+					synchronized (this) {
+						bb.position(read);
+						bb.get(b, off, res);
+						read = bb.position();
+						if (read == write)
+							read = write = 0;
+					}
 				return res;
 			}
 		}
 		static private class _FileBuffer extends _List<_File> {
-			_FileBuffer() throws IOException { super(); this.add(new _File()); write = head; }
+			_FileBuffer() throws IOException { super(); add(new _File()); write = head; }
 			volatile _Item<_File> write;
-			void write(byte[] b, int off, int len) {
+			void write(byte[] b, int off, int len) throws IOException {
 				int res = 0;
-//				boolean readLockNotified = false;
-				while ((res += write.obj.write(b, off + res, len - res)) < len) {
-//					if (res > 0 && !readLockNotified) { synchronized (readLock) { readLock.notify(); } readLockNotified = true; }
-					advanceWrite();
-				}
-				if (res > 0 && !readLockNotified) { synchronized (readLock) { readLock.notify(); } }
-				if (write.buf.atEndForWrite()) advanceWrite();
+				while ((res += write.obj.write(b, off + res, len - res)) < len)
+					synchronized (this) {
+						if (write.next == null)
+							add(new _File());
+						write = write.next;
+					}
 			}
-
+			int read(byte[] b, int off, int len) throws IOException {
+				int res = 0;
+				while ((res += head.obj.read(b, off + res, len - res)) < len)
+					synchronized (this) {
+						if (head == write)
+							throw new IOException("Insufficient size");
+						add(remove());
+					}
+				return res;
+			}
 		}
 		private _List<Buffer> filledBufferList = new _List<Buffer>(), emptyBufferList = new _List<Buffer>();
+		private _FileBuffer fileBuffer;
 		private volatile Buffer currentBuffer;
 		private int bufferCount, maxBufferCount;
 		private BufferedConsoleOut errOut = new BufferedConsoleOut(System.err);
-		private int dropFrameFirst, dropFrameLast;
 		public BufferList(BufferFactory bufferFactory, int maxBufferCount, boolean debug, String name) { super(bufferFactory, debug, name); this.maxBufferCount = maxBufferCount; }
 		public BufferList(int maxBufferCount, boolean debug, String name) { super(debug, name); this.maxBufferCount = maxBufferCount; }
 		@Override
 		int readToBuffer(ReaderToBuffer in) throws IOException, InterruptedException {
 			Buffer buf = emptyBufferList.remove();
 			if (buf == null) {
+				buf = bufferFactory.newBuffer();
 				if (bufferCount < maxBufferCount) {
-					buf = bufferFactory.newBuffer();
 					bufferCount++;
 					if (DEBUG)
 						errOut.println(name + " buffer # " + bufferCount + " allocated");
 				} else {
-//					buf = filledBufferList.remove();
-//					if (DEBUG) {
-//						if (dropFrameFirst == 0)
-//							dropFrameFirst = buf.sn;
-//						dropFrameLast = buf.sn;
-//					}
-					buf = emptyBufferList.removeWait();
+					buf.persistent = true;
 				}
-			}
-			if (dropFrameFirst > 0 && dropFrameLast < buf.sn) {
-				errOut.println("Dropped frame" + (dropFrameFirst == dropFrameLast ? " " + dropFrameFirst : "s " + dropFrameFirst + " - " + dropFrameLast));
-				dropFrameFirst = dropFrameLast = 0; 
 			}
 			int res = buf.len = in.read(buf);
 			buf.sn = ++sn;
-			(res != -1 ? filledBufferList : emptyBufferList).add(buf);
+			if (buf.persistent) {
+				if (res != -1) {
+					if (fileBuffer == null)
+						fileBuffer = new _FileBuffer();
+					fileBuffer.write(buf.b, 0, buf.len);
+					buf.b = null;
+					filledBufferList.add(buf);
+				}
+			} else
+				(res != -1 ? filledBufferList : emptyBufferList).add(buf);
 			return res;
 		}
 		@Override
@@ -267,7 +276,12 @@ public class ImgApplet extends JApplet implements Runnable {
 		byte[] getBytes() throws IOException {
 			getCurrentBuffer_();
 			if (currentBuffer != null) {
-				byte[] ret = Arrays.copyOf(currentBuffer.b, currentBuffer.len);
+				byte[] ret = null;
+				if (currentBuffer.persistent) {
+					ret = new byte[currentBuffer.len];
+					fileBuffer.read(ret, 0, currentBuffer.len);
+				} else
+					ret = Arrays.copyOf(currentBuffer.b, currentBuffer.len);
 				releaseCurrentBuffer_();
 				return ret;
 			}
@@ -282,15 +296,19 @@ public class ImgApplet extends JApplet implements Runnable {
 				currentBuffer = filledBufferList.removeWait();
 		}
 		private void releaseCurrentBuffer_() {
-			Buffer buf = currentBuffer;
-			currentBuffer = null;
-			if (bufferCount > maxBufferCount / 2 && emptyBufferList.count > maxBufferCount / 2) {
-				if (DEBUG)
-					try { errOut.println(name + " buffer # " + bufferCount + " discarded"); } catch (IOException e) { e.printStackTrace(); }
-				bufferCount--;
-				return;
+			if (currentBuffer.persistent)
+				currentBuffer = null;
+			else {
+				Buffer buf = currentBuffer;
+				currentBuffer = null;
+				if (bufferCount > maxBufferCount / 2 && emptyBufferList.count > maxBufferCount / 2) {
+					if (DEBUG)
+						try { errOut.println(name + " buffer # " + bufferCount + " discarded"); } catch (IOException e) { e.printStackTrace(); }
+					bufferCount--;
+					return;
+				}
+				emptyBufferList.add(buf);
 			}
-			emptyBufferList.add(buf);
 		}
 		@Override
 		Buffer getCurrentBuffer() {
