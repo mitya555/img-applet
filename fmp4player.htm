@@ -111,8 +111,6 @@ script>-->
 
 <script>
 
-var width = 720, height = 540; // for the <embed> only
-
 // global variables
 var image, videoImage, videoImageContext, applet, applet_ie, applet_, sn = 0, last_img = -1;
 var audio;
@@ -128,11 +126,9 @@ audio = document.getElementById( 'audio' ); // [ document.getElementById( 'audio
 
 function checkApplet() {
 	if (!applet_) {
-		if (applet && applet.getSN) {
+		if (applet && applet.getSN)
 			applet_ = applet;
-			image[0].width = image[1].width = videoImage.width = width;
-			image[0].height = image[1].height = videoImage.height = height;
-		} else if (applet_ie && typeof(applet_ie.getSN) === "unknown")
+		else if (applet_ie && typeof(applet_ie.getSN) === "unknown")
 			applet_ = applet_ie;
 	}
 	return applet_;
@@ -197,7 +193,7 @@ audio.onvolumechange      = function() { console.log("event: volumechange;     "
 //	window.setTimeout( callback, 1 );
 //};
 
-var cnt = 0, playing = false, timeScale = 0, timeLine = 0, initial_ts = 0, videoWidth = 0, videoHeight = 0;
+var cnt = 0, playing = false, timeScale = 0, timeLine = 0, initial_ts = 0, videoInfo;
 
 var perf_prev = 0, perf_msg = document.getElementById("msg"), perf_msg_lines = 10;
 function add_perf_msg(txt) {
@@ -225,16 +221,14 @@ function render() {
 	//check_performance();
 	if (checkApplet()) {
 		var sn_ = applet_.getVideoSN();
-		if (sn_ != sn && sn_ > 0) {
-			if (timeScale == 0)
-				timeScale = applet_.getVideoTimeScale();
-			if (videoWidth == 0) {
-				if ((videoWidth = applet_.getVideoWidth()) > 0)
-					image[0].width = image[1].width = videoImage.width = videoWidth;
-			}
-			if (videoHeight == 0) {
-				if ((videoHeight = applet_.getVideoHeight()) > 0)
-					image[0].height = image[1].height = videoImage.height = videoHeight;
+		if (/*sn_ != sn &&*/ sn_ > 0) {
+			if (!videoInfo) {
+				videoInfo = applet_.getVideoTrackInfo();
+				timeScale = videoInfo.timeScale;
+				if (videoInfo.width > 0)
+					image[0].width = image[1].width = videoImage.width = videoInfo.width;
+				if (videoInfo.height > 0)
+					image[0].height = image[1].height = videoImage.height = videoInfo.height;
 			}
 			var ts_ = applet_.getVideoTimestamp(), tl_ = performance.now(), dt_ = (ts_ - initial_ts) * 1000 / timeScale;
 			//if (dt_ > 100)
@@ -248,8 +242,10 @@ function render() {
 				//add_perf_msg("sn = " + sn_ + "; ts = " + ts_);
 				image[last_img = (last_img + 1) % 2].src = applet_.getVideoDataURI();
 			}
-		} else
-			timeScale = timeLine = initial_ts = videoWidth = videoHeight = 0;
+		} else {
+			timeScale = timeLine = initial_ts = 0;
+			delete videoInfo;
+		}
 	}
 	if (playing)
 		playing = applet_.isStreaming();

@@ -67,17 +67,9 @@ public class ImgApplet extends JApplet implements Runnable {
 
 	static class VideoBuffer extends Buffer { public volatile long timestamp; }
 	
-	static interface BufferFactory {
-		Buffer newBuffer();
-	}
+	static interface BufferFactory { Buffer newBuffer(); }
 	
-	static interface ReaderToBuffer {
-		int read(Buffer b) throws IOException;
-	}
-	
-	static abstract class MediaReader extends FilterInputStream implements ReaderToBuffer {
-		protected MediaReader(InputStream in) { super(in); }
-	}
+	static interface ReaderToBuffer { int read(Buffer b) throws IOException; }
 
 	static abstract class MultiBuffer
 	{
@@ -97,6 +89,10 @@ public class ImgApplet extends JApplet implements Runnable {
 		abstract Buffer getCurrentBufferWait() throws InterruptedException;
 		abstract void getCurrentBufferNotify();
 		abstract int getQueueLength();
+	}
+	
+	static abstract class MediaReader extends FilterInputStream implements ReaderToBuffer {
+		protected MediaReader(InputStream in) { super(in); }
 	}
 
 	static interface Demuxer {
@@ -355,9 +351,9 @@ public class ImgApplet extends JApplet implements Runnable {
 		public void resetStringBuilder() { dataUriStringBuilder.setLength(dataUriPrefixLength); }
 	}
 	
-	private class DataStream
+	private class MediaStream
 	{
-		protected DataStream(String contentType, MultiBuffer multiBuffer) { dataOut = new DataOut(contentType); this.multiBuffer = multiBuffer; }
+		protected MediaStream(String contentType, MultiBuffer multiBuffer) { dataOut = new DataOut(contentType); this.multiBuffer = multiBuffer; }
 
 		private MultiBuffer multiBuffer;
 		private DataOut dataOut; 
@@ -515,7 +511,7 @@ public class ImgApplet extends JApplet implements Runnable {
 	private boolean demux_fMP4;
 	private int bufferSize, vBufferSize, aBufferSize, maxBufferCount, mp3FramesPerChunk;
 	private double bufferGrowFactor, bufferShrinkThresholdFactor;
-	private DataStream dataStream, demuxVideoDataStream;
+	private MediaStream mediaStream, demuxVideoStream;
 
 	@Override
 	public void init() {
@@ -721,12 +717,12 @@ public class ImgApplet extends JApplet implements Runnable {
 				contentType = "application/octet-stream";
 				break; 
 			}
-			dataStream = new DataStream(contentType, new BufferList(maxBufferCount, DEBUG, "Frame"));
-			demuxVideoDataStream = null;
+			mediaStream = new MediaStream(contentType, new BufferList(maxBufferCount, DEBUG, "Frame"));
+			demuxVideoStream = null;
 			int res = 0;
 			while (res != -1/* && !ffm_stop*/)
 				try {
-					res = dataStream.multiBuffer.readToBuffer(in_);
+					res = mediaStream.multiBuffer.readToBuffer(in_);
 //					debug("fragment of " + res + " bytes");
 				} catch (IOException e) {
 					e.printStackTrace();
@@ -749,16 +745,16 @@ public class ImgApplet extends JApplet implements Runnable {
 		setUIForPlaying(true);
 		MediaDemuxer in_ = null;
 		try {
-			dataStream = new DataStream("audio/mpeg", new BufferList(maxBufferCount, DEBUG, "Audio"));
-			demuxVideoDataStream = new DataStream("image/jpeg", new BufferList(
+			mediaStream = new MediaStream("audio/mpeg", new BufferList(maxBufferCount, DEBUG, "Audio"));
+			demuxVideoStream = new MediaStream("image/jpeg", new BufferList(
 					new BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, maxBufferCount, DEBUG, "Video"));
 			in_ = new fMP4DemuxerInputStream(/*new FileBackedAutoReadingInputStream(*/ffmp.getInputStream()/*)*/,
 					bufferGrowFactor, bufferShrinkThresholdFactor,
-					demuxVideoDataStream.multiBuffer, dataStream.multiBuffer,
+					demuxVideoStream.multiBuffer, mediaStream.multiBuffer,
 					new Gettable() { @Override public void get(Object info) {
-						demuxVideoDataStream.timeScale = ((fMP4DemuxerInputStream.Trak)info).timeScale;
-						demuxVideoDataStream.width = ((fMP4DemuxerInputStream.Trak)info).width;
-						demuxVideoDataStream.height = ((fMP4DemuxerInputStream.Trak)info).height;
+						demuxVideoStream.timeScale = ((fMP4DemuxerInputStream.Trak)info).timeScale;
+						demuxVideoStream.width = ((fMP4DemuxerInputStream.Trak)info).width;
+						demuxVideoStream.height = ((fMP4DemuxerInputStream.Trak)info).height;
 					} }, null,
 					null, null,
 					DEBUG);
@@ -809,29 +805,41 @@ public class ImgApplet extends JApplet implements Runnable {
 			this.ffmp.destroy();
 	}
 
-	public String getDataURI() throws IOException { return dataStream != null ? dataStream.getDataURI() : null; }
+	public String getDataURI() throws IOException { return mediaStream != null ? mediaStream.getDataURI() : null; }
 	
-	public int getSN() { return dataStream != null ? dataStream.multiBuffer.getSN() : 0; }
+	public int getSN() { return mediaStream != null ? mediaStream.multiBuffer.getSN() : 0; }
 	
-	int getQueueLength() { return dataStream != null ? dataStream.multiBuffer.getQueueLength() : 0; }
+	int getQueueLength() { return mediaStream != null ? mediaStream.multiBuffer.getQueueLength() : 0; }
 	
-	public boolean isStreaming() { return dataStream != null ? dataStream.isStreaming() : false; }
+	public boolean isStreaming() { return mediaStream != null ? mediaStream.isStreaming() : false; }
 	
-	public String startHttpServer() throws InterruptedException { return dataStream != null ? dataStream.startHttpServer() : null; } 
+	public String startHttpServer() throws InterruptedException { return mediaStream != null ? mediaStream.startHttpServer() : null; } 
 
-	public String getVideoDataURI() throws IOException { return demuxVideoDataStream != null ? demuxVideoDataStream.getDataURI() : null; }
+	public String getVideoDataURI() throws IOException { return demuxVideoStream != null ? demuxVideoStream.getDataURI() : null; }
 	
-	public int getVideoSN() { return demuxVideoDataStream != null ? demuxVideoDataStream.multiBuffer.getSN() : 0; }
+	public int getVideoSN() { return demuxVideoStream != null ? demuxVideoStream.multiBuffer.getSN() : 0; }
 
-	public int getVideoQueueLength() { return demuxVideoDataStream != null ? demuxVideoDataStream.multiBuffer.getQueueLength() : 0; }
+	public int getVideoQueueLength() { return demuxVideoStream != null ? demuxVideoStream.multiBuffer.getQueueLength() : 0; }
 
-	public long getVideoTimestamp() { VideoBuffer cvb = demuxVideoDataStream != null ? (VideoBuffer)demuxVideoDataStream.multiBuffer.getCurrentBuffer() : null; return cvb != null ? cvb.timestamp : 0L; }
-
-	public long getVideoTimeScale() { return demuxVideoDataStream != null ? demuxVideoDataStream.timeScale : 0; }
-
-	public long getVideoWidth() { return demuxVideoDataStream != null ? demuxVideoDataStream.width : 0; }
-
-	public long getVideoHeight() { return demuxVideoDataStream != null ? demuxVideoDataStream.height : 0; }
+	public long getVideoTimestamp() { VideoBuffer cvb = demuxVideoStream != null ? (VideoBuffer)demuxVideoStream.multiBuffer.getCurrentBuffer() : null; return cvb != null ? cvb.timestamp : 0L; }
+//
+//	public int getVideoTimeScale() { return demuxVideoDataStream != null ? demuxVideoDataStream.timeScale : 0; }
+//
+//	public int getVideoWidth() { return demuxVideoDataStream != null ? demuxVideoDataStream.width : 0; }
+//
+//	public int getVideoHeight() { return demuxVideoDataStream != null ? demuxVideoDataStream.height : 0; }
+	
+	static public class VideoTrackInfo { public int timeScale, width, height; }
+	
+	public VideoTrackInfo getVideoTrackInfo() {
+		if (demuxVideoStream != null)
+			return new VideoTrackInfo() {{
+				timeScale = demuxVideoStream.timeScale;
+				width = demuxVideoStream.width;
+				height = demuxVideoStream.height;
+			}};
+		return null;
+	}
 
 	public void stopPlayback() {
 
@@ -846,7 +854,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		if (isPlaying())
 			killProcess();
 
-		if (dataStream != null) dataStream.httpLockNotify();
+		if (mediaStream != null) mediaStream.httpLockNotify();
 	}
 
 	@Override
@@ -862,7 +870,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		
 		killProcess();
 
-		if (dataStream != null) dataStream.httpLockNotify();
+		if (mediaStream != null) mediaStream.httpLockNotify();
 		
 		super.destroy();
 	}
