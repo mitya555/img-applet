@@ -10,6 +10,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
+import java.io.Closeable;
 import java.io.File;
 import java.io.FilterInputStream;
 //import java.io.BufferedInputStream;
@@ -25,7 +26,9 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.channels.FileChannel.MapMode;
+import java.nio.file.Files;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 //import java.net.SocketAddress;
@@ -71,7 +74,7 @@ public class ImgApplet extends JApplet implements Runnable {
 	
 	static interface ReaderToBuffer { int read(Buffer b) throws IOException; }
 
-	static abstract class MultiBuffer
+	static abstract class MultiBuffer implements Closeable
 	{
 		protected volatile int sn;
 		int getSN() { return sn; }
@@ -89,6 +92,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		abstract Buffer getCurrentBufferWait() throws InterruptedException;
 		abstract void getCurrentBufferNotify();
 		abstract int getQueueLength();
+		abstract void waitForEnd() throws InterruptedException;
 	}
 	
 	static abstract class MediaReader extends FilterInputStream implements ReaderToBuffer {
@@ -150,9 +154,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			return getBytes(currentBuffer);
 		}
 		@Override
-		Buffer getCurrentBuffer() {
-			return b1.sn > b2.sn ? b1 : b2;
-		}
+		Buffer getCurrentBuffer() { return b1.sn > b2.sn ? b1 : b2; }
 		@Override
 		void releaseCurrentBuffer() {}
 		@Override
@@ -161,6 +163,10 @@ public class ImgApplet extends JApplet implements Runnable {
 		void getCurrentBufferNotify() {}
 		@Override
 		int getQueueLength() { return 2; }
+		@Override
+		void waitForEnd() {}
+		@Override
+		public void close() throws IOException {}
 	}
 	
 	static class BufferList extends MultiBuffer
@@ -168,25 +174,28 @@ public class ImgApplet extends JApplet implements Runnable {
 		static private class _List<T>
 		{
 			static protected class _Item<T> { public volatile _Item<T> next; public T obj; public _Item(T obj) { this.obj = obj; } }
-			protected _Item<T> head, tail;
-			protected int count;
+			protected volatile _Item<T> head, tail;
+			protected volatile int count;
 			synchronized void add(T o) { if (head == null) head = tail = new _Item<T>(o); else tail = tail.next = new _Item<T>(o); count++; this.notify(); }
 			synchronized T remove() { T ret = null; if (head != null) { ret = head.obj; head = head.next; count--; } return ret; }
 			synchronized T removeWait() throws InterruptedException { T ret = remove(); if (ret == null) { this.wait(); ret = remove(); } return ret; }
 		}
-		static private class _File {
+		static private class _File implements Closeable {
 			int read, write;
-			RandomAccessFile file;
+			File file;
+			RandomAccessFile raf;
+			FileChannel fc;
 			ByteBuffer bb;
 			_File() throws IOException {
-				File temp = File.createTempFile("img_applet_", null, JarLib.tmpdir);
-				temp.deleteOnExit();
-				file = new RandomAccessFile(temp, "rw");
-				file.setLength(1024 * 1024);
-				bb = file.getChannel().map(MapMode.READ_WRITE, 0, file.length());
+				file = File.createTempFile("img_applet_", null, JarLib.tmpdir);
+				file.deleteOnExit();
+				raf = new RandomAccessFile(file, "rw");
+				raf.setLength(1024 * 1024);
+				fc = raf.getChannel();
+				bb = fc.map(MapMode.READ_WRITE, 0, raf.length());
 			}
 			int write(byte[] b, int off, int len) throws IOException {
-				int res = (int) Math.min(len, file.length() - write);
+				int res = (int) Math.min(len, raf.length() - write);
 				if (res > 0)
 					synchronized (this) {
 						bb.position(write);
@@ -207,6 +216,19 @@ public class ImgApplet extends JApplet implements Runnable {
 					}
 				return res;
 			}
+			@Override
+			public void close() throws IOException {
+				bb.clear();
+				bb = null;
+				fc.close();
+				raf.close();
+//				if (!file.delete())
+//					throw new IOException("File " + file.getName() + " couldn't be deleted.");
+//				Files.deleteIfExists(file.toPath());
+				file.delete();
+			}
+			@Override
+			protected void finalize() throws Throwable { file.delete(); super.finalize(); }
 		}
 		static private class _FileBuffer extends _List<_File> {
 			_FileBuffer() throws IOException { super(); add(new _File()); write = head; }
@@ -266,12 +288,8 @@ public class ImgApplet extends JApplet implements Runnable {
 			return res;
 		}
 		@Override
-		int getSN() {
-			getCurrentBuffer_();
-			if (currentBuffer != null)
-				return currentBuffer.sn; 
-			return sn;
-		}
+		int getSN() { getCurrentBuffer_(); if (currentBuffer != null) return currentBuffer.sn; return sn; }
+		@Override
 		byte[] getBytes(Buffer b) throws IOException {
 			byte[] ret = null;
 			if (b.persistent) {
@@ -291,15 +309,9 @@ public class ImgApplet extends JApplet implements Runnable {
 			}
 			return null;
 		}
-		private void getCurrentBuffer_() {
-			if (currentBuffer == null)
-				currentBuffer = filledBufferList.remove();
-		}
-		private void getCurrentBufferWait_() throws InterruptedException {
-			if (currentBuffer == null)
-				currentBuffer = filledBufferList.removeWait();
-		}
-		private void releaseCurrentBuffer_() {
+		private void getCurrentBuffer_() { if (currentBuffer == null) currentBuffer = filledBufferList.remove(); }
+		private void getCurrentBufferWait_() throws InterruptedException { if (currentBuffer == null) currentBuffer = filledBufferList.removeWait(); }
+		synchronized private void releaseCurrentBuffer_() {
 			if (currentBuffer.persistent)
 				currentBuffer = null;
 			else {
@@ -313,29 +325,31 @@ public class ImgApplet extends JApplet implements Runnable {
 				}
 				emptyBufferList.add(buf);
 			}
+			if (filledBufferList.count == 0)
+				this.notify();
 		}
 		@Override
-		Buffer getCurrentBuffer() {
-			getCurrentBuffer_();
-			return currentBuffer;
-		}
+		Buffer getCurrentBuffer() { getCurrentBuffer_(); return currentBuffer; }
 		@Override
-		void releaseCurrentBuffer() {
-			if (currentBuffer != null)
-				releaseCurrentBuffer_();
-		}
+		void releaseCurrentBuffer() { if (currentBuffer != null) releaseCurrentBuffer_(); }
 		@Override
-		Buffer getCurrentBufferWait() throws InterruptedException {
-			getCurrentBufferWait_();
-			return currentBuffer;
-		}
+		Buffer getCurrentBufferWait() throws InterruptedException { getCurrentBufferWait_(); return currentBuffer; }
 		@Override
-		void getCurrentBufferNotify() {
-			synchronized (filledBufferList) { filledBufferList.notify(); }
-		}
+		void getCurrentBufferNotify() { synchronized (filledBufferList) { filledBufferList.notify(); } }
 		@Override
-		int getQueueLength() {
-			return filledBufferList.count;
+		int getQueueLength() { return filledBufferList.count + (currentBuffer != null ? 1 : 0); }
+		@Override
+		synchronized void waitForEnd() throws InterruptedException { if (getQueueLength() > 0) wait(); }
+		@Override
+		public void close() throws IOException {
+			if (fileBuffer != null) {
+				_File _file;
+				while ((_file = fileBuffer.remove()) != null) {
+					debug("Closing file " + _file.file.getName());
+					try { _file.close(); } catch (Throwable e) { e.printStackTrace(); }
+				}
+				fileBuffer = null;
+			}
 		}
 	}
 
@@ -351,16 +365,15 @@ public class ImgApplet extends JApplet implements Runnable {
 		public void resetStringBuilder() { dataUriStringBuilder.setLength(dataUriPrefixLength); }
 	}
 	
-	private class MediaStream
+	static public class TrackInfo { public int timeScale, width, height; }
+
+	private class MediaStream implements Closeable
 	{
 		protected MediaStream(String contentType, MultiBuffer multiBuffer) { dataOut = new DataOut(contentType); this.multiBuffer = multiBuffer; }
 
 		private MultiBuffer multiBuffer;
 		private DataOut dataOut; 
-
-		private int timeScale;
-		
-		private int width, height;
+		private TrackInfo trackInfo;
 		
 		public String getDataURI() throws IOException {
 			if (multiBuffer.getSN() == 0)
@@ -450,6 +463,9 @@ public class ImgApplet extends JApplet implements Runnable {
 				e.printStackTrace();
 			}
 		}
+
+		@Override
+		public void close() throws IOException { if (multiBuffer != null) multiBuffer.close(); }
 	}
 
 	private void setButton(Button button, String label, ActionListener click, boolean active) {
@@ -727,17 +743,15 @@ public class ImgApplet extends JApplet implements Runnable {
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
-			debug("Thread processing output from ffmpeg is ending...");
+			debug("FFMPEG process has ended.");
+			mediaStream.multiBuffer.waitForEnd();
+			debug("FFMPEG output thread is ending...");
 		}
 		finally {
-			if (in_ != null)
-				try {
-					in_.close();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
+			if (in_ != null) try { in_.close(); } catch (IOException e) { e.printStackTrace(); }
+			if (mediaStream != null) try { mediaStream.close(); } catch (IOException e) { e.printStackTrace(); }
 			setUIForPlaying(false);
-			debug("Thread processing output from ffmpeg has ended.", "FFMPEG process terminated.");
+			debug("FFMPEG output thread has ended.", "FFMPEG process terminated.");
 		}
 	}
 
@@ -751,11 +765,11 @@ public class ImgApplet extends JApplet implements Runnable {
 			in_ = new fMP4DemuxerInputStream(/*new FileBackedAutoReadingInputStream(*/ffmp.getInputStream()/*)*/,
 					bufferGrowFactor, bufferShrinkThresholdFactor,
 					demuxVideoStream.multiBuffer, mediaStream.multiBuffer,
-					new Gettable() { @Override public void get(Object info) {
-						demuxVideoStream.timeScale = ((fMP4DemuxerInputStream.Trak)info).timeScale;
-						demuxVideoStream.width = ((fMP4DemuxerInputStream.Trak)info).width;
-						demuxVideoStream.height = ((fMP4DemuxerInputStream.Trak)info).height;
-					} }, null,
+					new Gettable() { @Override public void get(final Object info) { demuxVideoStream.trackInfo = new TrackInfo() {{
+						timeScale = ((fMP4DemuxerInputStream.Trak)info).timeScale;
+						width = ((fMP4DemuxerInputStream.Trak)info).width;
+						height = ((fMP4DemuxerInputStream.Trak)info).height;
+					}}; } }, null,
 					null, null,
 					DEBUG);
 			int res = 0;
@@ -766,17 +780,17 @@ public class ImgApplet extends JApplet implements Runnable {
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
-			debug("Thread processing output from ffmpeg is ending...");
+			debug("FFMPEG process has ended.");
+			mediaStream.multiBuffer.waitForEnd();
+			demuxVideoStream.multiBuffer.waitForEnd();
+			debug("FFMPEG output thread is ending...");
 		}
 		finally {
-			if (in_ != null)
-				try {
-					in_.close();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
+			if (in_ != null) try { in_.close(); } catch (IOException e) { e.printStackTrace(); }
+			if (mediaStream != null) try { mediaStream.close(); } catch (IOException e) { e.printStackTrace(); }
+			if (demuxVideoStream != null) try { demuxVideoStream.close(); } catch (IOException e) { e.printStackTrace(); }
 			setUIForPlaying(false);
-			debug("Thread processing output from ffmpeg has ended.", "FFMPEG process terminated.");
+			debug("FFMPEG output thread has ended.", "FFMPEG process terminated.");
 		}
 	}
 
@@ -822,24 +836,8 @@ public class ImgApplet extends JApplet implements Runnable {
 	public int getVideoQueueLength() { return demuxVideoStream != null ? demuxVideoStream.multiBuffer.getQueueLength() : 0; }
 
 	public long getVideoTimestamp() { VideoBuffer cvb = demuxVideoStream != null ? (VideoBuffer)demuxVideoStream.multiBuffer.getCurrentBuffer() : null; return cvb != null ? cvb.timestamp : 0L; }
-//
-//	public int getVideoTimeScale() { return demuxVideoDataStream != null ? demuxVideoDataStream.timeScale : 0; }
-//
-//	public int getVideoWidth() { return demuxVideoDataStream != null ? demuxVideoDataStream.width : 0; }
-//
-//	public int getVideoHeight() { return demuxVideoDataStream != null ? demuxVideoDataStream.height : 0; }
 	
-	static public class VideoTrackInfo { public int timeScale, width, height; }
-	
-	public VideoTrackInfo getVideoTrackInfo() {
-		if (demuxVideoStream != null)
-			return new VideoTrackInfo() {{
-				timeScale = demuxVideoStream.timeScale;
-				width = demuxVideoStream.width;
-				height = demuxVideoStream.height;
-			}};
-		return null;
-	}
+	public TrackInfo getVideoTrackInfo() { return demuxVideoStream != null ? demuxVideoStream.trackInfo : null; }
 
 	public void stopPlayback() {
 
