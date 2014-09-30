@@ -242,14 +242,17 @@ function render() {
 				//add_perf_msg("sn = " + sn_ + "; ts = " + ts_);
 				image[last_img = (last_img + 1) % 2].src = applet_.getVideoDataURI();
 			}
-		} else {
+		} else if (videoInfo) {
 			timeScale = timeLine = initial_ts = 0;
-			delete videoInfo;
+			videoInfo = null;
 		}
 	}
-	if (playing)
-		playing = applet_.isStreaming();
-	else if (checkApplet() && applet_.isPlaying() && applet_.getSN() > 0) {
+	if (playing) {
+		if (!(playing = applet_.isStreaming())) {
+			audio.removeAttribute("src");
+			;
+		}
+	} else if (checkApplet() && applet_.isPlaying() && applet_.getSN() > 0) {
 		playing = true;
 		audio.src = applet_.startHttpServer();
 	}
