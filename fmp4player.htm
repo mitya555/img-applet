@@ -112,7 +112,7 @@ script>-->
 <script>
 
 // global variables
-var image, videoImage, videoImageContext, applet, applet_ie, applet_, sn = 0, last_img = -1;
+var image, videoImage, videoImageContext, applet, applet_ie, applet_, prev_sn = 0, last_img = -1;
 var audio;
 
 // assign variables to HTML elements
@@ -193,7 +193,7 @@ audio.onvolumechange      = function() { console.log("event: volumechange;     "
 //	window.setTimeout( callback, 1 );
 //};
 
-var cnt = 0, playing = false, timeScale = 0, timeLine = 0, initial_ts = 0, videoInfo;
+var cnt = 0, playing = false, timeScale = 0, timeLine = 0, initial_ts = 0, prev_ts = 0, videoInfo;
 
 var perf_prev = 0, perf_msg = document.getElementById("msg"), perf_msg_lines = 10;
 function add_perf_msg(txt) {
@@ -221,7 +221,7 @@ function render() {
 	//check_performance();
 	if (checkApplet()) {
 		var sn_ = applet_.getVideoSN();
-		if (/*sn_ != sn &&*/ sn_ > 0) {
+		if (/*sn_ != prev_sn &&*/ sn_ > 0) {
 			if (!videoInfo) {
 				videoInfo = applet_.getVideoTrackInfo();
 				timeScale = videoInfo.timeScale;
@@ -231,26 +231,26 @@ function render() {
 					image[0].height = image[1].height = videoImage.height = videoInfo.height;
 			}
 			var ts_ = applet_.getVideoTimestamp(), tl_ = performance.now(), dt_ = (ts_ - initial_ts) * 1000 / timeScale;
-			//if (dt_ > 100)
-			//	add_perf_msg("sn = " + sn_ + "; ts = " + (ts_ - initial_ts));
+			//if (prev_ts > 0 && (ts_ - prev_ts) * 1000 / timeScale > 100)
+			//	add_perf_msg("sn = " + sn_ + "; ts = " + (ts_ - prev_ts));
 			if (timeScale > 0 && (ts_ == 0 || timeLine == 0 || dt_ <= tl_ - timeLine)) {
 				if (ts_ == 0 || timeLine == 0) {
 					timeLine = tl_;
 					initial_ts = ts_;
 				}
-				sn = sn_;
+				prev_ts = ts_;
+				prev_sn = sn_;
 				//add_perf_msg("sn = " + sn_ + "; ts = " + ts_);
 				image[last_img = (last_img + 1) % 2].src = applet_.getVideoDataURI();
 			}
 		} else if (videoInfo) {
-			timeScale = timeLine = initial_ts = 0;
+			timeScale = timeLine = initial_ts = prev_ts = 0;
 			videoInfo = null;
 		}
 	}
 	if (playing) {
-		if (!(playing = applet_.isStreaming())) {
+		if (!(playing = applet_.isPlaying())) {
 			audio.removeAttribute("src");
-			;
 		}
 	} else if (checkApplet() && applet_.isPlaying() && applet_.getSN() > 0) {
 		playing = true;

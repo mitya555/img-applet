@@ -404,7 +404,7 @@ public class ImgApplet extends JApplet implements Runnable {
 						e.printStackTrace();
 					} finally {
 						httpPort = 0;
-						stopPlayback();
+//						stopPlayback();
 					}
 				}
 	        });
@@ -444,13 +444,11 @@ public class ImgApplet extends JApplet implements Runnable {
 //					}
 //				}
 				Buffer buf;
-				while ((buf = multiBuffer.getCurrentBufferWait()) != null || isPlaying()) {
-					if (buf != null) {
-						byte[] res = buf.persistent ? multiBuffer.getBytes(buf) : buf.b;
-						byteOut.write(res, 0, buf.len);
-						multiBuffer.releaseCurrentBuffer();
-						byteOut.flush();
-					}
+				while (isPlaying() && (buf = multiBuffer.getCurrentBufferWait()) != null) {
+					byte[] res = buf.persistent ? multiBuffer.getBytes(buf) : buf.b;
+					byteOut.write(res, 0, buf.len);
+					multiBuffer.releaseCurrentBuffer();
+					byteOut.flush();
 				}
 			} catch (IOException | InterruptedException e) {
 				e.printStackTrace();
@@ -600,7 +598,7 @@ public class ImgApplet extends JApplet implements Runnable {
 				OutputFormat.unknown : OutputFormat.none;
 	}
 	
-	public boolean isPlaying() { return this.ffmt != null && this.ffmt.isAlive(); }
+	public boolean isPlaying() { return ffmt != null && ffmt.isAlive(); }
 	
 	public void play() {
 		
@@ -657,9 +655,19 @@ public class ImgApplet extends JApplet implements Runnable {
 		if (!DEBUG)
 			pb.redirectError(ProcessBuilder.Redirect.INHERIT);
 		try {
-			this.ffmp = pb.start();
+			ffmp = pb.start();
 			debug(">" + command, "FFMPEG process started.");
-			this.ffmt = new Thread(new Runnable() {
+			(ffmt = new Thread(new Runnable() {
+				@Override
+				public void run() {
+					try {
+						ffmp.waitFor();
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+				}
+			})).start();
+			new Thread(new Runnable() {
 				@Override
 				public void run() {
 					try {
@@ -671,8 +679,7 @@ public class ImgApplet extends JApplet implements Runnable {
 						e.printStackTrace();
 					}
 				}
-			});
-			this.ffmt.start();
+			}).start();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -811,7 +818,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			if (isPlaying()) {
 				OutputStream out_ = ffmp.getOutputStream();
 				if (out_ != null) {
-				debug("Signalled to quit FFMPEG process.");
+					debug("Signal to quit FFMPEG process.");
 					out_.write('q');
 					out_.flush();
 				}
@@ -829,9 +836,9 @@ public class ImgApplet extends JApplet implements Runnable {
 //		if (this.ffmt != null)
 //			this.ffmt.interrupt();
 
-		if (this.ffmp != null) {
-			debug("Signalled to kill FFMPEG process.");
-			this.ffmp.destroy();
+		if (isPlaying()) {
+			debug("Killing FFMPEG process.");
+			ffmp.destroy();
 		}
 	}
 
@@ -840,7 +847,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		if (isPlaying()) {
 			quitProcess();
 			try {
-				this.ffmt.join(200);
+				ffmt.join(500);
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
@@ -848,7 +855,8 @@ public class ImgApplet extends JApplet implements Runnable {
 		if (isPlaying())
 			killProcess();
 
-		if (mediaStream != null) mediaStream.httpLockNotify();
+		if (mediaStream != null)
+			mediaStream.httpLockNotify();
 	}
 
 	@Override
@@ -864,7 +872,8 @@ public class ImgApplet extends JApplet implements Runnable {
 		
 		killProcess();
 
-		if (mediaStream != null) mediaStream.httpLockNotify();
+		if (mediaStream != null)
+			mediaStream.httpLockNotify();
 		
 		super.destroy();
 	}
