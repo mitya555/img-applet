@@ -253,16 +253,29 @@ public class ImgApplet extends JApplet implements Runnable {
 		private _List<Buffer> filledBufferList = new _List<Buffer>(), emptyBufferList = new _List<Buffer>();
 		private _FileBuffer fileBuffer;
 		private volatile Buffer currentBuffer;
-		private int bufferCount, maxBufferCount;
+		private int bufferCount;
+		final private int maxMemoryBufferCount, maxBufferCount;
 		private BufferedConsoleOut errOut = new BufferedConsoleOut(System.err);
-		public BufferList(BufferFactory bufferFactory, int maxBufferCount, boolean debug, String name) { super(bufferFactory, debug, name); this.maxBufferCount = maxBufferCount; }
-		public BufferList(int maxBufferCount, boolean debug, String name) { super(debug, name); this.maxBufferCount = maxBufferCount; }
+		public BufferList(BufferFactory bufferFactory, int maxMemoryBufferCount, int maxBufferCount, boolean debug, String name) {
+			super(bufferFactory, debug, name);
+			this.maxMemoryBufferCount = maxMemoryBufferCount;
+			this.maxBufferCount = maxBufferCount;
+		}
+		public BufferList(int maxMemoryBufferCount, int maxBufferCount, boolean debug, String name) {
+			super(debug, name);
+			this.maxMemoryBufferCount = maxMemoryBufferCount;
+			this.maxBufferCount = maxBufferCount;
+		}
 		@Override
 		int readToBuffer(ReaderToBuffer in) throws IOException, InterruptedException {
+
+			while (maxBufferCount > 0 && filledBufferList.count >= maxBufferCount)
+				getCurrentBytes();
+
 			Buffer buf = emptyBufferList.remove();
 			if (buf == null) {
 				buf = bufferFactory.newBuffer();
-				if (bufferCount < maxBufferCount) {
+				if (bufferCount < maxMemoryBufferCount) {
 					bufferCount++;
 					if (DEBUG)
 						errOut.println(name + " buffer # " + bufferCount + " allocated");
@@ -314,7 +327,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			else {
 				Buffer buf = currentBuffer;
 				currentBuffer = null;
-				if (bufferCount > maxBufferCount / 2 && emptyBufferList.count > maxBufferCount / 2) {
+				if (bufferCount > maxMemoryBufferCount / 2 && emptyBufferList.count > maxMemoryBufferCount / 2) {
 					if (DEBUG)
 						try { errOut.println(name + " buffer # " + bufferCount + " discarded"); } catch (IOException e) { e.printStackTrace(); }
 					bufferCount--;
@@ -516,7 +529,7 @@ public class ImgApplet extends JApplet implements Runnable {
 //	private volatile boolean ffm_stop;
 
 	private boolean demux_fMP4;
-	private int bufferSize, vBufferSize, aBufferSize, maxBufferCount, mp3FramesPerChunk;
+	private int bufferSize, vBufferSize, aBufferSize, maxMemoryBufferCount, maxVideoBufferCount, mp3FramesPerChunk;
 	private double bufferGrowFactor, bufferShrinkThresholdFactor;
 	private MediaStream mediaStream, demuxVideoStream;
 
@@ -537,8 +550,10 @@ public class ImgApplet extends JApplet implements Runnable {
 		
 		bufferSize = parseInt(getParameter("buffer-size"));
 		
-		maxBufferCount = parseInt(getParameter("max-buffer-count"));
-		if (maxBufferCount < 0) maxBufferCount = 30;
+		maxMemoryBufferCount = parseInt(getParameter("max-memory-buffer-count"));
+		if (maxMemoryBufferCount < 0) maxMemoryBufferCount = 30;
+		maxVideoBufferCount = parseInt(getParameter("max-video-buffer-count"));
+		if (maxVideoBufferCount < 0) maxVideoBufferCount = 300;
 		
 		mp3FramesPerChunk = parseInt(getParameter("mp3-frames-per-chunk"));
 		
@@ -714,29 +729,35 @@ public class ImgApplet extends JApplet implements Runnable {
 		MediaReader in_ = null;
 		try {
 			String contentType;
+			boolean video;
 			switch (pipeOutputFormat()) {
 			case mjpeg:
 				in_ = new MjpegInputStream(ffmp.getInputStream(), vBufferSize, bufferGrowFactor);
 				contentType = "image/jpeg";
+				video = true;
 				break;
 			case mp3:
 				in_ = new MP3InputStream(ffmp.getInputStream(), aBufferSize, mp3FramesPerChunk, bufferGrowFactor)/*.setSkipTags()*/;
 				contentType = "audio/mpeg";
+				video = false;
 				break;
 			case mp4:
 				in_ = new fMP4InputStream(ffmp.getInputStream(), bufferGrowFactor);
 				contentType = "video/mp4";
+				video = true;
 				break;
 			case webm:
 				in_ = new GenericBufferWriter(ffmp.getInputStream(), bufferSize);
 				contentType ="video/webm";
+				video = true;
 				break; 
 			case unknown: case none: default:
 				in_ = new GenericBufferWriter(ffmp.getInputStream(), bufferSize);
 				contentType = "application/octet-stream";
+				video = false;
 				break; 
 			}
-			mediaStream = new MediaStream(contentType, new BufferList(maxBufferCount, DEBUG, "Frame"));
+			mediaStream = new MediaStream(contentType, new BufferList(maxMemoryBufferCount, video ? maxVideoBufferCount : 0, DEBUG, "Frame"));
 			demuxVideoStream = null;
 			int res = 0;
 			while (res != -1/* && !ffm_stop*/)
@@ -760,9 +781,10 @@ public class ImgApplet extends JApplet implements Runnable {
 		setUIForPlaying(true);
 		MediaDemuxer in_ = null;
 		try {
-			mediaStream = new MediaStream("audio/mpeg", new BufferList(maxBufferCount, DEBUG, "Audio"));
-			demuxVideoStream = new MediaStream("image/jpeg", new BufferList(
-					new BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, maxBufferCount, DEBUG, "Video"));
+			mediaStream = new MediaStream("audio/mpeg", new BufferList(maxMemoryBufferCount, 0, DEBUG, "Audio"));
+			demuxVideoStream = new MediaStream("image/jpeg",
+					new BufferList(new BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } },
+					maxMemoryBufferCount, maxVideoBufferCount, DEBUG, "Video"));
 			in_ = new fMP4DemuxerInputStream(/*new FileBackedAutoReadingInputStream(*/ffmp.getInputStream()/*)*/,
 					bufferGrowFactor, bufferShrinkThresholdFactor,
 					demuxVideoStream.multiBuffer, mediaStream.multiBuffer,
