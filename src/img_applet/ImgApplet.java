@@ -438,8 +438,10 @@ public class ImgApplet extends JApplet implements Runnable {
 					BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()))
 				) {
 				StringBuilder input = new StringBuilder();
-				String crlf = "\r\n", inputLine;
+				String inputLine, crlf = "\r\n", contentRange = "*/*";
 				while ((inputLine = in.readLine()) != null) {
+					if (inputLine.startsWith("User-Agent:") && inputLine.contains("Chrome"))
+						contentRange = "0-9999999999/10000000000";
 			        if (inputLine.equals(""))
 			            break;
 					input.append(inputLine).append(crlf);
@@ -447,7 +449,14 @@ public class ImgApplet extends JApplet implements Runnable {
 				if (DEBUG)
 					System.out.println(input.toString());
 				//charOut.write("HTTP/1.1 200 OK\r\nContent-Type: " + dataOut.contentType + "\r\n\r\n");
-				charOut.write("HTTP/1.1 206 Partial Content\r\nContent-Type: " + dataOut.contentType + "\r\nAccess-Control-Allow-Origin: *\r\n\r\n");
+				String output_header = "HTTP/1.1 206 Partial Content\r\n" +
+						"Content-Type: " + dataOut.contentType + "\r\n" +
+						"Content-Range: bytes " + contentRange + "\r\n" +
+						"Access-Control-Allow-Origin: *\r\n" +
+						"\r\n";
+				if (DEBUG)
+					System.out.print(output_header);
+				charOut.write(output_header);
 				charOut.flush();
 //				byte[] bytes;
 //				while ((bytes = getBytes()) != null || isPlaying()) {
