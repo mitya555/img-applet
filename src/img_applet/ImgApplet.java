@@ -440,7 +440,7 @@ public class ImgApplet extends JApplet implements Runnable {
 				StringBuilder input = new StringBuilder();
 				String inputLine, crlf = "\r\n", contentRange = "*/*";
 				while ((inputLine = in.readLine()) != null) {
-					if (inputLine.startsWith("User-Agent:") && inputLine.contains("Chrome"))
+					if (inputLine.startsWith("User-Agent:") && (inputLine.contains("Chrome") || inputLine.contains("Trident")))
 						contentRange = "0-9999999999/10000000000";
 			        if (inputLine.equals(""))
 			            break;

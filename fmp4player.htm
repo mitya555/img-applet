@@ -37,9 +37,9 @@ script>-->
   <param name="archive" value="img-applet.jar">
   <param name="code" value="img_applet.ImgApplet">
   <!--<param name="ffmpeg-i" value="rtmp://10.44.41.97/rtmp/webcam">-->
-  <!--<param name="ffmpeg-i" value="rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp">-->
+  <param name="ffmpeg-i" value="rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp">
   <!--<param name="ffmpeg-i" value="rtmp://85.132.78.6:1935/live/muztv.stream">-->
-  <param name="ffmpeg-i" value="http://83.139.104.101/Content/HLS/Live/Channel(Sk_1)/index.m3u8">
+  <!--<param name="ffmpeg-i" value="http://83.139.104.101/Content/HLS/Live/Channel(Sk_1)/index.m3u8">-->
   <!--<param name="ffmpeg-map" value="0:6">-->
   <param name="ffmpeg-c:a" value="libmp3lame">
   <param name="ffmpeg-c:v" value="mjpeg">
@@ -218,6 +218,11 @@ function animate() {
 	render();
 }
 
+audio.ontimeupdate = function() {
+	if (this.played != null && this.played.length > 0 && timeLine > 0)
+		timeLine = performance.now() - (this.played.end(0) - this.played.start(0)) * 1000;
+};
+
 function render() {
 	cnt++;
 	//check_performance();
@@ -251,8 +256,8 @@ function render() {
 		}
 	}
 	if (playing) {
-		if (!(playing = applet_.isPlaying())) {
-			audio.removeAttribute("src");
+		if (!(playing = applet_.isStreaming())) {
+			//audio.removeAttribute("src");
 		}
 	} else if (checkApplet() && applet_.isPlaying() && applet_.getSN() > 0) {
 		playing = true;
