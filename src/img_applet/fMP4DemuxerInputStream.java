@@ -117,6 +117,7 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 				switch (type) {
 				case video: if (videoInfoCreatedCallback != null) videoInfoCreatedCallback.get(this); break;
 				case audio: if (audioInfoCreatedCallback != null) audioInfoCreatedCallback.get(this); break;
+				default: break;
 				}
 				if (traksByType.size() == 2)
 					return moov.skip();
@@ -158,11 +159,13 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 //					if (mdat.skip() == -1) return -1;
 //					continue;
 //				}
-				if (moof.trafs[0].trak.type == TrakType.video) { 
+				if (moof.trafs[0].trak.type == TrakType.video) {
 					if (video.readToBuffer(moof.trafs[0]) == -1) return -1;
 					if (videoReadCallback != null) videoReadCallback.run();
-					if (audio.readToBuffer(moof.trafs[1]) == -1) return -1;
-					if (audioReadCallback != null) audioReadCallback.run();
+					if (moof.trafs[1] != null) {
+						if (audio.readToBuffer(moof.trafs[1]) == -1) return -1;
+						if (audioReadCallback != null) audioReadCallback.run();
+					}
 				} else {
 					if (audio.readToBuffer(moof.trafs[0]) == -1) return -1;
 					if (audioReadCallback != null) audioReadCallback.run();
