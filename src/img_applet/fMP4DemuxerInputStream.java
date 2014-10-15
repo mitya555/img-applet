@@ -169,8 +169,10 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 				} else {
 					if (audio.readToBuffer(moof.trafs[0]) == -1) return -1;
 					if (audioReadCallback != null) audioReadCallback.run();
-					if (video.readToBuffer(moof.trafs[1]) == -1) return -1;
-					if (videoReadCallback != null) videoReadCallback.run();
+					if (moof.trafs[1] != null) {
+						if (video.readToBuffer(moof.trafs[1]) == -1) return -1;
+						if (videoReadCallback != null) videoReadCallback.run();
+					}
 				}
 				if (mdat.skip() == -1) return -1;
 				return 0;
