@@ -371,7 +371,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		public void resetStringBuilder() { dataUriStringBuilder.setLength(dataUriPrefixLength); }
 	}
 	
-	static public class TrackInfo { public int timeScale, width, height; }
+	static public class TrackInfo { public int timeScale, width, height; public boolean hasAudio; }
 
 	private class MediaStream implements Closeable
 	{
@@ -379,7 +379,7 @@ public class ImgApplet extends JApplet implements Runnable {
 
 		private MultiBuffer multiBuffer;
 		private DataOut dataOut; 
-		private TrackInfo trackInfo;
+		private TrackInfo trackInfo = new TrackInfo();
 		
 		public String getDataURI() throws IOException {
 			if (multiBuffer.getSN() == 0)
@@ -610,7 +610,7 @@ public class ImgApplet extends JApplet implements Runnable {
 	private void addOptNV(String name, List<String> command, String dflt) { addOptNV(name, name, command, dflt); }
 	private void addOptNV(String name, List<String> command) { addOptNV(name, name, command); }
 	private void addOpt_V(String name, List<String> command, String dflt) { addOptNV(name, null, command, dflt); }
-	private void addOptN_(String name, List<String> command) { if (!isNo(getParameter(PARAM_PREFIX + name))) command.add("-" + name); }
+	private void addOptN_(String name, List<String> command) { if (!isNo(getParameter(PARAM_PREFIX + name))) { String _opt = "-" + name; command.add(_opt); optName.put(name, _opt); } }
 	
 	private enum OutputFormat { none, mjpeg, mp3, mp4, webm, unknown }
 	private OutputFormat pipeOutputFormat() {
@@ -621,6 +621,9 @@ public class ImgApplet extends JApplet implements Runnable {
 				"webm".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.webm :
 				OutputFormat.unknown : OutputFormat.none;
 	}
+	
+	private boolean NoAudio() { return optValue.containsKey("an"); }
+	private boolean NoVideo() { return optValue.containsKey("vn"); }
 	
 	public boolean isPlaying() { return ffmt != null && ffmt.isAlive(); }
 	
@@ -789,19 +792,23 @@ public class ImgApplet extends JApplet implements Runnable {
 	private void playMediaDemuxer() throws InterruptedException {
 		setUIForPlaying(true);
 		MediaDemuxer in_ = null;
+		boolean hasAudio = !NoAudio(), hasVideo = !NoVideo();
 		try {
-			mediaStream = new MediaStream("audio/mpeg", new BufferList(maxMemoryBufferCount, 0, DEBUG, "Audio"));
-			demuxVideoStream = new MediaStream("image/jpeg",
+			mediaStream = hasAudio ? new MediaStream("audio/mpeg", new BufferList(maxMemoryBufferCount, 0, DEBUG, "Audio")) : null;
+			demuxVideoStream = hasVideo ? new MediaStream("image/jpeg",
 					new BufferList(new BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } },
-					maxMemoryBufferCount, maxVideoBufferCount, DEBUG, "Video"));
+					maxMemoryBufferCount, maxVideoBufferCount, DEBUG, "Video")) : null;
 			in_ = new fMP4DemuxerInputStream(/*new FileBackedAutoReadingInputStream(*/ffmp.getInputStream()/*)*/,
 					bufferGrowFactor, bufferShrinkThresholdFactor,
-					demuxVideoStream.multiBuffer, mediaStream.multiBuffer,
-					new Gettable() { @Override public void get(final Object info) { demuxVideoStream.trackInfo = new TrackInfo() {{
-						timeScale = ((fMP4DemuxerInputStream.Trak)info).timeScale;
-						width = ((fMP4DemuxerInputStream.Trak)info).width;
-						height = ((fMP4DemuxerInputStream.Trak)info).height;
-					}}; } }, null,
+					hasVideo ? demuxVideoStream.multiBuffer : null, hasAudio ? mediaStream.multiBuffer : null,
+					hasVideo ? new Gettable() { @Override public void get(final Object info) {
+						demuxVideoStream.trackInfo.timeScale = ((fMP4DemuxerInputStream.Trak)info).timeScale;
+						demuxVideoStream.trackInfo.width = ((fMP4DemuxerInputStream.Trak)info).width;
+						demuxVideoStream.trackInfo.height = ((fMP4DemuxerInputStream.Trak)info).height;
+					} } : null,
+					hasAudio ? new Gettable() { @Override public void get(final Object info) {
+						demuxVideoStream.trackInfo.hasAudio = true;
+					} } : null,
 					null, null,
 					DEBUG);
 			int res = 0;
