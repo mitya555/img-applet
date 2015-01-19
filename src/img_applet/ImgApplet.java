@@ -585,8 +585,12 @@ public class ImgApplet extends JApplet implements Runnable {
 //        }
 
 		// Remove as many temp files as possible
-		for (File temp : JarLib.tmpdir.listFiles(new FilenameFilter() { @Override public boolean accept(File dir, String name) { return Pattern.matches("img_applet_\\d+\\.tmp", name); } }))
-			temp.delete();
+		try {
+			for (File temp : JarLib.tmpdir.listFiles(new FilenameFilter() { @Override public boolean accept(File dir, String name) { return Pattern.matches("img_applet_\\d+\\.tmp", name); } }))
+				temp.delete();
+		} catch (Throwable e) {
+			e.printStackTrace();
+		}
 		
 		SwingUtilities.invokeLater(this);
 	}
