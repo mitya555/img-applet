@@ -44,6 +44,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.DataLine;
+import javax.sound.sampled.LineUnavailableException;
+import javax.sound.sampled.SourceDataLine;
+import javax.sound.sampled.UnsupportedAudioFileException;
 import javax.swing.JApplet;
 import javax.swing.SwingUtilities;
 import javax.xml.bind.DatatypeConverter;
@@ -173,9 +180,11 @@ public class ImgApplet extends JApplet implements Runnable {
 			static protected class _Item<T> { public volatile _Item<T> next; public T obj; public _Item(T obj) { this.obj = obj; } }
 			protected volatile _Item<T> head, tail;
 			protected volatile int count;
-			synchronized void add(T o) { if (head == null) head = tail = new _Item<T>(o); else tail = tail.next = new _Item<T>(o); count++; this.notify(); }
+			private boolean stopped;
+			synchronized void add(T o) { if (head == null) head = tail = new _Item<T>(o); else tail = tail.next = new _Item<T>(o); count++; this.notify(); stopped = false; }
 			synchronized T remove() { T ret = null; if (head != null) { ret = head.obj; head = head.next; count--; } return ret; }
-			synchronized T removeWait() throws InterruptedException { T ret = remove(); if (ret == null) { this.wait(); ret = remove(); } return ret; }
+			synchronized T removeWait() throws InterruptedException { T ret = remove(); if (ret == null && !stopped) { this.wait(); ret = remove(); } return ret; }
+			synchronized void stop() { stopped = true; this.notify(); }
 		}
 		static private class _File implements Closeable {
 			int read, write;
@@ -343,7 +352,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		@Override
 		Buffer getCurrentBufferWait() throws InterruptedException { getCurrentBufferWait_(); return currentBuffer; }
 		@Override
-		void getCurrentBufferNotify() { synchronized (filledBufferList) { filledBufferList.notify(); } }
+		void getCurrentBufferNotify() { filledBufferList.stop(); }
 		@Override
 		int getQueueLength() { return filledBufferList.count + (currentBuffer != null ? 1 : 0); }
 		@Override
@@ -388,7 +397,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			return dataOut.dataUriStringBuilder.append(DatatypeConverter.printBase64Binary(multiBuffer.getCurrentBytes())).toString();
 		}
 		
-		public void httpLockNotify() { multiBuffer.getCurrentBufferNotify(); }
+		public void multiBufferNotify() { multiBuffer.getCurrentBufferNotify(); }
 		
 		private volatile int httpPort;
 		private InetAddress httpAddress;
@@ -405,11 +414,12 @@ public class ImgApplet extends JApplet implements Runnable {
 						serverSocket.bind(new InetSocketAddress(InetAddress.getByAddress(new byte[] { 127, 0, 0, 1 }), 0), 1);
 						httpPort = serverSocket.getLocalPort();
 						httpAddress = serverSocket.getInetAddress();
-						synchronized (startLock) { startLock.notify(); }
+						synchronized (startLock) { debug("HTTP startLock.notify()"); startLock.notify(); }
 						AccessController.doPrivileged(new PrivilegedAction<Object>() {
 							@Override
 							public Object run() {
 								runHttpServer(serverSocket);
+								debug("HTTP streaming ended.");
 								return null;
 							}
 						}); /* doPrivileged() */
@@ -423,6 +433,7 @@ public class ImgApplet extends JApplet implements Runnable {
 	        });
 			synchronized (startLock) {
 				httpThread.start();
+				debug("HTTP startLock.wait()");
 				startLock.wait();
 			}
 			String res = "http://" + httpAddress.getHostAddress() + ":" + httpPort;
@@ -478,7 +489,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		}
 
 		@Override
-		public void close() throws IOException { if (multiBuffer != null) multiBuffer.close(); }
+		public void close() throws IOException { if (multiBuffer != null) { multiBuffer.getCurrentBufferNotify(); multiBuffer.close(); } }
 	}
 
 	private void setButton(Button button, String label, ActionListener click, boolean active) {
@@ -616,13 +627,14 @@ public class ImgApplet extends JApplet implements Runnable {
 	private void addOpt_V(String name, List<String> command, String dflt) { addOptNV(name, null, command, dflt); }
 	private void addOptN_(String name, List<String> command) { if (!isNo(getParameter(PARAM_PREFIX + name))) { String _opt = "-" + name; command.add(_opt); optName.put(name, _opt); } }
 	
-	private enum OutputFormat { none, mjpeg, mp3, mp4, webm, unknown }
+	private enum OutputFormat { none, mjpeg, mp3, mp4, webm, wav, unknown }
 	private OutputFormat pipeOutputFormat() {
 		return optValue.get("o").startsWith("pipe:") ?
 				"mjpeg".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.mjpeg :
 				"mp3".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.mp3 :
 				"mp4".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.mp4 :
 				"webm".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.webm :
+				"wav".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.wav :
 				OutputFormat.unknown : OutputFormat.none;
 	}
 	
@@ -649,6 +661,8 @@ public class ImgApplet extends JApplet implements Runnable {
 		addOptN_("re", command);
 		addOptNV("f:i", "f", command/*, "flv"*/);
 		addOptNV("flv_metadata", command);
+		addOptNV("rtmp_buffer", command);
+		addOptNV("rtmp_live", command);
 		addOptNV("i", command);
 		addOptNV("frames:d", command);
 		addOptNV("map", command);
@@ -753,10 +767,44 @@ public class ImgApplet extends JApplet implements Runnable {
 				video = true;
 				break;
 			case mp3:
+//				in_ = new GenericBufferWriter(ffmp.getInputStream(), aBufferSize > 0 ? aBufferSize : 400);
 				in_ = new MP3InputStream(ffmp.getInputStream(), aBufferSize, mp3FramesPerChunk, bufferGrowFactor)/*.setSkipTags()*/;
 				contentType = "audio/mpeg";
 				video = false;
 				break;
+			case wav:
+				mediaStream = null;
+				demuxVideoStream = null;
+				final int BUFFER_SIZE = 32;
+				SourceDataLine audioLine = null;
+				try (	RIFFInputStream inputStream = new RIFFInputStream(ffmp.getInputStream(), 400);
+						AudioInputStream audioInputStream = AudioSystem.getAudioInputStream(inputStream)) {
+					
+//					debug("inputStream position: " + inputStream.getPosition());
+//					debug("AudioFormat audioFormat = audioInputStream.getFormat();");
+					AudioFormat audioFormat = audioInputStream.getFormat();
+//					debug("inputStream position: " + inputStream.getPosition());
+					audioLine = (SourceDataLine)AudioSystem.getLine(new DataLine.Info(SourceDataLine.class, audioFormat));
+//					debug("audioLine.open(audioFormat);");
+					audioLine.open(audioFormat);
+//					debug("audioLine.start();");
+					audioLine.start();
+					debug("Playback started.");
+					byte[] bytesBuffer = new byte[BUFFER_SIZE];
+					int bytesRead = -1;
+					while ((bytesRead = inputStream.read(bytesBuffer, 0, BUFFER_SIZE)) != -1) {
+//						debug("read " + bytesRead + " bytes");
+//						debug("inputStream position: " + inputStream.getPosition());
+						audioLine.write(bytesBuffer, 0, bytesRead);
+					}
+//					debug("inputStream position: " + inputStream.getPosition());
+//					debug("audioLine.drain();");
+					audioLine.drain();
+					debug("Playback ended.");
+				} catch (IOException | UnsupportedAudioFileException | LineUnavailableException e) {
+					e.printStackTrace();
+				}
+				return; 
 			case mp4:
 				in_ = new fMP4InputStream(ffmp.getInputStream(), bufferGrowFactor);
 				contentType = "video/mp4";
@@ -789,7 +837,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			if (in_ != null) try { in_.close(); } catch (IOException e) { e.printStackTrace(); }
 			if (mediaStream != null) { try { mediaStream.close(); } catch (IOException e) { e.printStackTrace(); } mediaStream = null; }
 			setUIForPlaying(false);
-			debug("FFMPEG output thread has ended.", "FFMPEG process terminated.");
+			debug("FFMPEG output thread ended.", "FFMPEG process terminated.");
 		}
 	}
 
@@ -830,7 +878,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			if (mediaStream != null) { try { mediaStream.close(); } catch (IOException e) { e.printStackTrace(); } mediaStream = null; }
 			if (demuxVideoStream != null) { try { demuxVideoStream.close(); } catch (IOException e) { e.printStackTrace(); } demuxVideoStream = null; } 
 			setUIForPlaying(false);
-			debug("FFMPEG output thread has ended.", "FFMPEG process terminated.");
+			debug("FFMPEG output thread ended.", "FFMPEG process terminated.");
 		}
 	}
 
@@ -853,6 +901,8 @@ public class ImgApplet extends JApplet implements Runnable {
 	public long getVideoTimestamp() { VideoBuffer cvb = demuxVideoStream != null ? (VideoBuffer)demuxVideoStream.multiBuffer.getCurrentBuffer() : null; return cvb != null ? cvb.timestamp : 0L; }
 	
 	public TrackInfo getVideoTrackInfo() { return demuxVideoStream != null ? demuxVideoStream.trackInfo : null; }
+	
+	public boolean isDebug() { return DEBUG; }
 
 	private void quitProcess() {
 		try {
@@ -898,7 +948,7 @@ public class ImgApplet extends JApplet implements Runnable {
 			killProcess();
 
 		if (mediaStream != null)
-			mediaStream.httpLockNotify();
+			mediaStream.multiBufferNotify();
 	}
 
 	@Override
@@ -915,7 +965,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		killProcess();
 
 		if (mediaStream != null)
-			mediaStream.httpLockNotify();
+			mediaStream.multiBufferNotify();
 		
 		super.destroy();
 	}
