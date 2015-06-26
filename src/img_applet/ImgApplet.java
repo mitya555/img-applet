@@ -130,34 +130,51 @@ public class ImgApplet extends JApplet implements Runnable {
 	static class DoubleBuffer extends MultiBuffer
 	{
 		private Buffer b1, b2;
+		public DoubleBuffer(BufferFactory bufferFactory, boolean debug, String name) { super(bufferFactory, debug, name); b1 = new Buffer(); b2 = new Buffer(); }
 		public DoubleBuffer(boolean debug, String name) { super(debug, name); b1 = new Buffer(); b2 = new Buffer(); }
 		@Override
 		public int readToBuffer(ReaderToBuffer in) throws IOException {
 			int res;
 			if (b1.sn <= b2.sn) {
-				res = b1.len = in.read(b1);
-				b1.sn = ++sn;
+				synchronized (b1) {
+					res = b1.len = in.read(b1);
+					b1.sn = ++sn;
+				}
 			}
 			else {
-				res = b2.len = in.read(b2);
-				b2.sn = ++sn;
+				synchronized (b2) {
+					res = b2.len = in.read(b2);
+					b2.sn = ++sn;
+				}
 			}
 			return res;
 		}
 		private int prev_sn;
 		private BufferedConsoleOut errOut = new BufferedConsoleOut(System.err); 
 		@Override
-		byte[] getBytes(Buffer b) throws IOException { return Arrays.copyOf(b.b, b.len); }
+		byte[] getBytes(Buffer b) throws IOException { synchronized (b) { return Arrays.copyOf(b.b, b.len); } }
 		@Override
 		byte[] getCurrentBytes() throws IOException {
-			if (DEBUG) {
-				if (sn - prev_sn > 1) {
-					errOut.println("Dropped frame" + (sn - prev_sn == 2 ? " " + (sn - 1) : "s " + (prev_sn + 1) + " - " + (sn - 1)));
-				}
-				prev_sn = sn;
-			}
 			Buffer currentBuffer = getCurrentBuffer();
-			return getBytes(currentBuffer);
+			while (true) {
+				synchronized (currentBuffer) {
+					Buffer newCurrentBuffer = getCurrentBuffer();
+					if (currentBuffer != newCurrentBuffer) {
+						currentBuffer = newCurrentBuffer;
+						if (DEBUG) {
+							errOut.println("Re-lock buffer");
+						}
+						continue;
+					}
+					if (DEBUG) {
+						if (sn - prev_sn > 1) {
+							errOut.println("Dropped frame" + (sn - prev_sn == 2 ? " " + (sn - 1) : "s " + (prev_sn + 1) + " - " + (sn - 1)));
+						}
+						prev_sn = sn;
+					}
+					return getBytes(currentBuffer);
+				}
+			}
 		}
 		@Override
 		Buffer getCurrentBuffer() { return b1.sn > b2.sn ? b1 : b2; }
@@ -548,7 +565,7 @@ public class ImgApplet extends JApplet implements Runnable {
 	private Thread ffmt;
 //	private volatile boolean ffm_stop;
 
-	private boolean demux_fMP4;
+	private boolean demux_fMP4, dropUnusedFrames;
 	private int bufferSize, vBufferSize, aBufferSize, maxMemoryBufferCount, maxVideoBufferCount, mp3FramesPerChunk;
 	private double bufferGrowFactor, bufferShrinkThresholdFactor;
 	private MediaStream mediaStream, demuxVideoStream;
@@ -561,6 +578,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		DEBUG = !isNo(getParameter("debug"));
 		
 		demux_fMP4 = !isNo(getParameter("demux-fMP4"));
+		dropUnusedFrames = !isNo(getParameter("drop-unused-frames"));
 		
 		vBufferSize = parseInt(getParameter("video-buffer-size"));
 		aBufferSize = parseInt(getParameter("audio-buffer-size"));
@@ -821,7 +839,8 @@ public class ImgApplet extends JApplet implements Runnable {
 				video = false;
 				break; 
 			}
-			mediaStream = new MediaStream(contentType, new BufferList(maxMemoryBufferCount, video ? maxVideoBufferCount : 0, DEBUG, "Frame"));
+			mediaStream = new MediaStream(contentType, dropUnusedFrames ? new DoubleBuffer(DEBUG, "Frame") :
+					new BufferList(maxMemoryBufferCount, video ? maxVideoBufferCount : 0, DEBUG, "Frame"));
 			demuxVideoStream = null;
 			int res = 0;
 			while (res != -1/* && !ffm_stop*/)
@@ -846,10 +865,13 @@ public class ImgApplet extends JApplet implements Runnable {
 		MediaDemuxer in_ = null;
 		boolean hasAudio = !NoAudio(), hasVideo = !NoVideo();
 		try {
-			mediaStream = hasAudio ? new MediaStream("audio/mpeg", new BufferList(maxMemoryBufferCount, 0, DEBUG, "Audio")) : null;
-			demuxVideoStream = hasVideo ? new MediaStream("image/jpeg",
-					new BufferList(new BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } },
-					maxMemoryBufferCount, maxVideoBufferCount, DEBUG, "Video")) : null;
+			mediaStream = hasAudio ? new MediaStream("audio/mpeg", dropUnusedFrames ?
+					new DoubleBuffer(DEBUG, "Audio") :
+						new BufferList(maxMemoryBufferCount, 0, DEBUG, "Audio")) : null;
+			demuxVideoStream = hasVideo ? new MediaStream("image/jpeg", dropUnusedFrames ?
+					new DoubleBuffer(new BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, DEBUG, "Video") :
+						new BufferList(new BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } },
+								maxMemoryBufferCount, maxVideoBufferCount, DEBUG, "Video")) : null;
 			in_ = new fMP4DemuxerInputStream(/*new FileBackedAutoReadingInputStream(*/ffmp.getInputStream()/*)*/,
 					bufferGrowFactor, bufferShrinkThresholdFactor,
 					hasVideo ? demuxVideoStream.multiBuffer : null, hasAudio ? mediaStream.multiBuffer : null,

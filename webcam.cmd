@@ -18,14 +18,14 @@ ffmpeg -r 25 ^
 	-i video="Logitech QuickCam E3500" ^
 	-c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -g 50 ^
 	-an ^
-	-f flv rtmp://10.44.40.64/rtmp/v
+	-f flv rtmp://10.44.40.80/rtmp/v
 ) ELSE IF "%1" == "a" (
 ffmpeg ^
 	-f dshow -audio_buffer_size 50 ^
 	-i audio="Microphone (USB Audio Device)" ^
 	-vn ^
 	-c:a libmp3lame -async 1 ^
-	-f flv rtmp://10.44.40.64/rtmp/a
+	-f flv rtmp://10.44.40.80/rtmp/a
 REM	-c:a libspeex -async 1 -ar 16000 -ac 1 ^
 REM libopus doesn't work with FLV::	-c:a libopus -ar 16000 ^
 ) ELSE (
@@ -35,7 +35,7 @@ ffmpeg -r 25 ^
 	-c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -g 60 ^
 	-c:a libmp3lame -async 1 -ab 24k -ar 22050 ^
 	-maxrate 750k -bufsize 3000k -rtbufsize 5000k ^
-	-f flv rtmp://10.44.40.64/rtmp/av
+	-f flv rtmp://10.44.40.80/rtmp/av
 )
 
 REM http://x264dev.multimedia.cx/archives/249
