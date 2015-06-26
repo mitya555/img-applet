@@ -37,12 +37,13 @@ script>-->
   <param name="archive" value="img-applet.jar">
   <param name="code" value="img_applet.ImgApplet">
   <param name="ffmpeg-re" value="">
-  <param name="ffmpeg-f:i" value="">
+  <!--<param name="ffmpeg-f:i" value="">-->
   <!--<param name="ffmpeg-i" value="rtmp://10.44.41.97/rtmp/webcam">-->
-  <!--<param name="ffmpeg-i" value="rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp">-->
+  <param name="ffmpeg-i" value="rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp">
   <!--<param name="ffmpeg-i" value="rtmp://85.132.78.6:1935/live/muztv.stream">-->
-  <param name="ffmpeg-i" value="http://83.139.104.101/Content/HLS/Live/Channel(Sk_1)/index.m3u8">
+  <!--<param name="ffmpeg-i" value="http://83.139.104.101/Content/HLS/Live/Channel(Sk_1)/index.m3u8">-->
   <!--<param name="ffmpeg-map" value="0:6">-->
+  <param name="ffmpeg-c:v" value="mjpeg">
   <param name="ffmpeg-q:v" value="0.0">
   <!-- ‘-vsync parameter’
     Video sync method. For compatibility reasons old values can be specified as numbers. 
@@ -54,10 +55,12 @@ script>-->
     ‘-1, auto’ - Chooses between 1 and 2 depending on muxer capabilities. This is the default method.
   -->
   <param name="ffmpeg-vsync" value="0">
+  <param name="ffmpeg-f:o" value="mjpeg">
+  <param name="ffmpeg-an" value="">
   <!--<param name="ffmpeg-muxpreload" value="10">
   <param name="ffmpeg-muxdelay" value="10">
   <param name="ffmpeg-loglevel" value="warning">-->
-  <param name="debug" value="yes">
+  <param name="debug" value="no">
   <comment>
     <embed id="img-applet"
       type="application/x-java-applet"
@@ -110,12 +113,12 @@ script>-->
   width="100" height="40">
   <param name="archive" value="img-applet.jar">
   <param name="code" value="img_applet.ImgApplet">
-  <param name="ffmpeg-re" value="">
-  <param name="ffmpeg-f:i" value="">
+  <param name="ffmpeg-re" value="no">
+  <!--<param name="ffmpeg-f:i" value="">-->
   <!--<param name="ffmpeg-i" value="rtmp://10.44.41.97/rtmp/webcam">-->
-  <!--<param name="ffmpeg-i" value="rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp">-->
+  <param name="ffmpeg-i" value="rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp">
   <!--<param name="ffmpeg-i" value="rtmp://85.132.78.6:1935/live/muztv.stream">-->
-  <param name="ffmpeg-i" value="http://83.139.104.101/Content/HLS/Live/Channel(Sk_1)/index.m3u8">
+  <!--<param name="ffmpeg-i" value="http://83.139.104.101/Content/HLS/Live/Channel(Sk_1)/index.m3u8">-->
   <param name="ffmpeg-c:a" value="libmp3lame">
   <param name="ffmpeg-f:o" value="mp3">
   <param name="ffmpeg-vn" value="">
