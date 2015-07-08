@@ -1,8 +1,12 @@
 package img_applet;
 
-import img_applet.ImgApplet.Buffer;
-import img_applet.ImgApplet.MultiBuffer;
-import img_applet.ImgApplet.VideoBuffer;
+import img_applet.FFmpegProcess.Buffer;
+import img_applet.FFmpegProcess.VideoBuffer;
+import img_applet.FFmpegProcess.MultiBuffer;
+import img_applet.FFmpegProcess.BufferList;
+import img_applet.FFmpegProcess.BufferFactory;
+import img_applet.FFmpegProcess.MediaDemuxer;
+import img_applet.FFmpegProcess.ReaderToBuffer;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -13,7 +17,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 
-public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
+public class fMP4DemuxerInputStream extends MediaDemuxer {
 
 	public fMP4DemuxerInputStream(InputStream in,
 			double growFactor, double shrinkThresholdFactor,
@@ -127,7 +131,7 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 	}
 	private Map<Integer,Trak> traksById = new HashMap<Integer,Trak>();
 	private Map<TrakType,Trak> traksByType = new HashMap<TrakType,Trak>();
-	private class Traf extends Box implements ImgApplet.ReaderToBuffer {
+	private class Traf extends Box implements ReaderToBuffer {
 		int trakId, dfltSampleDuration, dfltSampleSize, dataOffset, duration, size;
 		long baseDataOffset;
 		Trak trak;
@@ -339,8 +343,9 @@ public class fMP4DemuxerInputStream extends ImgApplet.MediaDemuxer {
 	public static void main(String[] args) throws IOException, InterruptedException {
 		File file = new File("C:\\Users\\dmitriy.mukhin\\AppData\\Local\\Temp\\img_applet\\output.mp4"); // "C:\\Documents and Settings\\Mitya\\Local Settings\\Temp\\img_applet\\output1.mp4");
 		FileInputStream reader = new FileInputStream(file);
-		MultiBuffer videoMultiBuffer = new ImgApplet.BufferList(new ImgApplet.BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, 20, 200, true, "Video"),
-				audioMultiBuffer = new ImgApplet.BufferList(20, 0, true, "Audio");
+		MultiBuffer videoMultiBuffer = 
+				new BufferList(new BufferFactory() { @Override public Buffer newBuffer() { return new FFmpegProcess.VideoBuffer(); } }, 20, 200, true, "Video"),
+				audioMultiBuffer = new BufferList(20, 0, true, "Audio");
 		fMP4DemuxerInputStream mp4reader = new fMP4DemuxerInputStream(reader, 1.0, 1.5, videoMultiBuffer, audioMultiBuffer, null, null, null, null, true);
 		int res;
 		while ((res = mp4reader.readFragment()) != -1)

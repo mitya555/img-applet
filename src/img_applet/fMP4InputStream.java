@@ -1,9 +1,12 @@
 package img_applet;
 
+import img_applet.FFmpegProcess.Buffer;
+import img_applet.FFmpegProcess.MediaReader;
+
 import java.io.IOException;
 import java.io.InputStream;
 
-public class fMP4InputStream extends ImgApplet.MediaReader {
+public class fMP4InputStream extends MediaReader {
 
 	public fMP4InputStream(InputStream in, double growFactor) {
 		super(in);
@@ -15,7 +18,7 @@ public class fMP4InputStream extends ImgApplet.MediaReader {
 //	private int byteCount;
 	
 	@Override
-	public int read(ImgApplet.Buffer buf) throws IOException {
+	public int read(Buffer buf) throws IOException {
 		int b_;
 		CircularBuffer cb = new CircularBuffer(8);
 		while (true) {

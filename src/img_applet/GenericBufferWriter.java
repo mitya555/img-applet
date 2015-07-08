@@ -1,11 +1,12 @@
 package img_applet;
 
-import img_applet.ImgApplet.Buffer;
-//import java.io.FilterInputStream;
+import img_applet.FFmpegProcess.Buffer;
+import img_applet.FFmpegProcess.MediaReader;
+
 import java.io.IOException;
 import java.io.InputStream;
 
-public class GenericBufferWriter extends ImgApplet.MediaReader {
+public class GenericBufferWriter extends MediaReader {
 
 	protected GenericBufferWriter(InputStream in, int bufferSize) {
 		super(in);

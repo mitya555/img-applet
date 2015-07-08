@@ -1,9 +1,12 @@
 package img_applet;
 
+import img_applet.FFmpegProcess.Buffer;
+import img_applet.FFmpegProcess.MediaReader;
+
 import java.io.IOException;
 import java.io.InputStream;
 
-public class MP3InputStream extends ImgApplet.MediaReader {
+public class MP3InputStream extends MediaReader {
 
 	public MP3InputStream(InputStream in, int initBufferSize, int dataFramesInFragment, double growFactor) {
 		super(in);
@@ -29,7 +32,7 @@ public class MP3InputStream extends ImgApplet.MediaReader {
 	}
 
 	@Override
-	public int read(ImgApplet.Buffer buf) throws IOException {
+	public int read(Buffer buf) throws IOException {
 		int len = buf.size;
 		byte[] b = buf.b;
 		int b_, off_ = 0;

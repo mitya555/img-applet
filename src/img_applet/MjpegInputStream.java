@@ -1,9 +1,12 @@
 package img_applet;
 
+import img_applet.FFmpegProcess.Buffer;
+import img_applet.FFmpegProcess.MediaReader;
+
 import java.io.IOException;
 import java.io.InputStream;
 
-public class MjpegInputStream extends ImgApplet.MediaReader {
+public class MjpegInputStream extends MediaReader {
 
 	public MjpegInputStream(InputStream in, int initBufferSize, double growFactor) {
 		super(in);
@@ -15,7 +18,7 @@ public class MjpegInputStream extends ImgApplet.MediaReader {
 	protected double growFactor;
 	
 	@Override
-	public int read(ImgApplet.Buffer buf) throws IOException {
+	public int read(Buffer buf) throws IOException {
 		int off_ = 0;
 		int b_, b_prev = 0;
 		while ((b_ = in.read()) != 0xD8 || b_prev != 0xFF) {
