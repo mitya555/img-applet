@@ -525,12 +525,16 @@ public class FFmpegProcess extends Observable {
 	private double bufferGrowFactor, bufferShrinkThresholdFactor;
 	private MediaStream mediaStream, demuxVideoStream;
 	
-	private Applet applet;
-	private String getParameter(String name) { return applet.getParameter(name); }
+	private Object params;
+	private String getParameter(String name) {
+		return params instanceof Applet ? ((Applet)params).getParameter(name) :
+			params instanceof Map<?,?> ? ((Map<String,String>)params).get(name) :
+				null;
+	}
 
-	public FFmpegProcess init(Applet applet) {
+	public FFmpegProcess init(Object params) {
 		
-		this.applet = applet;
+		this.params = params;
 		
 		DEBUG = !isNo(getParameter("debug"));
 		
@@ -586,6 +590,8 @@ public class FFmpegProcess extends Observable {
 				"wav".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.wav :
 				OutputFormat.unknown : OutputFormat.none;
 	}
+	
+	public boolean HasInput() { addOptNV("i", new ArrayList<String>()); return optValue.containsKey("i"); } 
 	
 	private boolean NoAudio() { return optValue.containsKey("an"); }
 	private boolean NoVideo() { return optValue.containsKey("vn"); }

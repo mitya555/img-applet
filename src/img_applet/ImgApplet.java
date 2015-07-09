@@ -11,6 +11,8 @@ import java.awt.event.ActionListener;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Observable;
 import java.util.Observer;
 import java.util.regex.Pattern;
@@ -21,17 +23,19 @@ import javax.swing.SwingUtilities;
 @SuppressWarnings("serial")
 public class ImgApplet extends JApplet implements Runnable {
 
-	private void setButton(Button button, String label, ActionListener click, boolean active) {
+	private Button createButton(String label, ActionListener click, boolean active) {
+		Button button = new Button(); 
 		getContentPane().add(button);
 		button.addActionListener(click);
 		button.setLabel(label);
 		button.setEnabled(active);
 //		button.setVisible(active);
+		return button;
 	}
 	
-	private Button playButton = new Button(), stopButton = new Button();
-	
-	private void setUIForPlaying(boolean playing) { stopButton.setEnabled(playing); /*stopButton.setVisible(playing);*/ playButton.setEnabled(!playing); /*startButton.setVisible(!playing);*/ }
+	private static void setUIForPlaying(Button stopButton, Button playButton, boolean playing) {
+		stopButton.setEnabled(playing); /*stopButton.setVisible(playing);*/ playButton.setEnabled(!playing); /*startButton.setVisible(!playing);*/
+	}
 
 	@Override
 	public void run() {
@@ -39,8 +43,8 @@ public class ImgApplet extends JApplet implements Runnable {
 		FlowLayout cont = new FlowLayout(FlowLayout.CENTER, 10, 10);
 		getContentPane().setLayout(cont);
 		
-		setButton(stopButton, "Stop", new ActionListener() { @Override public void actionPerformed(ActionEvent e) { stopPlayback(); } }, isPlaying());
-		setButton(playButton, "Play", new ActionListener() { @Override public void actionPerformed(ActionEvent e) { play(); } }, !isPlaying());
+//		setButton(stopButton, "Stop", new ActionListener() { @Override public void actionPerformed(ActionEvent e) { stopPlayback(); } }, isPlaying());
+//		setButton(playButton, "Play", new ActionListener() { @Override public void actionPerformed(ActionEvent e) { play(); } }, !isPlaying());
 		
 		getContentPane().setBackground(Color.WHITE);
 //		System.out.println(FFmpeg.exe.getAbsolutePath());
@@ -51,7 +55,34 @@ public class ImgApplet extends JApplet implements Runnable {
 
     private boolean DEBUG = true;
     
-    private FFmpegProcess ffmpegProcess = new FFmpegProcess();
+    private FFmpegProcess ffmpegProcess;
+    private Map<Integer,FFmpegProcess> ffmpegs = new HashMap<Integer,FFmpegProcess>();
+    private int ffmpeg_count = 0;
+
+	private FFmpegProcess createFFmpegProcess(Object params) {
+		final FFmpegProcess ffmpeg = new FFmpegProcess();
+		if (ffmpeg.init(params).HasInput()) {
+			ffmpegs.put(++ffmpeg_count, ffmpeg);
+			final Button stopButton = createButton("Stop", new ActionListener() { @Override public void actionPerformed(ActionEvent e) {
+				ffmpeg.stopPlayback(); 
+			} }, ffmpeg.isPlaying()),
+			playButton = createButton("Play", new ActionListener() { @Override public void actionPerformed(ActionEvent e) {
+				ffmpeg.play();
+			} }, !ffmpeg.isPlaying());
+			ffmpeg.addObserver(new Observer() { @Override public void update(Observable o, Object arg) {
+				setUIForPlaying(stopButton, playButton, FFmpegProcess.Event.START.equals(arg));
+			} });
+		}
+		return ffmpeg;
+	}
+	
+	public FFmpegProcess createFFmpeg(String... params) {
+		HashMap<String,String> _params = new HashMap<String, String>();
+		for (int i = 0; i < params.length - 1; i += 2) {
+			_params.put(params[i], params[i + 1]);
+		}
+		return createFFmpegProcess(_params);
+	}
 
 	@Override
 	public void init() {
@@ -60,8 +91,7 @@ public class ImgApplet extends JApplet implements Runnable {
 		
 		DEBUG = !isNo(getParameter("debug"));
 		
-		ffmpegProcess.init(this).addObserver(new Observer() { @Override public void update(Observable o, Object arg) {
-			setUIForPlaying(FFmpegProcess.Event.START.equals(arg)); }});
+		ffmpegProcess = createFFmpegProcess(this);
 		
         //Execute a job on the event-dispatching thread:
         //creating this applet's GUI.
@@ -87,16 +117,12 @@ public class ImgApplet extends JApplet implements Runnable {
 		ffmpegProcess.play();
 	}
 
-	public boolean isPlaying() { 
+	public boolean isPlaying() {
 		return ffmpegProcess.isPlaying();
 	}
 
 	protected void stopPlayback() {
 		ffmpegProcess.stopPlayback();
-	}
-
-	private void killProcess() {
-		ffmpegProcess.kill();
 	}
 
 	public String getDataURI() throws IOException { return ffmpegProcess.getDataURI(); }
@@ -132,7 +158,8 @@ public class ImgApplet extends JApplet implements Runnable {
 	@Override
 	public void destroy() {
 		
-		killProcess();
+		for (FFmpegProcess ffmpeg : ffmpegs.values())
+			ffmpeg.kill();
 		
 		super.destroy();
 	}

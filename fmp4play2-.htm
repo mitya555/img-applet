@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+<head>
+<title>fmp4play2</title>
+<script src="//code.jquery.com/jquery-1.11.3.min.js"></script>
+<script src="jquery.fmp4player.js"></script>
+</head>
+<body>
+
+<div id="video-player"></div>
+
+<div id="audio-player"></div>
+
+<script>
+
+$('#video-player').fmp4player({
+	//debug: 'no',
+	//audioControls: 'yes',
+	appletParams: {
+		//debug: 'no',
+		//"ffmpeg-re": "",
+		"ffmpeg-an": "",
+		"ffmpeg-i": "rtmp://10.44.40.64/rtmp/v"
+	}
+});
+
+$('#audio-player').fmp4player({
+	//debug: 'no',
+	//audioControls: 'yes',
+	appletParams: {
+		//debug: 'no',
+		//"ffmpeg-re": "",
+		//"ffmpeg-c:a": "copy",
+		"ffmpeg-vn": "",
+		"ffmpeg-i": "rtmp://10.44.40.64/rtmp/a"
+	}
+});
+</script>
+
+</body>
+</html>
