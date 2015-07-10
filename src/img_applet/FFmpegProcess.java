@@ -613,6 +613,7 @@ public class FFmpegProcess extends Observable {
 //		}));
 		addOptNV("analyzeduration", command);
 		addOptNV("probesize", command);
+		addOptNV("r", command);
 		addOptN_("re", command);
 		addOptNV("f:i", "f", command/*, "flv"*/);
 		addOptNV("flv_metadata", command);
@@ -631,6 +632,9 @@ public class FFmpegProcess extends Observable {
 		addOptNV("c:v", command, demux_fMP4 ? "mjpeg" : null);
 		addOptNV("q:v", command);
 		addOptNV("b:v", command);
+		addOptNV("preset", command);
+		addOptNV("tune", command);
+		addOptNV("pix_fmt", command);
 		addOptNV("g", command);
 		addOptNV("vsync", command);
 		addOptNV("f:o", "f", command, demux_fMP4 ? "mp4" : null);

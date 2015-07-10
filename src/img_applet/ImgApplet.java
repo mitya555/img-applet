@@ -11,6 +11,8 @@ import java.awt.event.ActionListener;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Observable;
@@ -21,7 +23,7 @@ import javax.swing.JApplet;
 import javax.swing.SwingUtilities;
 
 @SuppressWarnings("serial")
-public class ImgApplet extends JApplet implements Runnable {
+public class ImgApplet extends JApplet {
 
 	private Button createButton(String label, ActionListener click, boolean active) {
 		Button button = new Button(); 
@@ -37,24 +39,12 @@ public class ImgApplet extends JApplet implements Runnable {
 		stopButton.setEnabled(playing); /*stopButton.setVisible(playing);*/ playButton.setEnabled(!playing); /*startButton.setVisible(!playing);*/
 	}
 
-	@Override
-	public void run() {
-		
-		FlowLayout cont = new FlowLayout(FlowLayout.CENTER, 10, 10);
-		getContentPane().setLayout(cont);
-		
-//		setButton(stopButton, "Stop", new ActionListener() { @Override public void actionPerformed(ActionEvent e) { stopPlayback(); } }, isPlaying());
-//		setButton(playButton, "Play", new ActionListener() { @Override public void actionPerformed(ActionEvent e) { play(); } }, !isPlaying());
-		
-		getContentPane().setBackground(Color.WHITE);
-//		System.out.println(FFmpeg.exe.getAbsolutePath());
-//		console.append(FFmpeg.exe.getAbsolutePath() + "\n");
-	}
-
 	private static boolean isNo(String str) { return str == null || "No".equalsIgnoreCase(str) || "False".equalsIgnoreCase(str); }
 
     private boolean DEBUG = true;
-    
+    private void debug(String dbg) { if (DEBUG) System.out.println(dbg); }
+    //private void debug(String dbg, String inf) { if (DEBUG) System.out.println(dbg); else System.out.println(inf); }
+
     private FFmpegProcess ffmpegProcess;
     private Map<Integer,FFmpegProcess> ffmpegs = new HashMap<Integer,FFmpegProcess>();
     private int ffmpeg_count = 0;
@@ -63,10 +53,11 @@ public class ImgApplet extends JApplet implements Runnable {
 		final FFmpegProcess ffmpeg = new FFmpegProcess();
 		if (ffmpeg.init(params).HasInput()) {
 			ffmpegs.put(++ffmpeg_count, ffmpeg);
+			debug("Created FFmpeg # " + ffmpeg_count);
 			final Button stopButton = createButton("Stop", new ActionListener() { @Override public void actionPerformed(ActionEvent e) {
 				ffmpeg.stopPlayback(); 
-			} }, ffmpeg.isPlaying()),
-			playButton = createButton("Play", new ActionListener() { @Override public void actionPerformed(ActionEvent e) {
+			} }, ffmpeg.isPlaying());
+			final Button playButton = createButton("Play", new ActionListener() { @Override public void actionPerformed(ActionEvent e) {
 				ffmpeg.play();
 			} }, !ffmpeg.isPlaying());
 			ffmpeg.addObserver(new Observer() { @Override public void update(Observable o, Object arg) {
@@ -77,11 +68,16 @@ public class ImgApplet extends JApplet implements Runnable {
 	}
 	
 	public FFmpegProcess createFFmpeg(String... params) {
-		HashMap<String,String> _params = new HashMap<String, String>();
+		final HashMap<String,String> _params = new HashMap<String, String>();
 		for (int i = 0; i < params.length - 1; i += 2) {
 			_params.put(params[i], params[i + 1]);
 		}
-		return createFFmpegProcess(_params);
+		return AccessController.doPrivileged(new PrivilegedAction<FFmpegProcess>() {
+			@Override
+			public FFmpegProcess run() {
+				return createFFmpegProcess(_params);
+			}
+		}); /* doPrivileged() */
 	}
 
 	@Override
@@ -110,7 +106,23 @@ public class ImgApplet extends JApplet implements Runnable {
 			e.printStackTrace();
 		}
 		
-		SwingUtilities.invokeLater(this);
+		SwingUtilities.invokeLater(new Runnable() {
+			@Override
+			public void run() {
+				
+				FlowLayout cont = new FlowLayout(FlowLayout.CENTER, 10, 10);
+				getContentPane().setLayout(cont);
+				
+//				setButton(stopButton, "Stop", new ActionListener() { @Override public void actionPerformed(ActionEvent e) { stopPlayback(); } }, isPlaying());
+//				setButton(playButton, "Play", new ActionListener() { @Override public void actionPerformed(ActionEvent e) { play(); } }, !isPlaying());
+				
+				getContentPane().setBackground(Color.WHITE);
+//				System.out.println(FFmpeg.exe.getAbsolutePath());
+//				console.append(FFmpeg.exe.getAbsolutePath() + "\n");
+				
+				debug("Initialized GUI");				
+			}
+		});
 	}
 
 	protected void play() {
