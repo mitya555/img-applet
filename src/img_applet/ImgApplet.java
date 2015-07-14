@@ -2,6 +2,7 @@ package img_applet;
 
 import img_applet.FFmpegProcess.TrackInfo;
 
+import java.applet.Applet;
 import java.awt.Button;
 import java.awt.Color;
 import java.awt.FlowLayout;
@@ -22,6 +23,8 @@ import java.util.regex.Pattern;
 import javax.swing.JApplet;
 import javax.swing.SwingUtilities;
 
+import netscape.javascript.JSObject;
+
 @SuppressWarnings("serial")
 public class ImgApplet extends JApplet {
 
@@ -34,50 +37,71 @@ public class ImgApplet extends JApplet {
 //		button.setVisible(active);
 		return button;
 	}
-	
-	private static void setUIForPlaying(Button stopButton, Button playButton, boolean playing) {
-		stopButton.setEnabled(playing); /*stopButton.setVisible(playing);*/ playButton.setEnabled(!playing); /*startButton.setVisible(!playing);*/
-	}
 
+    private static boolean strEmpty(String str) { return str == null || str.length() == 0; }
 	private static boolean isNo(String str) { return str == null || "No".equalsIgnoreCase(str) || "False".equalsIgnoreCase(str); }
 
     private boolean DEBUG = true;
     private void debug(String dbg) { if (DEBUG) System.out.println(dbg); }
     //private void debug(String dbg, String inf) { if (DEBUG) System.out.println(dbg); else System.out.println(inf); }
 
-    private FFmpegProcess ffmpegProcess;
+    private FFmpegProcess ffmpeg0;
     private Map<Integer,FFmpegProcess> ffmpegs = new HashMap<Integer,FFmpegProcess>();
     private int ffmpeg_count = 0;
 
-	private FFmpegProcess createFFmpegProcess(Object params) {
-		final FFmpegProcess ffmpeg = new FFmpegProcess();
-		if (ffmpeg.init(params).HasInput()) {
+	private boolean registerFFmpeg(FFmpegProcess ffmpeg, Object params) {
+		boolean res = ffmpeg.init(params).HasInput();
+		if (res) {
 			ffmpegs.put(++ffmpeg_count, ffmpeg);
 			debug("Created FFmpeg # " + ffmpeg_count);
-			final Button stopButton = createButton("Stop", new ActionListener() { @Override public void actionPerformed(ActionEvent e) {
-				ffmpeg.stopPlayback(); 
-			} }, ffmpeg.isPlaying());
-			final Button playButton = createButton("Play", new ActionListener() { @Override public void actionPerformed(ActionEvent e) {
-				ffmpeg.play();
-			} }, !ffmpeg.isPlaying());
-			ffmpeg.addObserver(new Observer() { @Override public void update(Observable o, Object arg) {
-				setUIForPlaying(stopButton, playButton, FFmpegProcess.Event.START.equals(arg));
-			} });
 		}
-		return ffmpeg;
+		return res;
 	}
 	
-	public FFmpegProcess createFFmpeg(String... params) {
+	public FFmpegProcess createFFmpeg(final String jsCallback, String... params) {
 		final HashMap<String,String> _params = new HashMap<String, String>();
 		for (int i = 0; i < params.length - 1; i += 2) {
 			_params.put(params[i], params[i + 1]);
 		}
+		final Applet _applet = this;
 		return AccessController.doPrivileged(new PrivilegedAction<FFmpegProcess>() {
 			@Override
 			public FFmpegProcess run() {
-				return createFFmpegProcess(_params);
+				final FFmpegProcess ffmpeg = new FFmpegProcess();
+				if (registerFFmpeg(ffmpeg, _params) && !strEmpty(jsCallback)) {
+					ffmpeg.addObserver(new Observer() { @Override public void update(Observable o, Object arg) {
+						boolean playing = FFmpegProcess.Event.START.equals(arg);
+						JSObject.getWindow(_applet).call(jsCallback, new Object[] { ffmpeg, playing });
+					} });
+				}
+				return ffmpeg;
 			}
 		}); /* doPrivileged() */
+	}
+	
+	public int createFFmpegId(final String jsCallback, String... params) {
+		final HashMap<String,String> _params = new HashMap<String, String>();
+		for (int i = 0; i < params.length - 1; i += 2) {
+			_params.put(params[i], params[i + 1]);
+		}
+		final Applet _applet = this;
+//		return AccessController.doPrivileged(new PrivilegedAction<FFmpegProcess>() {
+//			@Override
+//			public FFmpegProcess run() {
+				final FFmpegProcess ffmpeg = new FFmpegProcess();
+				if (registerFFmpeg(ffmpeg, _params)) {
+					if (!strEmpty(jsCallback)) {
+						final int _id = ffmpeg_count;
+						ffmpeg.addObserver(new Observer() { @Override public void update(Observable o, Object arg) {
+							boolean playing = FFmpegProcess.Event.START.equals(arg);
+							JSObject.getWindow(_applet).call(jsCallback, new Object[] { _id, playing });
+						} });
+					}
+					return ffmpeg_count;
+				}
+				return 0;
+//			}
+//		}); /* doPrivileged() */
 	}
 
 	@Override
@@ -87,8 +111,20 @@ public class ImgApplet extends JApplet {
 		
 		DEBUG = !isNo(getParameter("debug"));
 		
-		ffmpegProcess = createFFmpegProcess(this);
-		
+		ffmpeg0 = new FFmpegProcess();
+		if (registerFFmpeg(ffmpeg0, this)) {
+			final Button stopButton = createButton("Stop", new ActionListener() { @Override public void actionPerformed(ActionEvent e) {
+				ffmpeg0.stopPlayback(); 
+			} }, ffmpeg0.isPlaying());
+			final Button playButton = createButton("Play", new ActionListener() { @Override public void actionPerformed(ActionEvent e) {
+				ffmpeg0.play();
+			} }, !ffmpeg0.isPlaying());
+			ffmpeg0.addObserver(new Observer() { @Override public void update(Observable o, Object arg) {
+				boolean playing = FFmpegProcess.Event.START.equals(arg);
+				stopButton.setEnabled(playing); /*stopButton.setVisible(playing);*/ playButton.setEnabled(!playing); /*startButton.setVisible(!playing);*/
+			} });
+		}
+
         //Execute a job on the event-dispatching thread:
         //creating this applet's GUI.
 //        try {
@@ -125,44 +161,64 @@ public class ImgApplet extends JApplet {
 		});
 	}
 
-	protected void play() {
-		ffmpegProcess.play();
-	}
-
-	public boolean isPlaying() {
-		return ffmpegProcess.isPlaying();
-	}
-
-	protected void stopPlayback() {
-		ffmpegProcess.stopPlayback();
-	}
-
-	public String getDataURI() throws IOException { return ffmpegProcess.getDataURI(); }
 	
-	public int getSN() { return ffmpegProcess.getSN(); }
-	
-	int getQueueLength() { return ffmpegProcess.getQueueLength(); }
-	
-	public boolean isStreaming() { return ffmpegProcess.isStreaming(); }
-	
-	public String startHttpServer() throws InterruptedException { return ffmpegProcess.startHttpServer(); } 
+	public void play(final int id) { AccessController.doPrivileged(new PrivilegedAction<Object>() { @Override public Object run() { ffmpegs.get(id).play(); return null; } }); }
 
-	public String getVideoDataURI() throws IOException { return ffmpegProcess.getVideoDataURI(); }
+	public void stopPlayback(int id) { ffmpegs.get(id).stopPlayback(); }
 	
-	public int getVideoSN() { return ffmpegProcess.getVideoSN(); }
+	public boolean isPlaying(int id) { return ffmpegs.get(id).isPlaying(); }
 
-	public int getVideoQueueLength() { return ffmpegProcess.getVideoQueueLength(); }
-
-	public long getVideoTimestamp() { return ffmpegProcess.getVideoTimestamp(); }
+	public String getDataURI(int id) throws IOException { return ffmpegs.get(id).getDataURI(); }
 	
-	public TrackInfo getVideoTrackInfo() { return ffmpegProcess.getVideoTrackInfo(); }
+	public int getSN(int id) { return ffmpegs.get(id).getSN(); }
+	
+	int getQueueLength(int id) { return ffmpegs.get(id).getQueueLength(); }
+	
+	public boolean isStreaming(int id) { return ffmpegs.get(id).isStreaming(); }
+	
+	public String startHttpServer(int id) throws InterruptedException { return ffmpegs.get(id).startHttpServer(); } 
+
+	public String getVideoDataURI(int id) throws IOException { return ffmpegs.get(id).getVideoDataURI(); }
+	
+	public int getVideoSN(int id) { return ffmpegs.get(id).getVideoSN(); }
+
+	public int getVideoQueueLength(int id) { return ffmpegs.get(id).getVideoQueueLength(); }
+
+	public long getVideoTimestamp(int id) { return ffmpegs.get(id).getVideoTimestamp(); }
+	
+	public TrackInfo getVideoTrackInfo(int id) { return ffmpegs.get(id).getVideoTrackInfo(); }
+
+	
+	public boolean isPlaying() { return ffmpeg0.isPlaying(); }
+
+	public String getDataURI() throws IOException { return ffmpeg0.getDataURI(); }
+	
+	public int getSN() { return ffmpeg0.getSN(); }
+	
+	int getQueueLength() { return ffmpeg0.getQueueLength(); }
+	
+	public boolean isStreaming() { return ffmpeg0.isStreaming(); }
+	
+	public String startHttpServer() throws InterruptedException { return ffmpeg0.startHttpServer(); } 
+
+	public String getVideoDataURI() throws IOException { return ffmpeg0.getVideoDataURI(); }
+	
+	public int getVideoSN() { return ffmpeg0.getVideoSN(); }
+
+	public int getVideoQueueLength() { return ffmpeg0.getVideoQueueLength(); }
+
+	public long getVideoTimestamp() { return ffmpeg0.getVideoTimestamp(); }
+	
+	public TrackInfo getVideoTrackInfo() { return ffmpeg0.getVideoTrackInfo(); }
+	
 	
 	public boolean isDebug() { return DEBUG; }
 
 	@Override
 	public void stop() {
 		
-		stopPlayback();
+		for (FFmpegProcess ffmpeg : ffmpegs.values())
+			ffmpeg.stopPlayback();
 		
 		super.stop();
 	}
