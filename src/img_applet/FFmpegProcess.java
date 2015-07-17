@@ -580,15 +580,15 @@ public class FFmpegProcess extends Observable {
 	private void addOpt_V(String name, List<String> command, String dflt) { addOptNV(name, null, command, dflt); }
 	private void addOptN_(String name, List<String> command) { if (!isNo(getParameter(PARAM_PREFIX + name))) { String _opt = "-" + name; command.add(_opt); optName.put(name, _opt); } }
 	
-	private enum OutputFormat { none, mjpeg, mp3, mp4, webm, wav, unknown }
+	private enum OutputFormat { none, mjpeg, mp3, mp4, webm, wav, other, unknown }
 	private OutputFormat pipeOutputFormat() {
-		return optValue.get("o").startsWith("pipe:") ?
+		return optValue.get("o") != null ? optValue.get("o").startsWith("pipe:") ?
 				"mjpeg".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.mjpeg :
 				"mp3".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.mp3 :
 				"mp4".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.mp4 :
 				"webm".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.webm :
 				"wav".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.wav :
-				OutputFormat.unknown : OutputFormat.none;
+				OutputFormat.other : OutputFormat.unknown : OutputFormat.none;
 	}
 	
 	public boolean HasInput() { addOptNV("i", new ArrayList<String>()); return optValue.containsKey("i"); } 
@@ -611,12 +611,14 @@ public class FFmpegProcess extends Observable {
 //				"-an", "-c:v", "mjpeg", "-q:v", qscale, "-vsync", vsync,
 //				"-f", "mjpeg", "pipe:1"
 //		}));
+		addOptNV("list_devices", command);
 		addOptNV("analyzeduration", command);
 		addOptNV("probesize", command);
 		addOptNV("r", command);
 		addOptN_("re", command);
 		addOptNV("audio_buffer_size", command);
 		addOptNV("f:i", "f", command/*, "flv"*/);
+		addOptNV("list_options", command);
 		addOptNV("flv_metadata", command);
 		addOptNV("rtmp_buffer", command);
 		addOptNV("rtmp_live", command);
@@ -778,7 +780,7 @@ public class FFmpegProcess extends Observable {
 				contentType ="video/webm";
 				video = true;
 				break; 
-			case unknown: case none: default:
+			case other: case unknown: case none: default:
 				in_ = new GenericBufferWriter(ffmp.getInputStream(), bufferSize);
 				contentType = "application/octet-stream";
 				video = false;

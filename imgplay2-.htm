@@ -58,7 +58,9 @@ Video: <input id="capture_video" type="checkbox" onclick="checkboxClick(this)" /
 Audio: <input id="capture_audio" type="checkbox" onclick="checkboxClick(this)" /><label for="capture_audio">capture</label> <input id="playback_audio" type="checkbox" onclick="checkboxClick(this)" /><label for="playback_audio">playback</label>
 <br />
 <div id="videoImageContainer"><canvas id="videoImage"></canvas></div>
-
+<input id="list_devices" type="checkbox" onclick="checkboxClick(this)" /><label for="list_devices">list devices</label>
+<br />
+<input id="list_options" type="checkbox" onclick="checkboxClick(this)" /><label for="list_options">list options</label>
 <script>
 
 // global variables
@@ -198,6 +200,22 @@ function onLoadHandler() {
 		"ffmpeg-f:o", "wav",
 		"ffmpeg-vn", "",
 		//"debug", "yes",
+	] );
+
+	ffmpeg_ids["list_devices"] = _applet.createFFmpegId( 'checkboxCallback', [
+		'ffmpeg-list_devices', 'true',
+		'ffmpeg-f:i', 'dshow',
+		'ffmpeg-i', 'dummy',
+		'ffmpeg-o', '',
+		'debug', 'yes',
+	] );
+
+	ffmpeg_ids["list_options"] = _applet.createFFmpegId( 'checkboxCallback', [
+		'ffmpeg-list_options', 'true',
+		'ffmpeg-f:i', 'dshow',
+		'ffmpeg-i', 'video=Logitech QuickCam Communicate STX',
+		'ffmpeg-o', '',
+		'debug', 'yes',
 	] );
 }
 
