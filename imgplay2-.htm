@@ -59,8 +59,10 @@ Audio: <input id="capture_audio" type="checkbox" onclick="checkboxClick(this)" /
 <br />
 <div id="videoImageContainer"><canvas id="videoImage"></canvas></div>
 <input id="list_devices" type="checkbox" onclick="checkboxClick(this)" /><label for="list_devices">list devices</label>
+<span style="white-space:pre;" id="list-devices"></span>
 <br />
 <input id="list_options" type="checkbox" onclick="checkboxClick(this)" /><label for="list_options">list options</label>
+<span style="white-space:pre;" id="list-options"></span>
 <script>
 
 // global variables
@@ -107,8 +109,23 @@ function findByFFmpegId(ffmpeg_id) {
 }
 function checkboxCallback(ffmpeg_id, playing) {
 	var key = findByFFmpegId(ffmpeg_id);
-	if (key)
+	if (key) {
 		document.getElementById(key).checked = playing;
+		if (key === "list_devices" && !playing) {
+			var res = _applet.getData(ffmpeg_id), res_;
+			while (res_ = _applet.getData(ffmpeg_id)) {
+				res += res_;
+			}
+			document.getElementById("list-devices").innerHTML = "\r\n" + res;
+			
+		} else if (key === "list_options" && !playing) {
+			var res = _applet.getData(ffmpeg_id), res_;
+			while (res_ = _applet.getData(ffmpeg_id)) {
+				res += res_;
+			}
+			document.getElementById("list-options").innerHTML = "\r\n" + res;
+		}
+	}
 }
 
 function checkAppletMethod(applet_, method) { return applet_ && (!method || (applet_[method] || typeof(applet_[method]) === "unknown")); }
@@ -125,6 +142,32 @@ function registerAppletStateHandler() {
 			// applet has already loaded or there was an error
 			onLoadHandler();
 		}
+	}
+}
+
+function _newFFmpeg(key, callback, param_arr) {
+	if (ffmpeg_ids[key])
+		_applet.removeFFmpegById(ffmpeg_ids[key]);
+	ffmpeg_ids[key] = _applet.createFFmpegId(callback, param_arr);
+}
+
+function newFFmpeg(key, device, rtmp_url) {
+	switch (key) {
+	case "capture_video": _newFFmpeg( key, 'checkboxCallback', [
+			'ffmpeg-r', '25',
+			'ffmpeg-f:i', 'dshow',
+			'ffmpeg-i', 'video=' + device,
+			'ffmpeg-c:v', 'libx264',
+			'ffmpeg-preset', 'ultrafast',
+			'ffmpeg-tune', 'zerolatency',
+			'ffmpeg-pix_fmt', 'yuv420p',
+			'ffmpeg-g', '50',
+			'ffmpeg-an', '',
+			'ffmpeg-f:o', 'flv',
+			'ffmpeg-o', rtmp_url,
+			//'debug', 'yes',
+		] );
+		break;
 	}
 }
 

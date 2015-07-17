@@ -103,6 +103,14 @@ public class ImgApplet extends JApplet {
 //			}
 //		}); /* doPrivileged() */
 	}
+	
+	public void removeFFmpegById(int id) {
+		FFmpegProcess ffmpeg = ffmpegs.get(id);
+		if (ffmpeg != null) {
+			ffmpeg.stopPlayback();
+			ffmpegs.remove(id);
+		}
+	}
 
 	@Override
 	public void init() {
@@ -168,6 +176,8 @@ public class ImgApplet extends JApplet {
 	
 	public boolean isPlaying(int id) { return ffmpegs.get(id).isPlaying(); }
 
+	public String getData(int id) throws IOException { byte[] res = ffmpegs.get(id).getData(); return res != null ? new String(res, "UTF-8") : null; }
+
 	public String getDataURI(int id) throws IOException { return ffmpegs.get(id).getDataURI(); }
 	
 	public int getSN(int id) { return ffmpegs.get(id).getSN(); }
@@ -190,6 +200,8 @@ public class ImgApplet extends JApplet {
 
 	
 	public boolean isPlaying() { return ffmpeg0.isPlaying(); }
+
+	public String getData() throws IOException { byte[] res = ffmpeg0.getData(); return res != null ? new String(res, "UTF-8") : null; }
 
 	public String getDataURI() throws IOException { return ffmpeg0.getDataURI(); }
 	

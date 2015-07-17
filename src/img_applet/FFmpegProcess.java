@@ -389,6 +389,12 @@ public class FFmpegProcess extends Observable {
 		private MultiBuffer multiBuffer;
 		private DataOut dataOut; 
 		private TrackInfo trackInfo = new TrackInfo();
+
+		public byte[] getData() throws IOException {
+			if (multiBuffer.getSN() == 0)
+				return null;
+			return multiBuffer.getCurrentBytes();
+		}
 		
 		public String getDataURI() throws IOException {
 			if (multiBuffer.getSN() == 0)
@@ -581,7 +587,7 @@ public class FFmpegProcess extends Observable {
 	private void addOptN_(String name, List<String> command) { if (!isNo(getParameter(PARAM_PREFIX + name))) { String _opt = "-" + name; command.add(_opt); optName.put(name, _opt); } }
 	
 	private enum OutputFormat { none, mjpeg, mp3, mp4, webm, wav, other, unknown }
-	private OutputFormat pipeOutputFormat() {
+	private OutputFormat getOutputFormat() {
 		return optValue.get("o") != null ? optValue.get("o").startsWith("pipe:") ?
 				"mjpeg".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.mjpeg :
 				"mp3".equalsIgnoreCase(optValue.get("f:o")) ? OutputFormat.mp3 :
@@ -649,6 +655,8 @@ public class FFmpegProcess extends Observable {
 		addOptNV("muxpreload", command);
 		addOptNV("loglevel", command);
 
+		final boolean useStderr = (getOutputFormat() == OutputFormat.none);
+		
 		ProcessBuilder pb = new ProcessBuilder(command);
 //		Map<String, String> env = pb.environment();
 //		env.put("VAR1", "myValue");
@@ -660,7 +668,7 @@ public class FFmpegProcess extends Observable {
 //		pb.redirectOutput(ProcessBuilder.Redirect.appendTo(log));
 //		assert pb.redirectInput() == ProcessBuilder.Redirect.PIPE;
 //		assert pb.redirectOutput().file() == log;
-		if (!DEBUG)
+		if (!DEBUG && !useStderr)
 			pb.redirectError(ProcessBuilder.Redirect.INHERIT);
 		try {
 			ffmp = pb.start();
@@ -692,7 +700,7 @@ public class FFmpegProcess extends Observable {
 			e.printStackTrace();
 		}
 //		assert ffmp.getInputStream().read() == -1;
-		if (DEBUG)
+		if (DEBUG && !useStderr)
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
@@ -722,10 +730,12 @@ public class FFmpegProcess extends Observable {
 	private void playMediaReader() throws InterruptedException {
 		setChanged(); notifyObservers(Event.START);
 		MediaReader in_ = null;
+		final OutputFormat outputFormat = getOutputFormat();
+		final boolean keepMediaStream = (outputFormat == OutputFormat.none);
 		try {
-			String contentType;
-			boolean video;
-			switch (pipeOutputFormat()) {
+			String contentType = "application/octet-stream";
+			boolean video = false;
+			switch (outputFormat) {
 			case mjpeg:
 				in_ = new MjpegInputStream(ffmp.getInputStream(), vBufferSize, bufferGrowFactor);
 				contentType = "image/jpeg";
@@ -780,10 +790,11 @@ public class FFmpegProcess extends Observable {
 				contentType ="video/webm";
 				video = true;
 				break; 
-			case other: case unknown: case none: default:
+			case other: case unknown:
 				in_ = new GenericBufferWriter(ffmp.getInputStream(), bufferSize);
-				contentType = "application/octet-stream";
-				video = false;
+				break; 
+			case none:
+				in_ = new GenericBufferWriter(ffmp.getErrorStream(), bufferSize);
 				break; 
 			}
 			mediaStream = new MediaStream(contentType, dropUnusedFrames ? new DoubleBuffer(DEBUG, "Frame") :
@@ -801,7 +812,7 @@ public class FFmpegProcess extends Observable {
 		}
 		finally {
 			if (in_ != null) try { in_.close(); } catch (IOException e) { e.printStackTrace(); }
-			if (mediaStream != null) { try { mediaStream.close(); } catch (IOException e) { e.printStackTrace(); } mediaStream = null; }
+			if (mediaStream != null) { try { mediaStream.close(); } catch (IOException e) { e.printStackTrace(); } if (!keepMediaStream) mediaStream = null; }
 			setChanged(); notifyObservers(Event.STOP);
 			debug("FFMPEG output thread ended.", "FFMPEG process terminated.");
 		}
@@ -850,6 +861,8 @@ public class FFmpegProcess extends Observable {
 			debug("FFMPEG output thread ended.", "FFMPEG process terminated.");
 		}
 	}
+
+	public byte[] getData() throws IOException { return mediaStream != null ? mediaStream.getData() : null; }
 
 	public String getDataURI() throws IOException { return mediaStream != null ? mediaStream.getDataURI() : null; }
 	
