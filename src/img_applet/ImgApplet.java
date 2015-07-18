@@ -198,6 +198,8 @@ public class ImgApplet extends JApplet {
 	
 	public TrackInfo getVideoTrackInfo(int id) { return ffmpegs.get(id).getVideoTrackInfo(); }
 
+	public String getStderrData(int id) throws IOException { return ffmpegs.get(id).getStderrData(); }
+
 	
 	public boolean isPlaying() { return ffmpeg0.isPlaying(); }
 
@@ -222,6 +224,8 @@ public class ImgApplet extends JApplet {
 	public long getVideoTimestamp() { return ffmpeg0.getVideoTimestamp(); }
 	
 	public TrackInfo getVideoTrackInfo() { return ffmpeg0.getVideoTrackInfo(); }
+
+	public String getStderrData() throws IOException { return ffmpeg0.getStderrData(); }
 	
 	
 	public boolean isDebug() { return DEBUG; }

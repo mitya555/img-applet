@@ -112,18 +112,9 @@ function checkboxCallback(ffmpeg_id, playing) {
 	if (key) {
 		document.getElementById(key).checked = playing;
 		if (key === "list_devices" && !playing) {
-			var res = _applet.getData(ffmpeg_id), res_;
-			while (res_ = _applet.getData(ffmpeg_id)) {
-				res += res_;
-			}
-			document.getElementById("list-devices").innerHTML = "\r\n" + res;
-			
+			document.getElementById("list-devices").innerHTML = "\r\n" + _applet.getStderrData(ffmpeg_id);
 		} else if (key === "list_options" && !playing) {
-			var res = _applet.getData(ffmpeg_id), res_;
-			while (res_ = _applet.getData(ffmpeg_id)) {
-				res += res_;
-			}
-			document.getElementById("list-options").innerHTML = "\r\n" + res;
+			document.getElementById("list-options").innerHTML = "\r\n" + _applet.getStderrData(ffmpeg_id);
 		}
 	}
 }
@@ -151,12 +142,12 @@ function _newFFmpeg(key, callback, param_arr) {
 	ffmpeg_ids[key] = _applet.createFFmpegId(callback, param_arr);
 }
 
-function newFFmpeg(key, device, rtmp_url) {
+function newFFmpeg(key, p1, p2) {
 	switch (key) {
 	case "capture_video": _newFFmpeg( key, 'checkboxCallback', [
 			'ffmpeg-r', '25',
 			'ffmpeg-f:i', 'dshow',
-			'ffmpeg-i', 'video=' + device,
+			'ffmpeg-i', 'video=' + p1, // device, e.g. "Logitech QuickCam E3500"
 			'ffmpeg-c:v', 'libx264',
 			'ffmpeg-preset', 'ultrafast',
 			'ffmpeg-tune', 'zerolatency',
@@ -164,10 +155,62 @@ function newFFmpeg(key, device, rtmp_url) {
 			'ffmpeg-g', '50',
 			'ffmpeg-an', '',
 			'ffmpeg-f:o', 'flv',
-			'ffmpeg-o', rtmp_url,
+			'ffmpeg-o', p2, // rtmp url, e.g. "rtmp://10.44.43.244/rtmp/v"
 			//'debug', 'yes',
-		] );
-		break;
+		] ); break;
+	case "playback_video": _newFFmpeg( key, 'checkboxCallback', [
+			//"ffmpeg-re", "",
+			//"ffmpeg-f:i", "",
+			"ffmpeg-i", p1, // rtmp url, e.g. "rtmp://10.44.43.244/rtmp/v",
+			//"ffmpeg-i", "rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp",
+			//"ffmpeg-i", "rtmp://85.132.78.6:1935/live/muztv.stream",
+			//"ffmpeg-i", "http://83.139.104.101/Content/HLS/Live/Channel(Sk_1)/index.m3u8",
+			//"ffmpeg-map", "0:6",
+			"ffmpeg-c:v", "mjpeg",
+			"ffmpeg-q:v", "0.0",
+ /* ‘-vsync parameter’
+    Video sync method. For compatibility reasons old values can be specified as numbers. 
+    Newly added values will have to be specified as strings always.
+    ‘0, passthrough’ - Each frame is passed with its timestamp from the demuxer to the muxer. 
+    ‘1, cfr’ - Frames will be duplicated and dropped to achieve exactly the requested constant frame rate. 
+    ‘2, vfr’ - Frames are passed through with their timestamp or dropped so as to prevent 2 frames from having the same timestamp. 
+    ‘drop’ - As passthrough but destroys all timestamps, making the muxer generate fresh timestamps based on frame-rate. 
+    ‘-1, auto’ - Chooses between 1 and 2 depending on muxer capabilities. This is the default method.
+  */
+			"ffmpeg-vsync", "0",
+			"ffmpeg-f:o", "mjpeg",
+			"ffmpeg-an", "",
+			//"ffmpeg-muxpreload", "10",
+			//"ffmpeg-muxdelay", "10",
+			//"ffmpeg-loglevel", "warning",
+			"drop-unused-frames", "yes",
+			"debug", "yes",
+		] ); break;
+	case "capture_audio": _newFFmpeg( key, 'checkboxCallback', [
+			'ffmpeg-f:i', 'dshow',
+			'ffmpeg-audio_buffer_size', '50',
+			'ffmpeg-i', 'audio=' + p1, // device, e.g. "Microphone (USB Audio Device)"
+			'ffmpeg-c:a', 'libmp3lame',
+			'ffmpeg-async', '1',
+			'ffmpeg-vn', '',
+			'ffmpeg-f:o', 'flv',
+			'ffmpeg-o', p2, // rtmp url, e.g. "rtmp://10.44.43.244/rtmp/a"
+			//'debug', 'yes',
+		] ); break;
+	case "playback_audio": _newFFmpeg( key, 'checkboxCallback', [
+			"ffmpeg-re", "no",
+			"ffmpeg-analyzeduration", "1000",
+			"ffmpeg-rtmp_buffer", "0",
+			"ffmpeg-rtmp_live", "live",
+			//"ffmpeg-f:i", "",
+			"ffmpeg-i", p1, // rtmp url, e.g. "rtmp://10.44.43.244/rtmp/a"
+			//"ffmpeg-c:a", "libmp3lame",
+			//"ffmpeg-f:o", "mp3",
+			//"mp3-frames-per-chunk", "1",
+			"ffmpeg-f:o", "wav",
+			"ffmpeg-vn", "",
+			//"debug", "yes",
+		] ); break;
 	}
 }
 

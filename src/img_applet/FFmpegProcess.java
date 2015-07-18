@@ -1,12 +1,12 @@
 package img_applet;
 
 import ffmpeg.FFmpeg;
-
 import img_applet.FFmpegProcess.MediaDemuxer.Gettable;
 
 import java.applet.Applet;
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.File;
 import java.io.FilterInputStream;
@@ -530,6 +530,7 @@ public class FFmpegProcess extends Observable {
 	private int bufferSize, vBufferSize, aBufferSize, maxMemoryBufferCount, maxVideoBufferCount, mp3FramesPerChunk;
 	private double bufferGrowFactor, bufferShrinkThresholdFactor;
 	private MediaStream mediaStream, demuxVideoStream;
+	private ByteArrayOutputStream stderrOut;
 	
 	private Object params;
 	private String getParameter(String name) {
@@ -731,7 +732,7 @@ public class FFmpegProcess extends Observable {
 		setChanged(); notifyObservers(Event.START);
 		MediaReader in_ = null;
 		final OutputFormat outputFormat = getOutputFormat();
-		final boolean keepMediaStream = (outputFormat == OutputFormat.none);
+		final boolean useStderr = (getOutputFormat() == OutputFormat.none);
 		try {
 			String contentType = "application/octet-stream";
 			boolean video = false;
@@ -795,16 +796,21 @@ public class FFmpegProcess extends Observable {
 				break; 
 			case none:
 				in_ = new GenericBufferWriter(ffmp.getErrorStream(), bufferSize);
+				stderrOut = new ByteArrayOutputStream();
 				break; 
 			}
 			mediaStream = new MediaStream(contentType, dropUnusedFrames ? new DoubleBuffer(DEBUG, "Frame") :
 					new BufferList(maxMemoryBufferCount, video ? maxVideoBufferCount : 0, DEBUG, "Frame"));
 			demuxVideoStream = null;
-			int res = 0;
-			while (res != -1/* && !ffm_stop*/)
+			while (true/* && !ffm_stop*/)
 				try {
-					res = mediaStream.multiBuffer.readToBuffer(in_);
-//					debug("fragment of " + res + " bytes");
+					int res = mediaStream.multiBuffer.readToBuffer(in_);
+					if (res != -1) {
+						if (useStderr)
+							stderrOut.write(mediaStream.getData());
+//						debug("fragment of " + res + " bytes");
+					} else
+						break;
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
@@ -812,7 +818,7 @@ public class FFmpegProcess extends Observable {
 		}
 		finally {
 			if (in_ != null) try { in_.close(); } catch (IOException e) { e.printStackTrace(); }
-			if (mediaStream != null) { try { mediaStream.close(); } catch (IOException e) { e.printStackTrace(); } if (!keepMediaStream) mediaStream = null; }
+			if (mediaStream != null) { try { mediaStream.close(); } catch (IOException e) { e.printStackTrace(); } mediaStream = null; }
 			setChanged(); notifyObservers(Event.STOP);
 			debug("FFMPEG output thread ended.", "FFMPEG process terminated.");
 		}
@@ -883,6 +889,8 @@ public class FFmpegProcess extends Observable {
 	public long getVideoTimestamp() { VideoBuffer cvb = demuxVideoStream != null ? (VideoBuffer)demuxVideoStream.multiBuffer.getCurrentBuffer() : null; return cvb != null ? cvb.timestamp : 0L; }
 	
 	public TrackInfo getVideoTrackInfo() { return demuxVideoStream != null ? demuxVideoStream.trackInfo : null; }
+
+	public String getStderrData() throws IOException { return stderrOut != null ? stderrOut.toString("UTF-8") : null; }
 	
 	public boolean isDebug() { return DEBUG; }
 
