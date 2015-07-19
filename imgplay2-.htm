@@ -58,11 +58,11 @@ Video: <input id="capture_video" type="checkbox" onclick="checkboxClick(this)" /
 Audio: <input id="capture_audio" type="checkbox" onclick="checkboxClick(this)" /><label for="capture_audio">capture</label> <input id="playback_audio" type="checkbox" onclick="checkboxClick(this)" /><label for="playback_audio">playback</label>
 <br />
 <div id="videoImageContainer"><canvas id="videoImage"></canvas></div>
-<input id="list_devices" type="checkbox" onclick="checkboxClick(this)" /><label for="list_devices">list devices</label>
+<!--<input id="list_devices" type="checkbox" onclick="checkboxClick(this)" /><label for="list_devices">list devices</label>-->
 <span style="white-space:pre;" id="list-devices"></span>
-<br />
+<!--<br />
 <input id="list_options" type="checkbox" onclick="checkboxClick(this)" /><label for="list_options">list options</label>
-<span style="white-space:pre;" id="list-options"></span>
+<span style="white-space:pre;" id="list-options"></span>-->
 <script>
 
 // global variables
@@ -109,14 +109,8 @@ function findByFFmpegId(ffmpeg_id) {
 }
 function checkboxCallback(ffmpeg_id, playing) {
 	var key = findByFFmpegId(ffmpeg_id);
-	if (key) {
+	if (key)
 		document.getElementById(key).checked = playing;
-		if (key === "list_devices" && !playing) {
-			document.getElementById("list-devices").innerHTML = "\r\n" + _applet.getStderrData(ffmpeg_id);
-		} else if (key === "list_options" && !playing) {
-			document.getElementById("list-options").innerHTML = "\r\n" + _applet.getStderrData(ffmpeg_id);
-		}
-	}
 }
 
 function checkAppletMethod(applet_, method) { return applet_ && (!method || (applet_[method] || typeof(applet_[method]) === "unknown")); }
@@ -136,18 +130,19 @@ function registerAppletStateHandler() {
 	}
 }
 
-function _newFFmpeg(key, callback, param_arr) {
+function recreateFFmpeg(key, callback, param_arr) {
 	if (ffmpeg_ids[key])
 		_applet.removeFFmpegById(ffmpeg_ids[key]);
 	ffmpeg_ids[key] = _applet.createFFmpegId(callback, param_arr);
 }
 
-function newFFmpeg(key, p1, p2) {
+function renewFFmpeg(key, p1, p2) {
 	switch (key) {
-	case "capture_video": _newFFmpeg( key, 'checkboxCallback', [
+
+	case "capture_video": recreateFFmpeg( key, 'checkboxCallback', [
 			'ffmpeg-r', '25',
 			'ffmpeg-f:i', 'dshow',
-			'ffmpeg-i', 'video=' + p1, // device, e.g. "Logitech QuickCam E3500"
+			'ffmpeg-i', 'video=' + p1,		// video device, e.g. "Logitech QuickCam E3500"
 			'ffmpeg-c:v', 'libx264',
 			'ffmpeg-preset', 'ultrafast',
 			'ffmpeg-tune', 'zerolatency',
@@ -155,13 +150,14 @@ function newFFmpeg(key, p1, p2) {
 			'ffmpeg-g', '50',
 			'ffmpeg-an', '',
 			'ffmpeg-f:o', 'flv',
-			'ffmpeg-o', p2, // rtmp url, e.g. "rtmp://10.44.43.244/rtmp/v"
+			'ffmpeg-o', p2,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/v"
 			//'debug', 'yes',
 		] ); break;
-	case "playback_video": _newFFmpeg( key, 'checkboxCallback', [
+
+	case "playback_video": recreateFFmpeg( key, 'checkboxCallback', [
 			//"ffmpeg-re", "",
 			//"ffmpeg-f:i", "",
-			"ffmpeg-i", p1, // rtmp url, e.g. "rtmp://10.44.43.244/rtmp/v",
+			"ffmpeg-i", p1,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/v",
 			//"ffmpeg-i", "rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp",
 			//"ffmpeg-i", "rtmp://85.132.78.6:1935/live/muztv.stream",
 			//"ffmpeg-i", "http://83.139.104.101/Content/HLS/Live/Channel(Sk_1)/index.m3u8",
@@ -186,24 +182,26 @@ function newFFmpeg(key, p1, p2) {
 			"drop-unused-frames", "yes",
 			"debug", "yes",
 		] ); break;
-	case "capture_audio": _newFFmpeg( key, 'checkboxCallback', [
+
+	case "capture_audio": recreateFFmpeg( key, 'checkboxCallback', [
 			'ffmpeg-f:i', 'dshow',
 			'ffmpeg-audio_buffer_size', '50',
-			'ffmpeg-i', 'audio=' + p1, // device, e.g. "Microphone (USB Audio Device)"
+			'ffmpeg-i', 'audio=' + p1,		// audio device, e.g. "Microphone (USB Audio Device)"
 			'ffmpeg-c:a', 'libmp3lame',
 			'ffmpeg-async', '1',
 			'ffmpeg-vn', '',
 			'ffmpeg-f:o', 'flv',
-			'ffmpeg-o', p2, // rtmp url, e.g. "rtmp://10.44.43.244/rtmp/a"
+			'ffmpeg-o', p2,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/a"
 			//'debug', 'yes',
 		] ); break;
-	case "playback_audio": _newFFmpeg( key, 'checkboxCallback', [
+
+	case "playback_audio": recreateFFmpeg( key, 'checkboxCallback', [
 			"ffmpeg-re", "no",
 			"ffmpeg-analyzeduration", "1000",
 			"ffmpeg-rtmp_buffer", "0",
 			"ffmpeg-rtmp_live", "live",
 			//"ffmpeg-f:i", "",
-			"ffmpeg-i", p1, // rtmp url, e.g. "rtmp://10.44.43.244/rtmp/a"
+			"ffmpeg-i", p1,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/a"
 			//"ffmpeg-c:a", "libmp3lame",
 			//"ffmpeg-f:o", "mp3",
 			//"mp3-frames-per-chunk", "1",
@@ -214,95 +212,48 @@ function newFFmpeg(key, p1, p2) {
 	}
 }
 
+function callFFmpeg(key, p1) {
+	var _ffmpeg_id, defer = $.Deferred().always(function () { if (_ffmpeg_id) _applet.removeFFmpegById(_ffmpeg_id); });
+	window.dataCallback = function (ffmpeg_id, playing) { if (!playing) defer.resolve(_applet.getStderrData(ffmpeg_id)); };
+	switch (key) {
+
+	case "list_devices": _ffmpeg_id = _applet.createFFmpegId( 'dataCallback', [
+			'ffmpeg-list_devices', 'true',
+			'ffmpeg-f:i', 'dshow',
+			'ffmpeg-i', 'dummy',
+			'ffmpeg-o', '',
+			'debug', 'yes',
+		] ); break;
+
+	case "list_options": _ffmpeg_id = _applet.createFFmpegId( 'dataCallback', [
+			'ffmpeg-list_options', 'true',
+			'ffmpeg-f:i', 'dshow',
+			'ffmpeg-i', p1,			// device, e.g. 'video=Logitech QuickCam Communicate STX', or 'audio=Logitech Mic (Communicate STX)'
+			'ffmpeg-o', '',
+			'debug', 'yes',
+		] ); break;
+	}
+	if (_ffmpeg_id)
+		_applet.play(_ffmpeg_id);
+	return defer.promise();
+}
+
 function onLoadHandler() {
 	// event handler for ready state
-
-	ffmpeg_ids["capture_video"] = _applet.createFFmpegId( 'checkboxCallback', [
-		'ffmpeg-r', '25',
-		'ffmpeg-f:i', 'dshow',
-		'ffmpeg-i', 'video=Logitech QuickCam E3500',
-		'ffmpeg-c:v', 'libx264',
-		'ffmpeg-preset', 'ultrafast',
-		'ffmpeg-tune', 'zerolatency',
-		'ffmpeg-pix_fmt', 'yuv420p',
-		'ffmpeg-g', '50',
-		'ffmpeg-an', '',
-		'ffmpeg-f:o', 'flv',
-		'ffmpeg-o', 'rtmp://10.44.43.244/rtmp/v',
-		//'debug', 'yes',
-	] );
-
-	ffmpeg_ids["playback_video"] = _applet.createFFmpegId( 'checkboxCallback', [
-		//"ffmpeg-re", "",
-		//"ffmpeg-f:i", "",
-		"ffmpeg-i", "rtmp://10.44.43.244/rtmp/v",
-		//"ffmpeg-i", "rtmp://europaplus.cdnvideo.ru:1935/europaplus-live/eptv_main.sdp",
-		//"ffmpeg-i", "rtmp://85.132.78.6:1935/live/muztv.stream",
-		//"ffmpeg-i", "http://83.139.104.101/Content/HLS/Live/Channel(Sk_1)/index.m3u8",
-		//"ffmpeg-map", "0:6",
-		"ffmpeg-c:v", "mjpeg",
-		"ffmpeg-q:v", "0.0",
- /* ‘-vsync parameter’
-    Video sync method. For compatibility reasons old values can be specified as numbers. 
-    Newly added values will have to be specified as strings always.
-    ‘0, passthrough’ - Each frame is passed with its timestamp from the demuxer to the muxer. 
-    ‘1, cfr’ - Frames will be duplicated and dropped to achieve exactly the requested constant frame rate. 
-    ‘2, vfr’ - Frames are passed through with their timestamp or dropped so as to prevent 2 frames from having the same timestamp. 
-    ‘drop’ - As passthrough but destroys all timestamps, making the muxer generate fresh timestamps based on frame-rate. 
-    ‘-1, auto’ - Chooses between 1 and 2 depending on muxer capabilities. This is the default method.
-  */
-		"ffmpeg-vsync", "0",
-		"ffmpeg-f:o", "mjpeg",
-		"ffmpeg-an", "",
-		//"ffmpeg-muxpreload", "10",
-		//"ffmpeg-muxdelay", "10",
-		//"ffmpeg-loglevel", "warning",
-		"drop-unused-frames", "yes",
-		"debug", "yes",
-	] );
-
-	ffmpeg_ids["capture_audio"] = _applet.createFFmpegId( 'checkboxCallback', [
-		'ffmpeg-f:i', 'dshow',
-		'ffmpeg-audio_buffer_size', '50',
-		'ffmpeg-i', 'audio=Microphone (USB Audio Device)',
-		'ffmpeg-c:a', 'libmp3lame',
-		'ffmpeg-async', '1',
-		'ffmpeg-vn', '',
-		'ffmpeg-f:o', 'flv',
-		'ffmpeg-o', 'rtmp://10.44.43.244/rtmp/a',
-		//'debug', 'yes',
-	] );
-
-	ffmpeg_ids["playback_audio"] = _applet.createFFmpegId( 'checkboxCallback', [
-		"ffmpeg-re", "no",
-		"ffmpeg-analyzeduration", "1000",
-		"ffmpeg-rtmp_buffer", "0",
-		"ffmpeg-rtmp_live", "live",
-		//"ffmpeg-f:i", "",
-		"ffmpeg-i", "rtmp://10.44.43.244/rtmp/a",
-		//"ffmpeg-c:a", "libmp3lame",
-		//"ffmpeg-f:o", "mp3",
-		//"mp3-frames-per-chunk", "1",
-		"ffmpeg-f:o", "wav",
-		"ffmpeg-vn", "",
-		//"debug", "yes",
-	] );
-
-	ffmpeg_ids["list_devices"] = _applet.createFFmpegId( 'checkboxCallback', [
-		'ffmpeg-list_devices', 'true',
-		'ffmpeg-f:i', 'dshow',
-		'ffmpeg-i', 'dummy',
-		'ffmpeg-o', '',
-		'debug', 'yes',
-	] );
-
-	ffmpeg_ids["list_options"] = _applet.createFFmpegId( 'checkboxCallback', [
-		'ffmpeg-list_options', 'true',
-		'ffmpeg-f:i', 'dshow',
-		'ffmpeg-i', 'video=Logitech QuickCam Communicate STX',
-		'ffmpeg-o', '',
-		'debug', 'yes',
-	] );
+	callFFmpeg("list_devices").then(function (res) {
+		var re = /\[\s*dshow\s*@\s*[a-fA-F0-9]+\s*\]\s*"?(.*?)"?\s*\r?\n/ig;
+		var arr, out = "";
+		while ((arr = re.exec(res)) !== null) {
+			out += "\r\n" + arr[1];
+		}
+		document.getElementById("list-devices").innerHTML = out;
+	});
+	renewFFmpeg("capture_video", 'Logitech QuickCam E3500', 'rtmp://10.44.43.244/rtmp/v');
+	renewFFmpeg("playback_video", 'rtmp://10.44.43.244/rtmp/v');
+	renewFFmpeg("capture_audio", 'Microphone (USB Audio Device)', 'rtmp://10.44.43.244/rtmp/a');
+	renewFFmpeg("playback_audio", 'rtmp://10.44.43.244/rtmp/a');
+	//renewFFmpeg("list_devices");
+	//renewFFmpeg("list_options", 'video=Logitech QuickCam Communicate STX');
 }
 
 // start the loop				
