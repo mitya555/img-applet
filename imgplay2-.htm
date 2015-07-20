@@ -254,7 +254,7 @@ function callFFmpeg(key, p1) {
 function onLoadHandler() {
 	// event handler for ready state
 	var listDevices = function () {
-		$("#deviceContainer")/*.addClass("ui-state-default")*/.empty();
+		$("#deviceContainer select").css("visibility", "hidden");
 		callFFmpeg("list_devices").then(function (res) {
 			var re = /\[\s*dshow\s*@\s*[a-fA-F0-9]+\s*\]\s*"?(.*?)"?\s*\r?\n/ig;
 			var tmp, arr = []; // , out = "";
@@ -265,6 +265,7 @@ function onLoadHandler() {
 			//document.getElementById("list-devices").innerHTML = out;
 			re = /^\s*Direct\s*Show\s*(video|audio)\s*devices\s*$/i;
 			var $select;
+			$("#deviceContainer")/*.addClass("ui-state-default")*/.empty();
 			for (var i in arr) {
 				if (re.test(arr[i])) {
 					$select = $("<select></select>").appendTo("#deviceContainer");

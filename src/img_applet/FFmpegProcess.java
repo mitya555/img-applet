@@ -530,6 +530,8 @@ public class FFmpegProcess extends Observable {
 	private int bufferSize, vBufferSize, aBufferSize, maxMemoryBufferCount, maxVideoBufferCount, mp3FramesPerChunk;
 	private double bufferGrowFactor, bufferShrinkThresholdFactor;
 	private MediaStream mediaStream, demuxVideoStream;
+	
+	private boolean useStderr;
 	private ByteArrayOutputStream stderrOut;
 	
 	private Object params;
@@ -656,7 +658,7 @@ public class FFmpegProcess extends Observable {
 		addOptNV("muxpreload", command);
 		addOptNV("loglevel", command);
 
-		final boolean useStderr = (getOutputFormat() == OutputFormat.none);
+		useStderr = (getOutputFormat() == OutputFormat.none);
 		
 		ProcessBuilder pb = new ProcessBuilder(command);
 //		Map<String, String> env = pb.environment();
@@ -731,12 +733,10 @@ public class FFmpegProcess extends Observable {
 	private void playMediaReader() throws InterruptedException {
 		setChanged(); notifyObservers(Event.START);
 		MediaReader in_ = null;
-		final OutputFormat outputFormat = getOutputFormat();
-		final boolean useStderr = (getOutputFormat() == OutputFormat.none);
 		try {
 			String contentType = "application/octet-stream";
 			boolean video = false;
-			switch (outputFormat) {
+			switch (getOutputFormat()) {
 			case mjpeg:
 				in_ = new MjpegInputStream(ffmp.getInputStream(), vBufferSize, bufferGrowFactor);
 				contentType = "image/jpeg";
@@ -797,6 +797,7 @@ public class FFmpegProcess extends Observable {
 			case none:
 				in_ = new GenericBufferWriter(ffmp.getErrorStream(), bufferSize);
 				stderrOut = new ByteArrayOutputStream();
+				useStderr = true;
 				break; 
 			}
 			mediaStream = new MediaStream(contentType, dropUnusedFrames ? new DoubleBuffer(DEBUG, "Frame") :
@@ -895,6 +896,8 @@ public class FFmpegProcess extends Observable {
 	public boolean isDebug() { return DEBUG; }
 
 	private void quitProcess() {
+		if (useStderr)
+			return;
 		try {
 //			debug("quitProcess() call...");
 			if (isPlaying()) {

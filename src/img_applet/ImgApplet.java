@@ -14,10 +14,12 @@ import java.io.FilenameFilter;
 import java.io.IOException;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
+import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Observable;
 import java.util.Observer;
+import java.util.Queue;
 import java.util.regex.Pattern;
 
 import javax.swing.JApplet;
@@ -47,15 +49,28 @@ public class ImgApplet extends JApplet {
 
     private FFmpegProcess ffmpeg0;
     private Map<Integer,FFmpegProcess> ffmpegs = new HashMap<Integer,FFmpegProcess>();
+    private Queue<Integer> id_pool = new ArrayDeque<Integer>();
     private int ffmpeg_count = 0;
 
-	private boolean registerFFmpeg(FFmpegProcess ffmpeg, Object params) {
-		boolean res = ffmpeg.init(params).HasInput();
-		if (res) {
-			ffmpegs.put(++ffmpeg_count, ffmpeg);
-			debug("Created FFmpeg # " + ffmpeg_count);
+	private Integer registerFFmpeg(FFmpegProcess ffmpeg, Object params) {
+		Integer id = null;
+		if (ffmpeg.init(params).HasInput()) {
+			Integer id_from_pool = id_pool.poll();
+			id = id_from_pool != null ? id_from_pool : ++ffmpeg_count;
+			ffmpegs.put(id, ffmpeg);
+			debug("Created FFmpeg ID: " + id);
 		}
-		return res;
+		return id;
+	}
+	
+	public void removeFFmpegById(int id) {
+		FFmpegProcess ffmpeg = ffmpegs.get(id);
+		if (ffmpeg != null) {
+			ffmpeg.stopPlayback();
+			ffmpegs.remove(id);
+			id_pool.add(id);
+			debug("Removed FFmpeg ID: " + id);
+		}
 	}
 	
 	public FFmpegProcess createFFmpeg(final String jsCallback, String... params) {
@@ -68,7 +83,7 @@ public class ImgApplet extends JApplet {
 			@Override
 			public FFmpegProcess run() {
 				final FFmpegProcess ffmpeg = new FFmpegProcess();
-				if (registerFFmpeg(ffmpeg, _params) && !strEmpty(jsCallback)) {
+				if (registerFFmpeg(ffmpeg, _params) != null && !strEmpty(jsCallback)) {
 					ffmpeg.addObserver(new Observer() { @Override public void update(Observable o, Object arg) {
 						boolean playing = FFmpegProcess.Event.START.equals(arg);
 						JSObject.getWindow(_applet).call(jsCallback, new Object[] { ffmpeg, playing });
@@ -89,27 +104,20 @@ public class ImgApplet extends JApplet {
 //			@Override
 //			public FFmpegProcess run() {
 				final FFmpegProcess ffmpeg = new FFmpegProcess();
-				if (registerFFmpeg(ffmpeg, _params)) {
+				final Integer res = registerFFmpeg(ffmpeg, _params);
+				if (res != null) {
+					final int id = res;
 					if (!strEmpty(jsCallback)) {
-						final int _id = ffmpeg_count;
 						ffmpeg.addObserver(new Observer() { @Override public void update(Observable o, Object arg) {
 							boolean playing = FFmpegProcess.Event.START.equals(arg);
-							JSObject.getWindow(_applet).call(jsCallback, new Object[] { _id, playing });
+							JSObject.getWindow(_applet).call(jsCallback, new Object[] { id, playing });
 						} });
 					}
-					return ffmpeg_count;
+					return id;
 				}
 				return 0;
 //			}
 //		}); /* doPrivileged() */
-	}
-	
-	public void removeFFmpegById(int id) {
-		FFmpegProcess ffmpeg = ffmpegs.get(id);
-		if (ffmpeg != null) {
-			ffmpeg.stopPlayback();
-			ffmpegs.remove(id);
-		}
 	}
 
 	@Override
@@ -120,7 +128,7 @@ public class ImgApplet extends JApplet {
 		DEBUG = !isNo(getParameter("debug"));
 		
 		ffmpeg0 = new FFmpegProcess();
-		if (registerFFmpeg(ffmpeg0, this)) {
+		if (registerFFmpeg(ffmpeg0, this) != null) {
 			final Button stopButton = createButton("Stop", new ActionListener() { @Override public void actionPerformed(ActionEvent e) {
 				ffmpeg0.stopPlayback(); 
 			} }, ffmpeg0.isPlaying());
