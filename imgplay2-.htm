@@ -30,6 +30,7 @@ if ( !window.requestAnimationFrame ) {
 		width: 640px;
 		background-color: green;*/
 	}
+	.ui-icon { /*float: right;*/ display: inline-block; cursor: pointer; /*margin-bottom: -3px;*/ vertical-align: middle; }
 </style>
 </head>
 <body onload="registerAppletStateHandler()">
@@ -53,14 +54,15 @@ if ( !window.requestAnimationFrame ) {
 </object>
 <img id="image0" style="visibility: hidden; display: none;" />
 <img id="image1" style="visibility: hidden; display: none;" />
+<div id="deviceContainer"></div>
 Video: <input id="capture_video" type="checkbox" onclick="checkboxClick(this)" /><label for="capture_video">capture</label> <input id="playback_video" type="checkbox" onclick="checkboxClick(this)" /><label for="playback_video">playback</label>
 <br />
 Audio: <input id="capture_audio" type="checkbox" onclick="checkboxClick(this)" /><label for="capture_audio">capture</label> <input id="playback_audio" type="checkbox" onclick="checkboxClick(this)" /><label for="playback_audio">playback</label>
 <br />
 <div id="videoImageContainer"><canvas id="videoImage"></canvas></div>
-<!--<input id="list_devices" type="checkbox" onclick="checkboxClick(this)" /><label for="list_devices">list devices</label>-->
+<!--<input id="list_devices" type="checkbox" onclick="checkboxClick(this)" /><label for="list_devices">list devices</label>
 <span style="white-space:pre;" id="list-devices"></span>
-<!--<br />
+<br />
 <input id="list_options" type="checkbox" onclick="checkboxClick(this)" /><label for="list_options">list options</label>
 <span style="white-space:pre;" id="list-options"></span>-->
 <script>
@@ -213,8 +215,18 @@ function renewFFmpeg(key, p1, p2) {
 }
 
 function callFFmpeg(key, p1) {
-	var _ffmpeg_id, defer = $.Deferred().always(function () { if (_ffmpeg_id) _applet.removeFFmpegById(_ffmpeg_id); });
-	window.dataCallback = function (ffmpeg_id, playing) { if (!playing) defer.resolve(_applet.getStderrData(ffmpeg_id)); };
+	var _ffmpeg_id, defer = $.Deferred().always(function () {
+		if (_ffmpeg_id) {
+			_applet.removeFFmpegById(_ffmpeg_id);
+			//alert("remove: " + _ffmpeg_id);
+		}
+	});
+	window.dataCallback = function (ffmpeg_id, playing) {
+		if (!playing) {
+			defer.resolve(_applet.getStderrData(ffmpeg_id));
+			//alert("resolve: " + ffmpeg_id);
+		}
+	};
 	switch (key) {
 
 	case "list_devices": _ffmpeg_id = _applet.createFFmpegId( 'dataCallback', [
@@ -233,21 +245,38 @@ function callFFmpeg(key, p1) {
 			'debug', 'yes',
 		] ); break;
 	}
-	if (_ffmpeg_id)
+	if (_ffmpeg_id) {
 		_applet.play(_ffmpeg_id);
+	}
 	return defer.promise();
 }
 
 function onLoadHandler() {
 	// event handler for ready state
-	callFFmpeg("list_devices").then(function (res) {
-		var re = /\[\s*dshow\s*@\s*[a-fA-F0-9]+\s*\]\s*"?(.*?)"?\s*\r?\n/ig;
-		var arr, out = "";
-		while ((arr = re.exec(res)) !== null) {
-			out += "\r\n" + arr[1];
-		}
-		document.getElementById("list-devices").innerHTML = out;
-	});
+	var listDevices = function () {
+		$("#deviceContainer")/*.addClass("ui-state-default")*/.empty();
+		callFFmpeg("list_devices").then(function (res) {
+			var re = /\[\s*dshow\s*@\s*[a-fA-F0-9]+\s*\]\s*"?(.*?)"?\s*\r?\n/ig;
+			var tmp, arr = []; // , out = "";
+			while ((tmp = re.exec(res)) !== null) {
+				//out += "\r\n" + tmp[1];
+				arr.push(tmp[1]);
+			}
+			//document.getElementById("list-devices").innerHTML = out;
+			re = /^\s*Direct\s*Show\s*(video|audio)\s*devices\s*$/i;
+			var $select;
+			for (var i in arr) {
+				if (re.test(arr[i])) {
+					$select = $("<select></select>").appendTo("#deviceContainer");
+					$("<option></option>").attr({ "value": arr[i], "disabled": "disabled" }).text(arr[i]).appendTo($select);
+				} else {
+					$("<option></option>").attr("value", arr[i]).text(arr[i]).appendTo($select);
+				}
+			}
+			$("<span class='ui-icon ui-icon-refresh'></span>").appendTo("#deviceContainer").click(listDevices);
+		});
+	};
+	listDevices();
 	renewFFmpeg("capture_video", 'Logitech QuickCam E3500', 'rtmp://10.44.43.244/rtmp/v');
 	renewFFmpeg("playback_video", 'rtmp://10.44.43.244/rtmp/v');
 	renewFFmpeg("capture_audio", 'Microphone (USB Audio Device)', 'rtmp://10.44.43.244/rtmp/a');
