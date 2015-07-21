@@ -68,7 +68,7 @@ Audio: <input id="capture_audio" type="checkbox" onclick="checkboxClick(this)" /
 <script>
 
 // global variables
-var image, videoImage, videoImageContext, applet, applet_ie, _applet, sn = 0, last_img = -1, ffmpeg_ids = {};
+var image, videoImage, videoImageContext, applet, applet_ie, _applet, sn = 0, last_img = -1, ffmpeg_ids = {}, devices = {};
 // assign variables to HTML elements
 image = [ document.getElementById( 'image0' ), document.getElementById( 'image1' ) ];
 videoImage = document.getElementById( 'videoImage' );
@@ -132,10 +132,23 @@ function registerAppletStateHandler() {
 	}
 }
 
-function recreateFFmpeg(key, callback, param_arr) {
-	if (ffmpeg_ids[key])
+function removeFFmpeg(key) {
+	if (ffmpeg_ids[key]) {
+		_applet.stopPlayback(ffmpeg_ids[key]);
 		_applet.removeFFmpegById(ffmpeg_ids[key]);
+		delete ffmpeg_ids[key];
+	}
+}
+
+function recreateFFmpeg(key, callback, param_arr) {
+	var playing = false;
+	if (ffmpeg_ids[key]) {
+		playing = _applet.isPlaying(ffmpeg_ids[key]);
+		removeFFmpeg(key);
+	}
 	ffmpeg_ids[key] = _applet.createFFmpegId(callback, param_arr);
+	if (playing)
+		_applet.play(ffmpeg_ids[key]);
 }
 
 function renewFFmpeg(key, p1, p2) {
@@ -154,7 +167,7 @@ function renewFFmpeg(key, p1, p2) {
 			'ffmpeg-f:o', 'flv',
 			'ffmpeg-o', p2,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/v"
 			//'debug', 'yes',
-		] ); break;
+		] ); devices[key] = p1; break;
 
 	case "playback_video": recreateFFmpeg( key, 'checkboxCallback', [
 			//"ffmpeg-re", "",
@@ -195,7 +208,7 @@ function renewFFmpeg(key, p1, p2) {
 			'ffmpeg-f:o', 'flv',
 			'ffmpeg-o', p2,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/a"
 			//'debug', 'yes',
-		] ); break;
+		] ); devices[key] = p1; break;
 
 	case "playback_audio": recreateFFmpeg( key, 'checkboxCallback', [
 			"ffmpeg-re", "no",
@@ -253,9 +266,11 @@ function callFFmpeg(key, p1) {
 
 function onLoadHandler() {
 	// event handler for ready state
+	var rtmp_host = window.location.hash && window.location.hash.length > 7 ? window.location.hash.substring(1) : '10.44.43.244';
 	var listDevices = function () {
 		$("#deviceContainer select").css("visibility", "hidden");
 		callFFmpeg("list_devices").then(function (res) {
+			// parse output
 			var re = /\[\s*dshow\s*@\s*[a-fA-F0-9]+\s*\]\s*"?(.*?)"?\s*\r?\n/ig;
 			var tmp, arr = []; // , out = "";
 			while ((tmp = re.exec(res)) !== null) {
@@ -263,25 +278,50 @@ function onLoadHandler() {
 				arr.push(tmp[1]);
 			}
 			//document.getElementById("list-devices").innerHTML = out;
-			re = /^\s*Direct\s*Show\s*(video|audio)\s*devices\s*$/i;
-			var $select;
+			// remember current devices
+			var videoDevice = $("#videoDevice").val(), audioDevice = $("#audioDevice").val();
+			// recreate dropdowns
 			$("#deviceContainer")/*.addClass("ui-state-default")*/.empty();
+			re = /^\s*Direct\s*Show\s*(video|audio)\s*devices\s*$/i;
+			var re1 = /^\s*Could\s*not\s*enumerate\s*(video|audio)\s*devices\.?\s*$/i;
+			var $select;
 			for (var i in arr) {
 				if (re.test(arr[i])) {
-					$select = $("<select></select>").appendTo("#deviceContainer");
-					$("<option></option>").attr({ "value": arr[i], "disabled": "disabled" }).text(arr[i]).appendTo($select);
+					$select = $("<select id='" + re.exec(arr[i])[1].toLowerCase() + "Device'></select>").appendTo("#deviceContainer");
+					$("<option></option>").attr({ "value": "", "disabled": "disabled" }).text(arr[i]).appendTo($select);
+				} else if (re1.test(arr[i])) {
+					$("<option></option>").attr({ "value": "", "disabled": "disabled" }).text(arr[i]).appendTo($select);
 				} else {
 					$("<option></option>").attr("value", arr[i]).text(arr[i]).appendTo($select);
 				}
 			}
-			$("<span class='ui-icon ui-icon-refresh'></span>").appendTo("#deviceContainer").click(listDevices);
+			// try to restore current devices
+			if (videoDevice)
+				$("#videoDevice").val(videoDevice);
+			if (audioDevice)
+				$("#audioDevice").val(audioDevice);
+
+			if (videoDevice = $("#videoDevice").val()) {
+				if (videoDevice !== devices["capture_video"])
+					renewFFmpeg("capture_video", videoDevice, 'rtmp://' + rtmp_host + '/rtmp/v');
+			} else {
+				removeFFmpeg("capture_video");
+			}
+			if (audioDevice = $("#audioDevice").val()) {
+				if (audioDevice !== devices["capture_audio"])
+					renewFFmpeg("capture_audio", audioDevice, 'rtmp://' + rtmp_host + '/rtmp/a');
+			} else {
+				removeFFmpeg("capture_audio");
+			}
+			// add refresh button
+			$("<span class='ui-icon ui-icon-refresh' title='Refresh'></span>").appendTo("#deviceContainer").click(listDevices);
 		});
 	};
 	listDevices();
-	renewFFmpeg("capture_video", 'Logitech QuickCam E3500', 'rtmp://10.44.43.244/rtmp/v');
-	renewFFmpeg("playback_video", 'rtmp://10.44.43.244/rtmp/v');
-	renewFFmpeg("capture_audio", 'Microphone (USB Audio Device)', 'rtmp://10.44.43.244/rtmp/a');
-	renewFFmpeg("playback_audio", 'rtmp://10.44.43.244/rtmp/a');
+	//renewFFmpeg("capture_video", 'Logitech QuickCam E3500', 'rtmp://' + rtmp_host + '/rtmp/v');
+	//renewFFmpeg("capture_audio", 'Microphone (USB Audio Device)', 'rtmp://' + rtmp_host + '/rtmp/a');
+	renewFFmpeg("playback_video", 'rtmp://' + rtmp_host + '/rtmp/v');
+	renewFFmpeg("playback_audio", 'rtmp://' + rtmp_host + '/rtmp/a');
 	//renewFFmpeg("list_devices");
 	//renewFFmpeg("list_options", 'video=Logitech QuickCam Communicate STX');
 }
