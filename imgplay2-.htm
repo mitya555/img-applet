@@ -322,7 +322,7 @@ function onLoadHandler() {
 	function keyFromName(opName, name, deviceType) { return (opName || "capture") + "-" + (name || "my") + "-" + deviceType; }
 	function create$FFmpegUi(deviceType, first, opName, name) {
 		var id = keyFromName(opName, name, deviceType);
-		return $((first ? '<span>capture: </span>' : '<span>  </span>') +
+		return $((first ? '<span>' + (opName || "capture") + ': </span>' : '<span>  </span>') +
 			'<label for="' + id + '">' + (name ? "<bold>" + name + "</bold>'s " : "") + deviceType + '</label>' +
 			'<div class="roundCheckbox">' +
 			'<input id="' + id + '" type="checkbox" onclick="checkboxClick(this)"' + ($("#" + id).is(":checked") ? ' checked="checked"' : '') + ' />' +
@@ -378,11 +378,11 @@ function onLoadHandler() {
 		});
 	}, listStreams = function () {
 		$.ajax({ url: 'http://' + rtmp_hostname + '/rtmp/stat', dataType: "xml" }).then(function (data) {
-			var $xml = $(data), $streams = $xml.find("rtmp server application:has(name)").filter(function () { return $(this).find("name").text() === "rtmp"; }).find("live stream");
+			var $xml = $(data), $streams = $xml.find("rtmp > server > application:has(> name)").filter(function () { return $(this).find("> name").text() === "rtmp"; }).find("> live > stream");
 			function getDeviceType($stream) {
-				var $video = $stream.find("meta video"), $audio;
-				return parseFloat($video.find("width").text()) > 0 && parseFloat($video.find("height").text()) > 0 ? "video" :
-					$stream.find("meta audio").has("*") ? "audio" : "unknown";
+				var $video = $stream.find("> meta > video"), $audio;
+				return parseFloat($video.find("> width").text()) > 0 && parseFloat($video.find("> height").text()) > 0 ? "video" :
+					$stream.find("> meta > audio").has("*") ? "audio" : "unknown";
 			}
 			$("#playbackContainer").empty();
 			$streams.each(function (i, e) {
