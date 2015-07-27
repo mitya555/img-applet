@@ -24,7 +24,8 @@ if ( !window.requestAnimationFrame ) {
 </script>
 <style>
 	.ui-resizable-handle { cursor: nw-resize; }
-	.ui-button { /*float: right;*/ display: inline-block; cursor: pointer; /*margin-bottom: -3px;*/ vertical-align: top; float: right; }
+	.ui-button { /*float: right;*/ display: inline-block; cursor: pointer; /*margin-bottom: -3px;*/ }
+	.ui-right { vertical-align: top; float: right; }
 	input[type=checkbox] { width: 8px; height: 8px; }
 	.roundCheckbox input[type=checkbox] { width: 3px; height: 3px; visibility: hidden; margin: 0; }
 	.roundCheckbox {
@@ -76,7 +77,7 @@ if ( !window.requestAnimationFrame ) {
 	body { color: #508; }
 </style>
 </head>
-<body onload="registerAppletStateHandler()">
+<body>
 <object id="img-applet-ie"
   classid="clsid:8AD9C840-044E-11D1-B3E9-00805F499D93"
   width="100" height="40" style="position:absolute;left:-1000px;top:-1000px;">
@@ -95,18 +96,35 @@ if ( !window.requestAnimationFrame ) {
       debug="yes" />
   </comment>
 </object>
-<div id="deviceContainer"></div>
-<div id="playbackContainer"></div>
-<div id="videoContainer"></div>
+<div id="sign-in-panel">
+	<label for="enter-your-name">Please enter your name</label>
+	<input type="text" id="enter-your-name" />
+	<span class='ui-icon ui-icon-refresh ui-button' title='Enter Your Name' onclick="
+		var val = $.trim($('#enter-your-name').val());
+		if ($('#enter-your-name').val() !== val)
+			$('#enter-your-name').val(val);
+		if (val)
+		{
+			$('#sign-in-panel').css('display', 'none');
+			$('#video-chat-panel').css('display', '');
+			registerAppletStateHandler();
+		}
+	"></span>
+</div>
+<div id="video-chat-panel" style="display:none;">
+	<div id="deviceContainer"></div>
+	<div id="playbackContainer"></div>
+	<div id="videoContainer"></div>
+</div>
 <script>
 
 // global variables
 var applets = [ document.getElementById( 'img-applet' ), document.getElementById( 'img-applet-ie' ) ],
 	_applet,
-	videoCanvas = createVideoCanvas(document.getElementById( 'videoContainer' ), true),
 	sn = 0,
 	ffmpeg_ids = {},
-	devices = {};
+	devices = {},
+	videos = {};
 
 function checkAppletMethod(applet, method) { return applet && (!method || (applet[method] || typeof(applet[method]) === "unknown")); }
 
@@ -162,7 +180,7 @@ function createVideoCanvas (container, resizable) {
 	};
 	return {
 		drawUri:	function (uri) { image[last_img = (last_img + 1) % 2].src = uri; },
-		destroy:	function () { (container.empty || $(container).empty)(); }
+		destroy:	function () { ($videoImageContainer || $(videoImage)).add(image[0], image[1]).remove(); }
 	};
 }
 
@@ -186,6 +204,9 @@ function removeFFmpeg(key) {
 		_applet.removeFFmpegById(ffmpeg_ids[key]);
 		delete ffmpeg_ids[key];
 		delete devices[key];
+		if (videos[key])
+			videos[key].destroy();
+		delete videos[key];
 	}
 }
 
@@ -319,14 +340,16 @@ function onLoadHandler() {
 	// event handler for ready state
 	var rtmp_hostname = window.location.hash && window.location.hash.length > 7 ? window.location.hash.substring(1) : window.location.hostname;
 	// FFmpeg UI functions
-	function keyFromName(opName, name, deviceType) { return (opName || "capture") + "-" + (name || "my") + "-" + deviceType; }
-	function create$FFmpegUi(deviceType, first, opName, name) {
-		var id = keyFromName(opName, name, deviceType);
+	function keyFromName(deviceType, opName, name) { return (opName || "capture") + "-" + (name || "my") + "-" + deviceType; }
+	function getCheckeds() { var checkeds = {}; for (var key in ffmpeg_ids) checkeds[key] = $("#" + key).is(":checked"); return checkeds; }
+	function create$FFmpegUi(deviceType, first, checkeds, opName, name) {
+		if (!checkeds) checkeds = {};
+		var key = keyFromName(deviceType, opName, name);
 		return $((first ? '<span>' + (opName || "capture") + ': </span>' : '<span>  </span>') +
-			'<label for="' + id + '">' + (name ? "<bold>" + name + "</bold>'s " : "") + deviceType + '</label>' +
+			'<label for="' + key + '">' + (name ? "<bold>" + name + "</bold>'s " : "") + deviceType + '</label>' +
 			'<div class="roundCheckbox">' +
-			'<input id="' + id + '" type="checkbox" onclick="checkboxClick(this)"' + ($("#" + id).is(":checked") ? ' checked="checked"' : '') + ' />' +
-			'<label for="' + id + '"></label>' +
+			'<input id="' + key + '" type="checkbox" onclick="checkboxClick(this)"' + (checkeds[key] ? ' checked="checked"' : '') + ' />' +
+			'<label for="' + key + '"></label>' +
 			'</div>');
 	}
 	function updateDeviceUi(deviceType, device) {
@@ -347,6 +370,7 @@ function onLoadHandler() {
 			}
 			//document.getElementById("list-devices").innerHTML = out;
 			// recreate dropdowns
+			var checkeds = getCheckeds();
 			$("#deviceContainer").empty();
 			re = /^\s*Direct\s*Show\s*(video|audio)\s*devices\s*$/i;
 			var re1 = /^\s*Could\s*not\s*enumerate\s*(video|audio)\s*devices\.?\s*$/i;
@@ -354,7 +378,7 @@ function onLoadHandler() {
 			for (var i in arr) {
 				if (re.test(arr[i])) {
 					var deviceType = re.exec(arr[i])[1].toLowerCase();
-					create$FFmpegUi(deviceType, $selects.length == 0).appendTo("#deviceContainer");
+					create$FFmpegUi(deviceType, $selects.length == 0, checkeds).appendTo("#deviceContainer");
 					$selects.push($select = $("<select style='border-width:0;'></select>").appendTo("#deviceContainer").change(function () {
 						updateDeviceUi(deviceType, setDevice(deviceType, $(this).val(), rtmp_hostname));
 					}));
@@ -374,24 +398,33 @@ function onLoadHandler() {
 					$selects[i].css("display", "none");
 			}
 			// add refresh button
-			$("<span class='ui-icon ui-icon-refresh ui-button' title='Refresh Audio/Video Devices'></span>").appendTo("#deviceContainer").click(listDevices);
+			$("<span class='ui-icon ui-icon-refresh ui-button ui-right' title='Refresh Audio/Video Devices'></span>").appendTo("#deviceContainer").click(listDevices);
 		});
 	}, listStreams = function () {
-		$.ajax({ url: 'http://' + rtmp_hostname + '/rtmp/stat', dataType: "xml" }).then(function (data) {
+		$.ajax({
+			url: 'http://' + rtmp_hostname + '/rtmp/stat',
+			cache: false,
+			dataType: "xml"
+		}).then(function (data) {
 			var $xml = $(data), $streams = $xml.find("rtmp > server > application:has(> name)").filter(function () { return $(this).find("> name").text() === "rtmp"; }).find("> live > stream");
 			function getDeviceType($stream) {
 				var $video = $stream.find("> meta > video"), $audio;
 				return parseFloat($video.find("> width").text()) > 0 && parseFloat($video.find("> height").text()) > 0 ? "video" :
 					$stream.find("> meta > audio").has("*") ? "audio" : "unknown";
 			}
+			var checkeds = getCheckeds();
 			$("#playbackContainer").empty();
 			$streams.each(function (i, e) {
-				var $e = $(e), deviceType = getDeviceType($e), opName = "play", name = $e.find("name").text();
-				create$FFmpegUi(deviceType, i == 0, opName, name).appendTo("#playbackContainer");
-				renewFFmpeg(_op["playback_" + deviceType], keyFromName(opName, name, deviceType), 'rtmp://' + rtmp_hostname + '/rtmp/' + name);
+				var $e = $(e), deviceType = getDeviceType($e), opName = "play", rtmp_app = $e.find("name").text(), name = rtmp_app.split("|")[0];
+				create$FFmpegUi(deviceType, i == 0, checkeds, opName, name).appendTo("#playbackContainer");
+				if (!checkeds[keyFromName(deviceType, opName, name)]) {
+					renewFFmpeg(_op["playback_" + deviceType], keyFromName(deviceType, opName, name), 'rtmp://' + rtmp_hostname + '/rtmp/' + rtmp_app);
+					if (deviceType === "video")
+						videos[keyFromName(deviceType, opName, name)] = createVideoCanvas("#video-chat-panel", true);
+				}
 			});
 			// add refresh button
-			$("<span class='ui-icon ui-icon-refresh ui-button' title='Refresh Audio/Video Streams'></span>").appendTo("#playbackContainer").click(listStreams);
+			$("<span class='ui-icon ui-icon-refresh ui-button ui-right' title='Refresh Audio/Video Streams'></span>").appendTo("#playbackContainer").click(listStreams);
 		}, function (error) {
 			var err = error;
 		});
@@ -400,7 +433,9 @@ function onLoadHandler() {
 	listStreams();
 }
 
-function rtmp_app(deviceType) { return deviceType === "video" ? "v" : deviceType === "audio" ? "a" :  "u"; }
+function my_name() { return $('#enter-your-name').val(); }
+
+function rtmp_app_name(deviceType) { var suffix = deviceType === "video" ? "v" : deviceType === "audio" ? "a" :  "u"; return my_name() + '|' + suffix; }
 
 function restoreDevice(deviceType, $dropdown, rtmp_hostname) {
 	var key = "capture-my-" + deviceType, device = devices[key], val;
@@ -411,12 +446,12 @@ function restoreDevice(deviceType, $dropdown, rtmp_hostname) {
 		val = $dropdown.val();
 		if (val) {
 			if (device !== val)
-				renewFFmpeg(_op["capture_" + deviceType], key, val, 'rtmp://' + rtmp_hostname + '/rtmp/' + rtmp_app(deviceType));
+				renewFFmpeg(_op["capture_" + deviceType], key, val, 'rtmp://' + rtmp_hostname + '/rtmp/' + rtmp_app_name(deviceType));
 		} else {
 			removeFFmpeg(key);
 		}
 	} else if (val = $dropdown.val()) {
-		renewFFmpeg(_op["capture_" + deviceType], key, val, 'rtmp://' + rtmp_hostname + '/rtmp/' + rtmp_app(deviceType));
+		renewFFmpeg(_op["capture_" + deviceType], key, val, 'rtmp://' + rtmp_hostname + '/rtmp/' + rtmp_app_name(deviceType));
 	}
 	return val || "";
 }
@@ -425,7 +460,7 @@ function setDevice(deviceType, val, rtmp_hostname) {
 	var key = "capture-my-" + deviceType, device = devices[key];
 	if (val) {
 		if (device !== val)
-			renewFFmpeg(_op["capture_" + deviceType], key, val, 'rtmp://' + rtmp_hostname + '/rtmp/' + rtmp_app(deviceType));
+			renewFFmpeg(_op["capture_" + deviceType], key, val, 'rtmp://' + rtmp_hostname + '/rtmp/' + rtmp_app_name(deviceType));
 	} else if (device) {
 		removeFFmpeg(key);
 	}
@@ -441,21 +476,23 @@ function animate() {
 }
 
 function render() {
-	if (ffmpeg_ids["playback-my-video"]) {
-		var sn_ = _applet.getSN(ffmpeg_ids["playback-my-video"]);
-		if ( sn_ != sn && sn_ > 0 ) {
-			sn = sn_;
-			var dataURI = _applet.getDataURI(ffmpeg_ids["playback-my-video"]);
-			// drop frames accumulated in the queue
+	for (var key in videos) {
+		if (ffmpeg_ids[key] && (_applet.getSN || typeof(_applet.getSN) === "unknown")) {
+			var sn_ = _applet.getSN(ffmpeg_ids[key]);
+			if ( sn_ != sn && sn_ > 0 ) {
+				sn = sn_;
+				var dataURI = _applet.getDataURI(ffmpeg_ids[key]);
+				// drop frames accumulated in the queue
 /*
-			while (_applet.getSN(ffmpeg_ids["playback-my-video"]) > sn) {
-				console.log("dropped frame # " + sn);
-				sn = _applet.getSN(ffmpeg_ids["playback-my-video"]);
-				dataURI = _applet.getDataURI(ffmpeg_ids["playback-my-video"]);
-			}
+				while (_applet.getSN(ffmpeg_ids[key]) > sn) {
+					console.log("dropped frame # " + sn);
+					sn = _applet.getSN(ffmpeg_ids[key]);
+					dataURI = _applet.getDataURI(ffmpeg_ids[key]);
+				}
 */ // we do it in the applet now when drop-unused-frames="yes"
-			// assign image src
-			videoCanvas.drawUri(dataURI);
+				// assign image src
+				videos[key].drawUri(dataURI);
+			}
 		}
 	}
 }

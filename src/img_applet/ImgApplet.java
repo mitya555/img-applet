@@ -242,7 +242,7 @@ public class ImgApplet extends JApplet {
 	public void stop() {
 		
 		for (FFmpegProcess ffmpeg : ffmpegs.values())
-			ffmpeg.stopPlayback();
+			ffmpeg./*stopPlayback*/kill();
 		
 		super.stop();
 	}
