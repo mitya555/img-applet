@@ -527,7 +527,7 @@ public class FFmpegProcess extends Observable {
 //	private volatile boolean ffm_stop;
 
 	private boolean demux_fMP4, dropUnusedFrames;
-	private int bufferSize, vBufferSize, aBufferSize, maxMemoryBufferCount, maxVideoBufferCount, mp3FramesPerChunk;
+	private int bufferSize, vBufferSize, aBufferSize, maxMemoryBufferCount, maxVideoBufferCount, mp3FramesPerChunk, wavAudioLineBufferSize;
 	private double bufferGrowFactor, bufferShrinkThresholdFactor;
 	private MediaStream mediaStream, demuxVideoStream;
 	
@@ -564,6 +564,8 @@ public class FFmpegProcess extends Observable {
 		if (maxVideoBufferCount < 0) maxVideoBufferCount = 300;
 		
 		mp3FramesPerChunk = parseInt(getParameter("mp3-frames-per-chunk"));
+
+		wavAudioLineBufferSize = parseInt(getParameter("wav-audio-line-buffer-size"));
 		
 		return this;
 	}
@@ -751,7 +753,7 @@ public class FFmpegProcess extends Observable {
 			case wav:
 				mediaStream = null;
 				demuxVideoStream = null;
-				final int BUFFER_SIZE = 32;
+				//final int BUFFER_SIZE = 32;
 				SourceDataLine audioLine = null;
 				try (	RIFFInputStream inputStream = new RIFFInputStream(ffmp.getInputStream(), 400);
 						AudioInputStream audioInputStream = AudioSystem.getAudioInputStream(inputStream)) {
@@ -762,7 +764,13 @@ public class FFmpegProcess extends Observable {
 //					debug("inputStream position: " + inputStream.getPosition());
 					audioLine = (SourceDataLine)AudioSystem.getLine(new DataLine.Info(SourceDataLine.class, audioFormat));
 //					debug("audioLine.open(audioFormat);");
-					audioLine.open(audioFormat);
+					debug("applet parameter wav-audio-line-buffer-size = " + wavAudioLineBufferSize);
+					if (wavAudioLineBufferSize > 0)
+						audioLine.open(audioFormat, wavAudioLineBufferSize);
+					else
+						audioLine.open(audioFormat);
+					final int BUFFER_SIZE = audioLine.getBufferSize();
+					debug("audioLine.getBufferSize() = " + BUFFER_SIZE);
 //					debug("audioLine.start();");
 					audioLine.start();
 					debug("Playback started.");
