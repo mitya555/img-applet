@@ -505,7 +505,7 @@ public class FFmpegProcess extends Observable {
     private static boolean strEmpty(String str) { return str == null || str.length() == 0; }
     private static boolean isNo(String str) { return str == null || "No".equalsIgnoreCase(str) || "False".equalsIgnoreCase(str); }
 
-    private boolean DEBUG = true;
+    private boolean DEBUG = true, DEBUG_FFMPEG = false;
     private void debug(String dbg) { if (DEBUG) System.out.println(dbg); }
     private void debug(String dbg, String inf) { if (DEBUG) System.out.println(dbg); else System.out.println(inf); }
 
@@ -527,7 +527,7 @@ public class FFmpegProcess extends Observable {
 //	private volatile boolean ffm_stop;
 
 	private boolean demux_fMP4, dropUnusedFrames;
-	private int bufferSize, vBufferSize, aBufferSize, maxMemoryBufferCount, maxVideoBufferCount, mp3FramesPerChunk, wavAudioLineBufferSize;
+	private int bufferSize, vBufferSize, aBufferSize, maxMemoryBufferCount, maxVideoBufferCount, mp3FramesPerChunk, wavAudioLineBufferSize, wavIntermediateBufferSize;
 	private double bufferGrowFactor, bufferShrinkThresholdFactor;
 	private MediaStream mediaStream, demuxVideoStream;
 	
@@ -546,6 +546,7 @@ public class FFmpegProcess extends Observable {
 		this.params = params;
 		
 		DEBUG = !isNo(getParameter("debug"));
+		DEBUG_FFMPEG = !isNo(getParameter("debug-ffmpeg"));
 		
 		demux_fMP4 = !isNo(getParameter("demux-fMP4"));
 		dropUnusedFrames = !isNo(getParameter("drop-unused-frames"));
@@ -566,6 +567,7 @@ public class FFmpegProcess extends Observable {
 		mp3FramesPerChunk = parseInt(getParameter("mp3-frames-per-chunk"));
 
 		wavAudioLineBufferSize = parseInt(getParameter("wav-audio-line-buffer-size"));
+		wavIntermediateBufferSize = parseInt(getParameter("wav-intermediate-buffer-size"));
 		
 		return this;
 	}
@@ -627,8 +629,13 @@ public class FFmpegProcess extends Observable {
 		addOptNV("probesize", command);
 		addOptNV("r", command);
 		addOptN_("re", command);
-		addOptNV("audio_buffer_size", command);
 		addOptNV("f:i", "f", command/*, "flv"*/);
+		addOptNV("show_region", command);
+		addOptNV("framerate", command);
+		addOptNV("offset_x", command);
+		addOptNV("offset_y", command);
+		addOptNV("video_size", command);
+		addOptNV("audio_buffer_size", command);
 		addOptNV("list_options", command);
 		addOptNV("flv_metadata", command);
 		addOptNV("rtmp_buffer", command);
@@ -673,7 +680,7 @@ public class FFmpegProcess extends Observable {
 //		pb.redirectOutput(ProcessBuilder.Redirect.appendTo(log));
 //		assert pb.redirectInput() == ProcessBuilder.Redirect.PIPE;
 //		assert pb.redirectOutput().file() == log;
-		if (!DEBUG && !useStderr)
+		if (!DEBUG_FFMPEG && !useStderr)
 			pb.redirectError(ProcessBuilder.Redirect.INHERIT);
 		try {
 			ffmp = pb.start();
@@ -705,7 +712,7 @@ public class FFmpegProcess extends Observable {
 			e.printStackTrace();
 		}
 //		assert ffmp.getInputStream().read() == -1;
-		if (DEBUG && !useStderr)
+		if (DEBUG_FFMPEG && !useStderr)
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
@@ -769,8 +776,9 @@ public class FFmpegProcess extends Observable {
 						audioLine.open(audioFormat, wavAudioLineBufferSize);
 					else
 						audioLine.open(audioFormat);
-					final int BUFFER_SIZE = audioLine.getBufferSize();
-					debug("audioLine.getBufferSize() = " + BUFFER_SIZE);
+					int audioLineBufferSize = audioLine.getBufferSize();
+					debug("audioLine.getBufferSize() = " + audioLineBufferSize);
+					final int BUFFER_SIZE = wavIntermediateBufferSize > 0 ? wavIntermediateBufferSize : audioLineBufferSize;
 //					debug("audioLine.start();");
 					audioLine.start();
 					debug("Playback started.");
