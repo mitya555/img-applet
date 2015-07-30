@@ -27,6 +27,7 @@ if ( !window.requestAnimationFrame ) {
  */
 function deriveFrom (child, parent) {
     child.prototype = Object.create(parent.prototype);
+    child.prototype.baseclass = parent.prototype;
     child.prototype.constructor = child; // Reset the constructor from parent to child
 }
 </script>
@@ -82,7 +83,8 @@ function deriveFrom (child, parent) {
 		background: #bbb;
 		cursor: default;
 	}
-	body { color: #508; }
+	/*body { color: #508; }*/
+	.contRightTop { width: 200px; float: right; clear: all; }
 </style>
 </head>
 <body>
@@ -120,8 +122,8 @@ function deriveFrom (child, parent) {
 	"></span>
 </div>
 <div id="video-chat-panel" style="display:none;">
-	<div id="deviceContainer"></div>
-	<div id="playbackContainer"></div>
+	<div id="deviceContainer" class="contRightTop"></div>
+	<div id="playbackContainer" class="contRightTop"></div>
 </div>
 <script>
 
@@ -375,21 +377,28 @@ function callFFmpeg(op, p1) {
 	return defer.promise();
 }
 
+function getMyName() { return $('#enter-your-name').val(); }
+
+function getMyRtmpAppName(deviceType) { return getMyName() + '|' + deviceType; }
+
+function getStreamInfo(rtmpAppName) { var tmp = rtmpAppName.split("|"); return { name: tmp[0], deviceType: tmp[1] }; }
+
 function onLoadHandler() {
 	// event handler for ready state
 	var rtmp_hostname = window.location.hash && window.location.hash.length > 7 ? window.location.hash.substring(1) : window.location.hostname;
+	function getRtmpUrl(rtmp_app) { return 'rtmp://' + rtmp_hostname + '/rtmp/' + rtmp_app; }
 	// FFmpeg UI functions
-	function keyFromNames(deviceTypeName, opName, name) { return (opName || "capture") + "-" + (name || "my") + "-" + deviceTypeName; }
-	function namesFromKey(key) { var tmp = key.split('-'); return { opName: tmp[0], name: tmp[1], deviceTypeName: tmp[2] }; }
+	function keyFromNames(deviceType, opName, name) { return (opName || "capture") + "-" + (name || "my") + "-" + deviceType; }
+	function namesFromKey(key) { var tmp = key.split('-'); return { opName: tmp[0], name: tmp[1], deviceType: tmp[2] }; }
 	function getCheckeds() { var checkeds = {}; for (var key in ffmpeg_ids) checkeds[key] = $("#" + key).is(":checked"); return checkeds; }
-	function create$ffmpegUi(deviceTypeName, checkeds, opName, name) {
+	function create$ffmpegUi(deviceType, checkeds, opName, name) {
 		if (!checkeds) checkeds = {};
-		var key = keyFromNames(deviceTypeName, opName, name), 
-			icon = '<i class="fa fa-' + (deviceTypeName=='audio'?'microphone':deviceTypeName=='video'?'video-camera':deviceTypeName=='screen'?'desktop':'bug') +
+		var key = keyFromNames(deviceType, opName, name), 
+			icon = '<i class="fa fa-' + (deviceType=='audio'?'microphone':deviceType=='video'?'video-camera':deviceType=='screen'?'desktop':'bug') +
 			'" style="cursor:default;/*color:green;*/vertical-align:middle;"></i>';
 		return $('<span> </span>' +
 			'<label for="' + key + '">' + (name ? "<b>" + name + "</b>'s " : "") +
-			//deviceTypeName +
+			//deviceType +
 			icon +
 			'</label>' +
 			'<span> </span>' +
@@ -402,48 +411,91 @@ function onLoadHandler() {
 	var listDevices = function () {
 		$("#deviceContainer select").css("visibility", "hidden");
 		callFFmpeg(_op.list_devices).then(function (res) {
-			// parse output
-			var re = /\[\s*dshow\s*@\s*[a-fA-F0-9]+\s*\]\s*"?(.*?)"?\s*\r?\n/ig, match, arr = [];
-			while ((match = re.exec(res)) !== null) {
-				arr.push(match[1]);
-			}
-			// recreate dropdowns
-			var checkeds = getCheckeds();
-			$("#deviceContainer").empty();
-			re = /^\s*Direct\s*Show\s*(video|audio)\s*devices\s*$/i;
-			var re1 = /^\s*Could\s*not\s*enumerate\s*(video|audio)\s*devices\.?\s*$/i;
-			var deviceTypes = [];
+			// DeviceType class
 			function DeviceType(deviceType) {
 				this.deviceType = deviceType;
 				this.$ffmpegUi = create$ffmpegUi(deviceType, checkeds);
 			}
-			DeviceType.prototype.appendTo = function(container) { this.$ffmpegUi.appendTo(container); if (this.$select) this.$select.appendTo(container); return this; };
+			DeviceType.prototype.appendTo = function(container) { this.$ffmpegUi.appendTo(container); return this; };
 			DeviceType.prototype.renew = function() {
 				var key = keyFromNames(this.deviceType);
 				if (!checkeds[key])
-					renewFFmpeg(_op["capture_" + this.deviceType], key, 'rtmp://' + rtmp_hostname + '/rtmp/' + getRtmpAppName(this.deviceType));
+					renewFFmpeg(_op["capture_" + this.deviceType], key, getRtmpUrl(getMyRtmpAppName(this.deviceType)));
 			};
-			function DirectShowDeviceType(deviceType) {
-				DeviceType.apply(this, arguments);
-				this.$select = DirectShowDeviceType.$select = $("<select style='border-width:0;'></select>").change(function () {
-					updateDirectShowDeviceUi(deviceType, setDirectShowDevice(deviceType, $(this).val(), rtmp_hostname));
+			// DirectShowDevice class
+			deriveFrom(DirectShowDevice, DeviceType);
+			function DirectShowDevice(deviceType) {
+				this.baseclass.constructor.call(this, deviceType);
+				var thisDevice = this;
+				this.$select = DirectShowDevice.$select = $("<select style='border-width:0;'></select>").change(function () {
+					thisDevice.updateUi(setDirectShowDevice(deviceType, $(this).val(), rtmp_hostname));
 				});
 			}
-			deriveFrom(DirectShowDeviceType, DeviceType);
-			DirectShowDeviceType.prototype.renew = function() {
-				updateDirectShowDeviceUi(this.deviceType, restoreDirectShowDevice(this.deviceType, this.$select, rtmp_hostname));
+			DirectShowDevice.prototype.appendTo = function(container) { this.baseclass.appendTo.call(this, container); this.$select.appendTo(container); return this; };
+			DirectShowDevice.prototype.renew = function() {
+				this.updateUi(this.restoreDeviceName());
 				if (this.$select.find("option").filter(function () { return this.value; }).length < 2)
 					this.$select.css("display", "none");
 			};
+			DirectShowDevice.prototype.updateUi = function(deviceName) {
+				var key = keyFromNames(this.deviceType);
+				var $checkbox = $("#" + key).prop("disabled", !deviceName);
+				if (!deviceName)
+					$checkbox.prop("checked", false);
+				var $label = $("label[for=" + key + "]");
+				$label/*.add($label.find("*"))*/.attr("title", deviceName);
+			}
+			DirectShowDevice.prototype.renewFFmpeg = function(key, val) { renewFFmpeg(_op["capture_" + this.deviceType], key, val, getRtmpUrl(getMyRtmpAppName(this.deviceType))); }
+			DirectShowDevice.prototype.restoreDeviceName = function() {
+				var key = keyFromNames(this.deviceType), deviceName = devices[key], val;
+				if (deviceName) {
+					if (this.$select.find("option").filter(function () { return this.value === deviceName; }).length > 0) {
+						this.$select.val(deviceName);
+					}
+					val = this.$select.val();
+					if (val) {
+						if (device !== val)
+							this.renewFFmpeg(key, val);
+					} else {
+						removeFFmpeg(key);
+					}
+				} else if (val = this.$select.val()) {
+					this.renewFFmpeg(key, val);
+				}
+				return val || "";
+			}
+			DirectShowDevice.prototype.setDeviceName = function(val) {
+				var key = keyFromNames(this.deviceType), deviceName = devices[key];
+				if (val) {
+					if (deviceName !== val)
+						this.renewFFmpeg(key, val);
+				} else if (deviceName) {
+					removeFFmpeg(key);
+				}
+				return val || "";
+			}
+			
+			// recreate UI
+			var checkeds = getCheckeds();
+			$("#deviceContainer").empty();
+			var deviceTypes = [];
+			// parse DirectShow output
+			var re = /\[\s*dshow\s*@\s*[a-fA-F0-9]+\s*\]\s*"?(.*?)"?\s*\r?\n/ig, match, arr = [];
+			while ((match = re.exec(res)) !== null) {
+				arr.push(match[1]);
+			}
+			re = /^\s*Direct\s*Show\s*(video|audio)\s*devices\s*$/i;
+			var re1 = /^\s*Could\s*not\s*enumerate\s*(video|audio)\s*devices\.?\s*$/i;
+			// add DirectShow devices
 			for (var i in arr) {
 				if (re.test(arr[i])) {
 					var deviceType = re.exec(arr[i])[1].toLowerCase();
-					deviceTypes.push(new DirectShowDeviceType(deviceType));
-					$("<option></option>").attr({ "value": "", "disabled": "disabled" }).text(arr[i]).appendTo(DirectShowDeviceType.$select);
+					deviceTypes.push(new DirectShowDevice(deviceType));
+					$("<option></option>").attr({ "value": "", "disabled": "disabled" }).text(arr[i]).appendTo(DirectShowDevice.$select);
 				} else if (re1.test(arr[i])) {
-					$("<option></option>").attr({ "value": "", "disabled": "disabled" }).text(arr[i]).appendTo(DirectShowDeviceType.$select);
+					$("<option></option>").attr({ "value": "", "disabled": "disabled" }).text(arr[i]).appendTo(DirectShowDevice.$select);
 				} else {
-					$("<option></option>").attr("value", arr[i]).text(arr[i]).appendTo(DirectShowDeviceType.$select);
+					$("<option></option>").attr("value", arr[i]).text(arr[i]).appendTo(DirectShowDevice.$select);
 				}
 			}
 			// add screen grab
@@ -453,12 +505,14 @@ function onLoadHandler() {
 				function deviceTypeOrder(a) { return a==="audio"?1:a==="video"?2:a==="screen"?3:4; }
 				return deviceTypeOrder(a.deviceType) - deviceTypeOrder(b.deviceType);
 			});
+			$("<span style='width:170px;display:inline-block;text-align:center;'>Capture</span>").appendTo("#deviceContainer");
+			// add refresh button
+			$("<span class='ui-icon ui-icon-refresh ui-button ui-right' title='Refresh Audio/Video Devices'></span>").appendTo("#deviceContainer").click(listDevices);
+			$("<br />").appendTo("#deviceContainer");
 			// try to restore current devices
 			for (var i = 0; i < deviceTypes.length; i++) {
 				deviceTypes[i].appendTo("#deviceContainer").renew();
 			}
-			// add refresh button
-			$("<span class='ui-icon ui-icon-refresh ui-button ui-right' title='Refresh Audio/Video Devices'></span>").appendTo("#deviceContainer").click(listDevices);
 		});
 	}, listStreams = function () {
 		$.ajax({
@@ -467,7 +521,7 @@ function onLoadHandler() {
 			dataType: "xml"
 		}).then(function (data) {
 			var $xml = $(data), $streams = $xml.find("rtmp > server > application:has(> name)").filter(function () { return $(this).find("> name").text() === "rtmp"; }).find("> live > stream");
-			function getDeviceType($stream) {
+			function getStreamType($stream) {
 				var $video = $stream.find("> meta > video"), $audio;
 				return parseFloat($video.find("> width").text()) > 0 && parseFloat($video.find("> height").text()) > 0 ? "video" : $stream.find("> meta > audio").has("*") ? "audio" : "unknown";
 			}
@@ -479,11 +533,13 @@ function onLoadHandler() {
 					removeFFmpeg(key);
 				}
 			}
+			$("<span style='/*width:70px;display:inline-block;*/'>Play:</span>").appendTo("#playbackContainer");
 			$streams.each(function (i, e) {
-				var $e = $(e), deviceType = getDeviceType($e), rtmp_app = $e.find("name").text(), info = getStreamInfo(rtmp_app);
-				create$ffmpegUi(info.deviceTypeName, checkeds, "play", info.name).appendTo("#playbackContainer");
-				if (!checkeds[keyFromNames(info.deviceTypeName, "play", info.name)]) {
-					renewFFmpeg(_op["playback_" + deviceType], keyFromNames(info.deviceTypeName, "play", info.name), 'rtmp://' + rtmp_hostname + '/rtmp/' + rtmp_app, "#video-chat-panel");
+				var $e = $(e), rtmp_app = $e.find("name").text(), info = getStreamInfo(rtmp_app);
+				create$ffmpegUi(info.deviceType, checkeds, "play", info.name).appendTo("#playbackContainer");
+				var key = keyFromNames(info.deviceType, "play", info.name);
+				if (!checkeds[key]) {
+					renewFFmpeg(_op["playback_" + getStreamType($e)], key, getRtmpUrl(rtmp_app), "#video-chat-panel");
 				}
 			});
 			// add refresh button
@@ -494,50 +550,6 @@ function onLoadHandler() {
 	};
 	listDevices();
 	listStreams();
-}
-
-function getMyName() { return $('#enter-your-name').val(); }
-
-function getRtmpAppName(deviceTypeName) { return getMyName() + '|' + deviceTypeName; }
-
-function getStreamInfo(rtmpAppName) { var tmp = rtmpAppName.split("|"); return { name: tmp[0], deviceTypeName: tmp[1] }; }
-
-function restoreDirectShowDevice(deviceType, $dropdown, rtmp_hostname) {
-	var key = "capture-my-" + deviceType, device = devices[key], val;
-	if (device) {
-		if ($dropdown.find("option").filter(function () { return this.value === device; }).length > 0) {
-			$dropdown.val(device);
-		}
-		val = $dropdown.val();
-		if (val) {
-			if (device !== val)
-				renewFFmpeg(_op["capture_" + deviceType], key, val, 'rtmp://' + rtmp_hostname + '/rtmp/' + getRtmpAppName(deviceType));
-		} else {
-			removeFFmpeg(key);
-		}
-	} else if (val = $dropdown.val()) {
-		renewFFmpeg(_op["capture_" + deviceType], key, val, 'rtmp://' + rtmp_hostname + '/rtmp/' + getRtmpAppName(deviceType));
-	}
-	return val || "";
-}
-
-function setDirectShowDevice(deviceType, val, rtmp_hostname) {
-	var key = "capture-my-" + deviceType, device = devices[key];
-	if (val) {
-		if (device !== val)
-			renewFFmpeg(_op["capture_" + deviceType], key, val, 'rtmp://' + rtmp_hostname + '/rtmp/' + getRtmpAppName(deviceType));
-	} else if (device) {
-		removeFFmpeg(key);
-	}
-	return val || "";
-}
-
-function updateDirectShowDeviceUi(deviceTypeName, device) {
-	var $checkbox = $("#capture-my-" + deviceTypeName).prop("disabled", !device);
-	if (!device)
-		$checkbox.prop("checked", false);
-	var $label = $("label[for=capture-my-" + deviceTypeName + "]");
-	$label/*.add($label.find("*"))*/.attr("title", device);
 }
 
 // start the loop				
