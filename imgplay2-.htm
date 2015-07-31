@@ -2,10 +2,12 @@
 <html>
 <head>
 <title>imgplay2-</title>
+<link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
 <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css">
 <link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
 <script src="//code.jquery.com/jquery-1.11.3.min.js"></script>
 <script src="//code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
+<script src="//maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
 <script>
 /**
  * Provides requestAnimationFrame in a cross browser way.
@@ -84,7 +86,7 @@ function deriveFrom (child, parent) {
 		cursor: default;
 	}
 	/*body { color: #508; }*/
-	.contRightTop { width: 200px; float: right; clear: all; }
+	.contRightTop { width: 250px; float: right; clear: both; }
 </style>
 </head>
 <body>
@@ -408,7 +410,7 @@ function onLoadHandler() {
 			'</div>' +
 			'<span>&nbsp;</span>');
 	}
-	var listDevices = function () {
+	function listDevices () {
 		$("#deviceContainer select").css("visibility", "hidden");
 		callFFmpeg(_op.list_devices).then(function (res) {
 			// DeviceType class
@@ -426,9 +428,9 @@ function onLoadHandler() {
 			deriveFrom(DirectShowDevice, DeviceType);
 			function DirectShowDevice(deviceType) {
 				this.baseclass.constructor.call(this, deviceType);
-				var thisDevice = this;
+				var self = this;
 				this.$select = DirectShowDevice.$select = $("<select style='border-width:0;'></select>").change(function () {
-					thisDevice.updateUi(setDirectShowDevice(deviceType, $(this).val(), rtmp_hostname));
+					self.updateUi(self.setDeviceName($(this).val()));
 				});
 			}
 			DirectShowDevice.prototype.appendTo = function(container) { this.baseclass.appendTo.call(this, container); this.$select.appendTo(container); return this; };
@@ -436,6 +438,17 @@ function onLoadHandler() {
 				this.updateUi(this.restoreDeviceName());
 				if (this.$select.find("option").filter(function () { return this.value; }).length < 2)
 					this.$select.css("display", "none");
+				else {
+					var key = keyFromNames(this.deviceType);
+					var $label = $("label[for=" + key + "]:first");
+					var $wrapAll = $('<div class="dropdown" style="display:inline-block;"></div>').insertAfter($label);
+					var $trigger = $('<a id="'+ key + '-label" href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"></a>')
+						//.append($label.contents())
+						.append('<span class="caret"></span>')
+						.appendTo($wrapAll);
+					var $wrap = $('<div class="dropdown-menu pull-right" aria-labelledby="'+ key + '-label"></div>').appendTo($wrapAll);
+					this.$select/*.detach()*/.appendTo($wrap);
+				}
 			};
 			DirectShowDevice.prototype.updateUi = function(deviceName) {
 				var key = keyFromNames(this.deviceType);
@@ -505,16 +518,18 @@ function onLoadHandler() {
 				function deviceTypeOrder(a) { return a==="audio"?1:a==="video"?2:a==="screen"?3:4; }
 				return deviceTypeOrder(a.deviceType) - deviceTypeOrder(b.deviceType);
 			});
-			$("<span style='width:170px;display:inline-block;text-align:center;'>Capture</span>").appendTo("#deviceContainer");
+			var $head = $("<div style='text-align:center;background-color:cyan;'>Capture</div>").appendTo("#deviceContainer");
 			// add refresh button
-			$("<span class='ui-icon ui-icon-refresh ui-button ui-right' title='Refresh Audio/Video Devices'></span>").appendTo("#deviceContainer").click(listDevices);
-			$("<br />").appendTo("#deviceContainer");
+			$("<span class='ui-icon ui-icon-refresh ui-button ui-right' title='Refresh Audio/Video Devices'></span>").appendTo($head).click(listDevices);
 			// try to restore current devices
+			var $line = $("<div style='text-align:right;'></span>").appendTo("#deviceContainer");
+			$("<span style='float:left;'>" + getMyName() + ":</span>").appendTo($line);
 			for (var i = 0; i < deviceTypes.length; i++) {
-				deviceTypes[i].appendTo("#deviceContainer").renew();
+				deviceTypes[i].appendTo($line).renew();
 			}
 		});
-	}, listStreams = function () {
+	}
+	function listStreams () {
 		$.ajax({
 			url: 'http://' + rtmp_hostname + '/rtmp/stat',
 			cache: false,
@@ -547,7 +562,7 @@ function onLoadHandler() {
 		}, function (error) {
 			var err = error;
 		});
-	};
+	}
 	listDevices();
 	listStreams();
 }
@@ -581,7 +596,11 @@ function render() {
 		}
 	}
 }
-</script>
 
+$( document ).on( "click", ".dropdown-menu select", function() {
+	event.stopPropagation();
+});
+
+</script>
 </body>
 </html>
