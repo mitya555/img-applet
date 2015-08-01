@@ -28,9 +28,30 @@ if ( !window.requestAnimationFrame ) {
  * OOP class inheritance.
  */
 function deriveFrom (child, parent) {
-    child.prototype = Object.create(parent.prototype);
-    child.prototype.baseclass = parent.prototype;
-    child.prototype.constructor = child; // Reset the constructor from parent to child
+	child.prototype = Object.create(parent.prototype);
+	child.prototype.baseclass = parent.prototype;
+	child.prototype.constructor = child; // Reset the constructor from parent to child
+}
+/**
+ * String to hex and hex to string.
+ */
+String.prototype.hexEncode = function () {
+	var hex, i;
+	var result = "";
+	for (i=0; i<this.length; i++) {
+		hex = this.charCodeAt(i).toString(16);
+		result += ("000"+hex).slice(-4);
+	}
+	return result;
+}
+String.prototype.hexDecode = function () {
+	var j;
+	var hexes = this.match(/.{1,4}/g) || [];
+	var back = "";
+	for(j = 0; j<hexes.length; j++) {
+		back += String.fromCharCode(parseInt(hexes[j], 16));
+	}
+	return back;
 }
 </script>
 <style>
@@ -420,8 +441,8 @@ function onLoadHandler() {
 	var rtmp_hostname = window.location.hash && window.location.hash.length > 7 ? window.location.hash.substring(1) : window.location.hostname;
 	function getRtmpUrl(rtmp_app) { return 'rtmp://' + rtmp_hostname + '/rtmp/' + encodeURIComponent(rtmp_app); }
 	// FFmpeg UI functions
-	function keyFromNames(deviceType, opName, name) { return encodeURIComponent(opName || "capture") + ":" + encodeURIComponent(name || "my") + ":" + encodeURIComponent(deviceType); }
-	function namesFromKey(key) { var tmp = key.split(':'); return { opName: decodeURIComponent(tmp[0]), name: decodeURIComponent(tmp[1]), deviceType: decodeURIComponent(tmp[2]) }; }
+	function keyFromNames(deviceType, opName, name) { return (opName || "capture") + "-" + (name || "my").hexEncode() + "-" + deviceType; }
+	function namesFromKey(key) { var tmp = key.split('-'); return { opName: tmp[0], name: tmp[1].hexDecode(), deviceType: tmp[2] }; }
 	function getCheckeds() { var checkeds = {}; for (var key in ffmpeg_ids) checkeds[key] = $("#" + jqId(key)).is(":checked"); return checkeds; }
 	function create$ffmpegUi(deviceType, checkeds, opName, name) {
 		if (!checkeds) checkeds = {};
@@ -461,10 +482,10 @@ function onLoadHandler() {
 				var key = keyFromNames(deviceType);
 				this.$dropdown = $(
 					'<div class="dropdown">' +
-						'<a id="'+ key + ':trigger" href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">' +
+						'<a id="'+ key + '-trigger" href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">' +
 							'<span class="caret"></span>' +
 						'</a>' +
-						'<div class="dropdown-menu pull-right" aria-labelledby="'+ key + ':trigger">' +
+						'<div class="dropdown-menu pull-right" aria-labelledby="'+ key + '-trigger">' +
 							'<select></select>' +
 						'</div>' +
 					'</div>');
