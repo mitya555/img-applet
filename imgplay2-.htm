@@ -68,6 +68,7 @@ function decodeId (str) {
 		.replace(/(^|[^:]):([A-Fa-f0-9]{4})/g, function (match, p1, p2) { return p1 + String.fromCharCode(parseInt(p2, 16)); })
 		.replace(/::|\.\./g, function (match) { return String.fromCharCode(match.charCodeAt(0)); });
 }
+function jqId ( id ) { return id.replace( /(:|\.|\[|\]|,)/g, "\\$1" ); }
 </script>
 <style>
 	.ui-resizable-handle { cursor: nw-resize; }
@@ -126,7 +127,11 @@ function decodeId (str) {
 
 	/*body { color: #508; }*/
 
-	.contRightTop { width: 250px; float: right; clear: both; }
+	.contCenter {  text-align: center; /*margin-top: 50%; float: none;*/ }
+
+	.contRightTop { width: 20%; float: right; clear: both; margin: 4px 4px 0px 0px; min-width: 85px; }
+	.boxHead { text-align: center; white-space: nowrap; min-width: 85px; }
+	#playbackContainer .ui-icon { background-image: url("//code.jquery.com/ui/1.11.4/themes/black-tie/images/ui-icons_ededed_256x240.png"); }
 
 	.contCheckbox { white-space: nowrap; }
 	.contCheckbox input[type=checkbox] { /*width: 3px; height: 3px; visibility: hidden; margin: 0;*/ display: none; }
@@ -171,8 +176,10 @@ function decodeId (str) {
   </comment>
 </object>
 <div id="sign-in-panel">
+<div class="container">
+<div class="form-inline form-group contCenter">
 	<label for="enter-your-name">Please enter your name</label>
-	<input type="text" id="enter-your-name" />
+	<input class="form-control" type="text" id="enter-your-name" />
 	<span class='ui-icon ui-icon-refresh ui-button' title='Enter Your Name' onclick="
 		var val = $.trim($('#enter-your-name').val());
 		if ($('#enter-your-name').val() !== val)
@@ -184,6 +191,8 @@ function decodeId (str) {
 			registerAppletStateHandler();
 		}
 	"></span>
+</div>
+</div>
 </div>
 <div id="video-chat-panel" style="display:none;">
 	<div id="deviceContainer" class="contRightTop"></div>
@@ -449,8 +458,6 @@ function getStreamInfo(rtmpAppName) { var p = rtmpAppName.lastIndexOf("|"); retu
 
 function deviceTypeOrder(a) { return a === "audio" ? 1 : a === "video" ? 2 : a === "screen" ? 3 : 4; }
 
-function jqId ( id ) { return id.replace( /(:|\.|\[|\]|,)/g, "\\$1" ); }
-
 function onLoadHandler() {
 	// event handler for ready state
 	var rtmp_hostname = window.location.hash && window.location.hash.length > 7 ? window.location.hash.substring(1) : window.location.hostname;
@@ -582,7 +589,7 @@ function onLoadHandler() {
 			deviceTypes.sort(function(a, b) {
 				return deviceTypeOrder(a.deviceType) - deviceTypeOrder(b.deviceType);
 			});
-			var $head = $("<div style='text-align:center;background-color:cyan;'>Capture</div>").appendTo("#deviceContainer");
+			var $head = $("<div class='boxHead' style='background-color:cyan;'>Capture</div>").appendTo("#deviceContainer");
 			// add refresh button
 			$("<span class='ui-icon ui-icon-refresh ui-button ui-right' title='Refresh Audio/Video Devices'></span>").appendTo($head).click(listDevices);
 			// try to restore current devices
@@ -621,7 +628,7 @@ function onLoadHandler() {
 				return a.name > b.name ? 1 : a.name < b.name ? -1 : deviceTypeOrder(a.deviceType) - deviceTypeOrder(b.deviceType);
 			});
 			// add header
-			var $head = $("<div style='text-align:center;background-color:magenta;color:white;'>Playback</div>").appendTo("#playbackContainer");
+			var $head = $("<div class='boxHead' style='background-color:magenta;color:white;'>Playback</div>").appendTo("#playbackContainer");
 			// add refresh button
 			$("<span class='ui-icon ui-icon-refresh ui-button ui-right' title='Refresh Audio/Video Streams'></span>").appendTo($head).click(listStreams);
 			var name = "", $line;
@@ -677,6 +684,12 @@ function render() {
 
 $( document ).on( "click", ".dropdown-menu select", function() {
 	event.stopPropagation();
+});
+
+$(function () {
+	function resize() { $('.contCenter').each(function () { var $this = $(this); $this.css('margin-top', ($(document).height() - $this.height()) / 2); }); }
+	$(window).resize(resize);
+	resize();
 });
 
 </script>
