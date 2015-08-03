@@ -456,7 +456,11 @@ function getMyRtmpAppName(deviceType) { return getMyName() + '|' + deviceType; }
 
 function getStreamInfo(rtmpAppName) { var p = rtmpAppName.lastIndexOf("|"); return { name: rtmpAppName.substring(0, p > -1 ? p : rtmpAppName.length), deviceType: p > -1 ? rtmpAppName.substring(p + 1) : "" }; }
 
-function deviceTypeOrder(a) { return a === "audio" ? 1 : a === "video" ? 2 : a === "screen" ? 3 : 4; }
+function deviceTypeOrder(a) { return a === "audio" ? 1 : a === "video" ? 2 : a === "screen" ? 3 : 101; }
+
+function orderToDeviceType(n) { return n == 1 ? "audio" : n == 2 ? "video" : n == 3 ? "screen" : "unknown"; }
+
+function deviceToStreamType(a) { return a === "audio" ? "audio" : a === "video" ? "video" : a === "screen" ? "video" : "video"; }
 
 function onLoadHandler() {
 	// event handler for ready state
@@ -631,12 +635,21 @@ function onLoadHandler() {
 			var $head = $("<div class='boxHead' style='background-color:magenta;color:white;'>Playback</div>").appendTo("#playbackContainer");
 			// add refresh button
 			$("<span class='ui-icon ui-icon-refresh ui-button ui-right' title='Refresh Audio/Video Streams'></span>").appendTo($head).click(listStreams);
-			var name = "", $line;
+			var name = "", $line, cnt;
 			for (var i = 0; i < rtmpStreams.length; i++) {
 				var rtmpStream = rtmpStreams[i];
 				if (name !== rtmpStream.name) {
 					name = rtmpStream.name;
 					$line = $("<div style='text-align:right;'><span style='float:left;font-weight:bold;'>" + name + "</span></div>").appendTo("#playbackContainer");
+					cnt = 1;
+				}
+				// add missing devices
+				var deviceOrder = deviceTypeOrder(rtmpStream.deviceType), deviceType = orderToDeviceType(cnt);
+				if (deviceOrder < 100) {
+					if (deviceOrder > cnt) {
+						rtmpStreams.splice(i, 0, rtmpStream = { rtmp_app: name + '|' + deviceType, streamType: deviceToStreamType(deviceType), deviceType: deviceType, name: name });
+					}
+					cnt++;
 				}
 				create$ffmpegUi(rtmpStream.deviceType, checkeds, "play", name).css("margin-left", "10px").appendTo($line);
 				var key = keyFromNames(rtmpStream.deviceType, "play", name);
