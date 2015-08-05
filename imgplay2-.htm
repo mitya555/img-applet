@@ -152,6 +152,12 @@ function strCompare(str1, str2) { return str1 > str2 ? 1 : str1 < str2 ? -1 : 0;
 		color: #bbb;
 		cursor: default;
 	}
+	.contCheckbox.unconfirmed input[type=checkbox] + label {
+		color: #bbb;
+	}
+	.contCheckbox.unconfirmed input[type=checkbox]:checked + label {
+		color: #e05050;
+	}
 
 	.dropdown { display: inline-block; }
 	.dropdown select { border-width: 0; }	
@@ -397,7 +403,7 @@ function renewFFmpeg(op, key, p1, p2) {
 	case _op.capture_screen: recreateFFmpeg( key, 'checkboxCallback', [
 			//'ffmpeg-r', '25',
 			'ffmpeg-f:i', 'gdigrab',
-			'ffmpeg-video_size', '800x600',
+			'ffmpeg-video_size', '1024x768', // '800x600',
 			'ffmpeg-show_region', '1',
 			'ffmpeg-i', 'desktop',
 			'ffmpeg-c:v', 'libx264',
@@ -488,6 +494,7 @@ function onLoadHandler() {
 				//'<span>&nbsp;</span>' +
 			'</span>');
 	}
+	var ldCnt = 0, lsCnt = 0, cardinalPoints = [ "n", "e", "s", "w" ];
 	function listDevices () {
 		$("#deviceContainer select").css("visibility", "hidden");
 		callFFmpeg(_op.list_devices).then(function (res) {
@@ -595,13 +602,15 @@ function onLoadHandler() {
 				return deviceTypeOrder(a.deviceType) - deviceTypeOrder(b.deviceType);
 			});
 			var $head = $("<div class='boxHead' style='background-color:cyan;'>Capture</div>").appendTo("#deviceContainer");
-			// add refresh button
-			$("<span class='ui-icon ui-icon-refresh ui-button ui-right' title='Refresh Audio/Video Devices'></span>").appendTo($head).click(listDevices);
 			// try to restore current devices
 			var $line = $("<div style='text-align:right;'><span style='float:left;font-weight:bold;'>" + getMyName() + "</span></div>").appendTo("#deviceContainer");
 			for (var i = 0; i < deviceTypes.length; i++) {
 				deviceTypes[i].appendTo($line).renew();
 			}
+			// add refresh button
+			//$("<span class='ui-icon ui-icon-refresh ui-button ui-right' title='Refresh Audio/Video Devices'></span>").appendTo($head).click(listDevices);
+			//$("<span style='display:inline-block;font-size:80%;vertical-align:bottom;float:right;'>" + new Date().toLocaleTimeString() + "</span>").appendTo($head);
+			$("<span class='ui-icon ui-icon-arrowrefresh-1-" + cardinalPoints[(ldCnt++) % 4] + " ui-button ui-right' title='Refresh Audio/Video Devices'></span>").appendTo($head).click(listDevices);
 		});
 	}
 	function listStreams () {
@@ -610,7 +619,7 @@ function onLoadHandler() {
 			cache: false,
 			dataType: "xml"
 		}).then(function (data) {
-			var $xml = $(data), $streams = $xml.find("rtmp > server > application:has(> name)").filter(function () { return $(this).find("> name").text() === "rtmp"; }).find("> live > stream");
+			var $xml = $(data), $streams = $xml.find("rtmp > server > application:has(> name)").filter(function () { return $(this).find("> name").text() === "rtmp"; }).find("> live > stream:has(> publishing)");
 			function getStreamType($stream) {
 				var $video = $stream.find("> meta > video"), $audio;
 				return parseFloat($video.find("> width").text()) > 0 && parseFloat($video.find("> height").text()) > 0 ? "video" : $stream.find("> meta > audio").has("*") ? "audio" : "unknown";
@@ -634,8 +643,6 @@ function onLoadHandler() {
 			});
 			// add header
 			var $head = $("<div class='boxHead' style='background-color:magenta;color:white;'>Playback</div>").appendTo("#playbackContainer");
-			// add refresh button
-			$("<span class='ui-icon ui-icon-refresh ui-button ui-right' title='Refresh Audio/Video Streams'></span>").appendTo($head).click(listStreams);
 			var name = "", $line, cnt;
 			for (var i = 0; i < rtmpStreams.length; i++) {
 				var rtmpStream = rtmpStreams[i];
@@ -649,24 +656,34 @@ function onLoadHandler() {
 				if (deviceOrder > 0) {
 					if (deviceOrder > ++cnt) { // insert before; process in this loop
 						var deviceType = orderToDeviceType(cnt);
-						rtmpStreams.splice(i, 0, rtmpStream = { rtmp_app: name + '|' + deviceType, streamType: deviceToStreamType(deviceType), deviceType: deviceType, name: name });
+						rtmpStreams.splice(i, 0, rtmpStream = { rtmp_app: name + '|' + deviceType, streamType: deviceToStreamType(deviceType), deviceType: deviceType, name: name, unconfirmed: true });
 					} else if (cnt < 3 && (i + 1 == rtmpStreams.length || name !== rtmpStreams[i + 1].name)) { // insert after; process in the next loop
 						var deviceType = orderToDeviceType(cnt + 1);
-						rtmpStreams.splice(i + 1, 0, { rtmp_app: name + '|' + deviceType, streamType: deviceToStreamType(deviceType), deviceType: deviceType, name: name });
+						rtmpStreams.splice(i + 1, 0, { rtmp_app: name + '|' + deviceType, streamType: deviceToStreamType(deviceType), deviceType: deviceType, name: name, unconfirmed: true });
 					}
 				}
-				create$ffmpegUi(rtmpStream.deviceType, checkeds, "play", name).css("margin-left", "10px").appendTo($line);
+				var $ffmpegUi = create$ffmpegUi(rtmpStream.deviceType, checkeds, "play", name).css("margin-left", "10px").appendTo($line);
+				if (rtmpStream.unconfirmed)
+					$ffmpegUi.addClass("unconfirmed");
 				var key = keyFromNames(rtmpStream.deviceType, "play", name);
 				if (!checkeds[key]) {
 					renewFFmpeg(_op["playback_" + rtmpStream.streamType], key, getRtmpUrl(rtmpStream.rtmp_app), "#video-chat-panel");
 				}
 			}
+			// add refresh button
+			//$("<span class='ui-icon ui-icon-refresh ui-button ui-right' title='Refresh Audio/Video Streams'></span>").appendTo($head).click(listStreams);
+			//$("<span style='display:inline-block;font-size:80%;vertical-align:bottom;float:right;'>" + new Date().toLocaleTimeString() + "</span>").appendTo($head);
+			$("<span class='ui-icon ui-icon-arrowrefresh-1-" + cardinalPoints[(lsCnt++) % 4] + " ui-button ui-right' title='Refresh Audio/Video Streams'></span>").appendTo($head).click(listStreams);
 		}, function (error) {
 			var err = error;
 		});
 	}
-	listDevices();
-	listStreams();
+	function refresh () {
+		window.setTimeout(refresh, 1000);
+		listDevices();
+		listStreams();
+	}
+	refresh();
 }
 
 // start the loop				
