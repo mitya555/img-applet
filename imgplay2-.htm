@@ -9,6 +9,19 @@
 <script src="//code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
 <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
 <script>
+//----------------------------------------------------------------------
+//-- guarantees that window.name is a GUID, and that it would
+//-- be preserved during this window's life time
+//----------------------------------------------------------------------
+//-- window.name will be set to "GUID-<SOME_RANDOM_GUID>"
+//----------------------------------------------------------------------
+function guid () {
+	function s4 () { return Math.floor( Math.random() * 0x10000 /* 65536 */ ).toString(16); }
+    return s4() + s4() + "-" + s4() + "-" + s4() + "-" + s4() + "-" + s4() + s4() + s4();
+}
+if (!window.name.match(/^GUID-/)) {
+    window.name = "GUID-" + guid();
+}
 /**
  * Provides requestAnimationFrame in a cross browser way.
  * http://paulirish.com/2011/requestanimationframe-for-smart-animating/
