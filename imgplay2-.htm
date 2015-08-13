@@ -199,18 +199,8 @@ function strCompare(str1, str2) { return str1 > str2 ? 1 : str1 < str2 ? -1 : 0;
 <div class="container">
 <div class="form-inline form-group contCenter">
 	<label for="enter-your-name">Please enter your name</label>
-	<input class="form-control" type="text" id="enter-your-name" />
-	<span class='ui-icon ui-icon-refresh ui-button' title='Enter Your Name' onclick="
-		var val = $.trim($('#enter-your-name').val());
-		if ($('#enter-your-name').val() !== val)
-			$('#enter-your-name').val(val);
-		if (val)
-		{
-			$('#sign-in-panel').css('display', 'none');
-			$('#video-chat-panel').css('display', '');
-			registerAppletStateHandler();
-		}
-	"></span>
+	<input class="form-control" type="text" id="enter-your-name" title="Enter Your Name" />
+	<button type="button" class="btn btn-default" title="Enter the Chat Room" onclick="enterButtonClick(this);">Enter</button>
 </div>
 </div>
 </div>
@@ -219,6 +209,27 @@ function strCompare(str1, str2) { return str1 > str2 ? 1 : str1 < str2 ? -1 : 0;
 	<div id="playbackContainer" class="contRightTop"></div>
 </div>
 <script>
+
+function enterButtonClick(e) {
+	$('#sign-in-panel').find('.alert').remove();
+	var _val = $('#enter-your-name').val(), val = $.trim(_val);
+	if (val !== _val)
+		$('#enter-your-name').val(val);
+	if (val)
+	{
+		$.ajax({
+			url: 'http://' + getRtmpHostname() + '/rest/vchat/' + encodeURIComponent(val) + '/' + encodeURIComponent(window.name),
+			cache: false,
+			dataType: 'json'
+		}).then(function (data) {
+			$('#sign-in-panel').css('display', 'none');
+			$('#video-chat-panel').css('display', '');
+			registerAppletStateHandler();
+		}, function (error) {
+			$('<div class="alert alert-warning" role="alert" style="margin-top:10px;">' + error.responseText + '</div>').insertAfter(e);
+		});
+	}
+}
 
 // global variables
 var applets = [ document.getElementById( 'img-applet' ), document.getElementById( 'img-applet-ie' ) ],
@@ -282,7 +293,7 @@ function createVideoCanvas (container, resizable) {
 	};
 	return {
 		drawUri:	function (uri) { image[last_img = (last_img + 1) % 2].src = uri; },
-		destroy:	function () { ($videoImageContainer || $(videoImage)).add(image[0], image[1]).remove(); }
+		destroy:	function () { ($videoImageContainer || $(videoImage)).remove(); $(image[0]).remove(); $(image[1]).remove(); }
 	};
 }
 
@@ -470,6 +481,8 @@ function callFFmpeg(op, p1) {
 	return defer.promise();
 }
 
+function getRtmpHostname() { return window.location.hash && window.location.hash.length > 7 ? window.location.hash.substring(1) : window.location.hostname; }
+
 function getMyName() { return $('#enter-your-name').val(); }
 
 function getMyRtmpAppName(deviceType) { return getMyName() + '|' + deviceType; }
@@ -484,7 +497,7 @@ function deviceToStreamType(a) { return a === "audio" ? "audio" : a === "video" 
 
 function onLoadHandler() {
 	// event handler for ready state
-	var rtmp_hostname = window.location.hash && window.location.hash.length > 7 ? window.location.hash.substring(1) : window.location.hostname;
+	var rtmp_hostname = getRtmpHostname();
 	function getRtmpUrl(rtmp_app) { return 'rtmp://' + rtmp_hostname + '/rtmp/' + encodeURIComponent(rtmp_app); }
 	// FFmpeg UI functions
 	function keyFromNames(deviceType, opName, name) { return (opName || "capture") + "-" + encodeId(name || "my") + "-" + deviceType; }
@@ -627,12 +640,19 @@ function onLoadHandler() {
 		});
 	}
 	function listStreams () {
-		$.ajax({
-			url: 'http://' + rtmp_hostname + '/rtmp/stat',
-			cache: false,
-			dataType: "xml"
-		}).then(function (data) {
-			var $xml = $(data), $streams = $xml.find("rtmp > server > application:has(> name)").filter(function () { return $(this).find("> name").text() === "rtmp"; }).find("> live > stream:has(> publishing)");
+		$.when(
+			$.ajax({
+				url: 'http://' + rtmp_hostname + '/rtmp/stat',
+				cache: false,
+				dataType: "xml"
+			}),
+			$.ajax({
+				url: 'http://' + rtmp_hostname + '/rest/vchat/' + encodeURIComponent(getMyName()) + '/' + encodeURIComponent(window.name),
+				cache: false,
+				dataType: 'json'
+			})
+		).then(function (data, data2) {
+			var $xml = $(data[0]), $streams = $xml.find("rtmp > server > application:has(> name)").filter(function () { return $(this).find("> name").text() === "rtmp"; }).find("> live > stream:has(> publishing)");
 			function getStreamType($stream) {
 				var $video = $stream.find("> meta > video"), $audio;
 				return parseFloat($video.find("> width").text()) > 0 && parseFloat($video.find("> height").text()) > 0 ? "video" : $stream.find("> meta > audio").has("*") ? "audio" : "unknown";
@@ -645,11 +665,20 @@ function onLoadHandler() {
 					removeFFmpeg(key);
 				}
 			}
-			var rtmpStreams = [];
+			var rtmpStreams = [], names = {};
 			$streams.each(function (i, e) {
 				var $e = $(e), rtmp_app = $e.find("name").text(), info = getStreamInfo(rtmp_app);
 				rtmpStreams.push({ rtmp_app: rtmp_app, streamType: getStreamType($e), deviceType: info.deviceType, name: info.name });
+				names[info.name] = true;
 			});
+			// add users from the REST service
+			for (var i = 0; i < data2[0].length; i++) {
+				var restName = data2[0][i];
+				if (!names[restName]) {
+					rtmpStreams.push({ rtmp_app: restName + "|audio", streamType: "audio", deviceType: "audio", name: restName, unconfirmed: true });
+					names[restName] = true;
+				}
+			}
 			// sort rtmpStreams
 			rtmpStreams.sort(function(a, b) {
 				return strCompare(a.name, b.name) || (deviceTypeOrder(a.deviceType) - deviceTypeOrder(b.deviceType)) || strCompare(a.deviceType, b.deviceType);
@@ -675,12 +704,14 @@ function onLoadHandler() {
 						rtmpStreams.splice(i + 1, 0, { rtmp_app: name + '|' + deviceType, streamType: deviceToStreamType(deviceType), deviceType: deviceType, name: name, unconfirmed: true });
 					}
 				}
-				var $ffmpegUi = create$ffmpegUi(rtmpStream.deviceType, checkeds, "play", name).css("margin-left", "10px").appendTo($line);
-				if (rtmpStream.unconfirmed)
-					$ffmpegUi.addClass("unconfirmed");
-				var key = keyFromNames(rtmpStream.deviceType, "play", name);
-				if (!checkeds[key]) {
-					renewFFmpeg(_op["playback_" + rtmpStream.streamType], key, getRtmpUrl(rtmpStream.rtmp_app), "#video-chat-panel");
+				if (rtmpStream.rtmp_app) {
+					var $ffmpegUi = create$ffmpegUi(rtmpStream.deviceType, checkeds, "play", name).css("margin-left", "10px").appendTo($line);
+					if (rtmpStream.unconfirmed)
+						$ffmpegUi.addClass("unconfirmed");
+					var key = keyFromNames(rtmpStream.deviceType, "play", name);
+					if (!checkeds[key]) {
+						renewFFmpeg(_op["playback_" + rtmpStream.streamType], key, getRtmpUrl(rtmpStream.rtmp_app), "#video-chat-panel");
+					}
 				}
 			}
 			// add refresh button
