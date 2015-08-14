@@ -684,7 +684,7 @@ public class FFmpegProcess extends Observable {
 			pb.redirectError(ProcessBuilder.Redirect.INHERIT);
 		try {
 			ffmp = pb.start();
-			debug(">" + command, "FFMPEG process started.");
+			debug(">" + command/*, "FFMPEG process started."*/);
 			(ffmt = new Thread(new Runnable() {
 				@Override
 				public void run() {
@@ -837,7 +837,7 @@ public class FFmpegProcess extends Observable {
 			if (in_ != null) try { in_.close(); } catch (IOException e) { e.printStackTrace(); }
 			if (mediaStream != null) { try { mediaStream.close(); } catch (IOException e) { e.printStackTrace(); } mediaStream = null; }
 			setChanged(); notifyObservers(Event.STOP);
-			debug("FFMPEG output thread ended.", "FFMPEG process terminated.");
+			debug("FFMPEG output thread ended."/*, "FFMPEG process terminated."*/);
 		}
 	}
 

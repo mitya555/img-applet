@@ -464,7 +464,7 @@ function callFFmpeg(op, p1) {
 			'ffmpeg-f:i', 'dshow',
 			'ffmpeg-i', 'dummy',
 			'ffmpeg-o', '',
-			'debug', 'yes',
+			//'debug', 'yes',
 		] ); break;
 
 	case _op.list_options: _ffmpeg_id = _applet.createFFmpegId( 'dataCallback', [
@@ -472,7 +472,7 @@ function callFFmpeg(op, p1) {
 			'ffmpeg-f:i', 'dshow',
 			'ffmpeg-i', p1,			// device, e.g. 'video=Logitech QuickCam Communicate STX', or 'audio=Logitech Mic (Communicate STX)'
 			'ffmpeg-o', '',
-			'debug', 'yes',
+			//'debug', 'yes',
 		] ); break;
 	}
 	if (_ffmpeg_id) {
