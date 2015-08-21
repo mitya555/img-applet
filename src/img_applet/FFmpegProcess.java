@@ -760,42 +760,7 @@ public class FFmpegProcess extends Observable {
 			case wav:
 				mediaStream = null;
 				demuxVideoStream = null;
-				//final int BUFFER_SIZE = 32;
-				SourceDataLine audioLine = null;
-				try (	RIFFInputStream inputStream = new RIFFInputStream(ffmp.getInputStream(), 400);
-						AudioInputStream audioInputStream = AudioSystem.getAudioInputStream(inputStream)) {
-					
-//					debug("inputStream position: " + inputStream.getPosition());
-//					debug("AudioFormat audioFormat = audioInputStream.getFormat();");
-					AudioFormat audioFormat = audioInputStream.getFormat();
-//					debug("inputStream position: " + inputStream.getPosition());
-					audioLine = (SourceDataLine)AudioSystem.getLine(new DataLine.Info(SourceDataLine.class, audioFormat));
-//					debug("audioLine.open(audioFormat);");
-					debug("applet parameter wav-audio-line-buffer-size = " + wavAudioLineBufferSize);
-					if (wavAudioLineBufferSize > 0)
-						audioLine.open(audioFormat, wavAudioLineBufferSize);
-					else
-						audioLine.open(audioFormat);
-					int audioLineBufferSize = audioLine.getBufferSize();
-					debug("audioLine.getBufferSize() = " + audioLineBufferSize);
-					final int BUFFER_SIZE = wavIntermediateBufferSize > 0 ? wavIntermediateBufferSize : audioLineBufferSize;
-//					debug("audioLine.start();");
-					audioLine.start();
-					debug("Playback started.");
-					byte[] bytesBuffer = new byte[BUFFER_SIZE];
-					int bytesRead = -1;
-					while ((bytesRead = inputStream.read(bytesBuffer, 0, BUFFER_SIZE)) != -1) {
-//						debug("read " + bytesRead + " bytes");
-//						debug("inputStream position: " + inputStream.getPosition());
-						audioLine.write(bytesBuffer, 0, bytesRead);
-					}
-//					debug("inputStream position: " + inputStream.getPosition());
-//					debug("audioLine.drain();");
-					audioLine.drain();
-					debug("Playback ended.");
-				} catch (IOException | UnsupportedAudioFileException | LineUnavailableException e) {
-					e.printStackTrace();
-				}
+				playWavAudio(ffmp.getInputStream());
 				return; 
 			case mp4:
 				in_ = new fMP4InputStream(ffmp.getInputStream(), bufferGrowFactor);
@@ -838,6 +803,45 @@ public class FFmpegProcess extends Observable {
 			if (mediaStream != null) { try { mediaStream.close(); } catch (IOException e) { e.printStackTrace(); } mediaStream = null; }
 			setChanged(); notifyObservers(Event.STOP);
 			debug("FFMPEG output thread ended."/*, "FFMPEG process terminated."*/);
+		}
+	}
+
+	private void playWavAudio(InputStream inputStream) {
+		//final int BUFFER_SIZE = 32;
+		try (	RIFFInputStream riffInputStream = new RIFFInputStream(inputStream, 400);
+				AudioInputStream audioInputStream = AudioSystem.getAudioInputStream(riffInputStream)	) {
+			
+//			debug("inputStream position: " + inputStream.getPosition());
+//			debug("AudioFormat audioFormat = audioInputStream.getFormat();");
+			AudioFormat audioFormat = audioInputStream.getFormat();
+			debug("audioFormat = " + audioFormat);
+//			debug("inputStream position: " + inputStream.getPosition());
+			SourceDataLine audioLine = (SourceDataLine)AudioSystem.getLine(new DataLine.Info(SourceDataLine.class, audioFormat));
+//			debug("audioLine.open(audioFormat);");
+			debug("applet parameter wav-audio-line-buffer-size = " + wavAudioLineBufferSize);
+			if (wavAudioLineBufferSize > 0)
+				audioLine.open(audioFormat, wavAudioLineBufferSize);
+			else
+				audioLine.open(audioFormat);
+			int audioLineBufferSize = audioLine.getBufferSize();
+			debug("audioLine.getBufferSize() = " + audioLineBufferSize);
+			final int BUFFER_SIZE = wavIntermediateBufferSize > 0 ? wavIntermediateBufferSize : audioLineBufferSize;
+//			debug("audioLine.start();");
+			audioLine.start();
+			debug("Playback started.");
+			byte[] bytesBuffer = new byte[BUFFER_SIZE];
+			int bytesRead = -1;
+			while ((bytesRead = riffInputStream.read(bytesBuffer, 0, BUFFER_SIZE)) != -1) {
+//				debug("read " + bytesRead + " bytes");
+//				debug("inputStream position: " + inputStream.getPosition());
+				audioLine.write(bytesBuffer, 0, bytesRead);
+			}
+//			debug("inputStream position: " + inputStream.getPosition());
+//			debug("audioLine.drain();");
+			audioLine.drain();
+			debug("Playback ended.");
+		} catch (IOException | UnsupportedAudioFileException | LineUnavailableException e) {
+			e.printStackTrace();
 		}
 	}
 
