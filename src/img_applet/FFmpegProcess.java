@@ -21,6 +21,8 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.ShortBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileChannel.MapMode;
 import java.security.AccessController;
@@ -830,11 +832,41 @@ public class FFmpegProcess extends Observable {
 			audioLine.start();
 			debug("Playback started.");
 			byte[] bytesBuffer = new byte[BUFFER_SIZE];
-			int bytesRead = -1;
+			ShortBuffer shortBuffer = ByteBuffer.wrap(bytesBuffer).asReadOnlyBuffer().order(ByteOrder.LITTLE_ENDIAN).asShortBuffer();
+			int bytesRead = -1, cnt = 0;
+//			long count = 0;
+			long sum = 0;
+			double sumSquare = 0;
+//			short min = Short.MAX_VALUE, max = Short.MIN_VALUE;
 			while ((bytesRead = riffInputStream.read(bytesBuffer, 0, BUFFER_SIZE)) != -1) {
 //				debug("read " + bytesRead + " bytes");
 //				debug("inputStream position: " + inputStream.getPosition());
 				audioLine.write(bytesBuffer, 0, bytesRead);
+//				count += bytesRead;
+				cnt += bytesRead;
+				final int shortsRead = bytesRead / 2;
+				for (int i = 0; i < shortsRead; i++) {
+					final short val = shortBuffer.get(i);
+					sum += val;
+					sumSquare += val * val;
+//					if (val > max)
+//						max = val;
+//					if (val < min)
+//						min = val;
+				}				
+				if (cnt >= 44100) { // 44100 bytes / 4 bytes/frame / 44100 frames/sec = 1/4 sec = 250 ms
+					final int shortCnt = cnt / 2;
+					final double avg = sum / shortCnt, meanSquare = sumSquare / shortCnt - avg * avg,
+//							maxSquare = (max - avg) * (max - avg), minSquare = (min - avg) * (min - avg),
+//							signalLevel = Math.sqrt(meanSquare / (maxSquare > minSquare ? maxSquare : minSquare));
+							signalLevel = 10 * Math.log10( Math.sqrt( meanSquare ) );
+					sumSquare = sum = cnt = 0;
+//					min = Short.MAX_VALUE;
+//					max = Short.MIN_VALUE;
+//					final int available = audioLine.available();
+//					debug("audioLine.available(): " + available + "\t\tplayed: " + (count - (audioLineBufferSize - available)) + " bytes; " + audioLine.getLongFramePosition() + " frames; " + audioLine.getMicrosecondPosition() + " µs");
+					debug("signal level " + signalLevel);
+				}
 			}
 //			debug("inputStream position: " + inputStream.getPosition());
 //			debug("audioLine.drain();");
