@@ -52,12 +52,12 @@ public class ImgApplet extends JApplet {
     private Queue<Integer> id_pool = new ArrayDeque<Integer>();
     private int ffmpeg_count = 0;
 
-	private Integer registerFFmpeg(FFmpegProcess ffmpeg, Object params) {
+	private Integer registerFFmpeg(FFmpegProcess ffmpeg, Object params, Applet applet) {
 		Integer id = null;
-		if (ffmpeg.init(params).HasInput()) {
+		if (ffmpeg.init(params, applet).HasInput()) {
 			Integer id_from_pool = id_pool.poll();
 			id = id_from_pool != null ? id_from_pool : ++ffmpeg_count;
-			ffmpegs.put(id, ffmpeg);
+			ffmpegs.put(id, ffmpeg.setId(id));
 			debug("Created FFmpeg ID: " + id);
 		}
 		return id;
@@ -83,7 +83,7 @@ public class ImgApplet extends JApplet {
 			@Override
 			public FFmpegProcess run() {
 				final FFmpegProcess ffmpeg = new FFmpegProcess();
-				if (registerFFmpeg(ffmpeg, _params) != null && !strEmpty(jsCallback)) {
+				if (registerFFmpeg(ffmpeg, _params, _applet) != null && !strEmpty(jsCallback)) {
 					ffmpeg.addObserver(new Observer() { @Override public void update(Observable o, Object arg) {
 						boolean playing = FFmpegProcess.Event.START.equals(arg);
 						JSObject.getWindow(_applet).call(jsCallback, new Object[] { ffmpeg, playing });
@@ -104,7 +104,7 @@ public class ImgApplet extends JApplet {
 //			@Override
 //			public FFmpegProcess run() {
 				final FFmpegProcess ffmpeg = new FFmpegProcess();
-				final Integer res = registerFFmpeg(ffmpeg, _params);
+				final Integer res = registerFFmpeg(ffmpeg, _params, _applet);
 				if (res != null) {
 					final int id = res;
 					if (!strEmpty(jsCallback)) {
@@ -128,7 +128,7 @@ public class ImgApplet extends JApplet {
 		DEBUG = !isNo(getParameter("debug"));
 		
 		ffmpeg0 = new FFmpegProcess();
-		if (registerFFmpeg(ffmpeg0, this) != null) {
+		if (registerFFmpeg(ffmpeg0, this, this) != null) {
 			final Button stopButton = createButton("Stop", new ActionListener() { @Override public void actionPerformed(ActionEvent e) {
 				ffmpeg0.stopPlayback(); 
 			} }, ffmpeg0.isPlaying());

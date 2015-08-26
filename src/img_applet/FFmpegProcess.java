@@ -33,6 +33,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Observable;
+import java.util.concurrent.ArrayBlockingQueue;
 
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
@@ -42,6 +43,9 @@ import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.SourceDataLine;
 import javax.sound.sampled.UnsupportedAudioFileException;
 import javax.xml.bind.DatatypeConverter;
+
+import netscape.javascript.JSException;
+import netscape.javascript.JSObject;
 
 public class FFmpegProcess extends Observable {
 	
@@ -530,6 +534,7 @@ public class FFmpegProcess extends Observable {
 
 	private boolean demux_fMP4, dropUnusedFrames;
 	private int bufferSize, vBufferSize, aBufferSize, maxMemoryBufferCount, maxVideoBufferCount, mp3FramesPerChunk, wavAudioLineBufferSize, wavIntermediateBufferSize;
+	private String wavLevelChangeCallback;
 	private double bufferGrowFactor, bufferShrinkThresholdFactor;
 	private MediaStream mediaStream, demuxVideoStream;
 	
@@ -542,10 +547,14 @@ public class FFmpegProcess extends Observable {
 			params instanceof Map<?,?> ? ((Map<String,String>)params).get(name) :
 				null;
 	}
+	private Applet applet;
+	private int id;
+	public FFmpegProcess setId(int id) { this.id = id; return this; }
 
-	public FFmpegProcess init(Object params) {
+	public FFmpegProcess init(Object params, Applet applet) {
 		
 		this.params = params;
+		this.applet = applet;
 		
 		DEBUG = !isNo(getParameter("debug"));
 		DEBUG_FFMPEG = !isNo(getParameter("debug-ffmpeg"));
@@ -570,6 +579,8 @@ public class FFmpegProcess extends Observable {
 
 		wavAudioLineBufferSize = parseInt(getParameter("wav-audio-line-buffer-size"));
 		wavIntermediateBufferSize = parseInt(getParameter("wav-intermediate-buffer-size"));
+
+		wavLevelChangeCallback = getParameter("wav-level-change-callback");
 		
 		return this;
 	}
@@ -836,37 +847,63 @@ public class FFmpegProcess extends Observable {
 			int bytesRead = -1, cnt = 0;
 //			long count = 0;
 			long sum = 0;
-			double sumSquare = 0;
-//			short min = Short.MAX_VALUE, max = Short.MIN_VALUE;
+			double sumSquare = 0, minRootMeanSquare = 200;
+			int prevSignalLevel = 0;
+			final boolean calcSignalLevel = !strEmpty(wavLevelChangeCallback);
+			ArrayBlockingQueue<Integer> signalLevelQueue = null;
+			if (calcSignalLevel) {
+				final ArrayBlockingQueue<Integer> _signalLevelQueue = new ArrayBlockingQueue<Integer>(5);
+				signalLevelQueue = _signalLevelQueue;
+				new Thread(new Runnable() {
+					@Override
+					public void run() {
+						Integer _signalLevel;
+						try {
+							while ((_signalLevel = _signalLevelQueue.take()) != null)
+								try {
+									JSObject.getWindow(applet).call(wavLevelChangeCallback, new Object[] { id, _signalLevel.intValue() });
+								} catch (JSException e) {
+									e.printStackTrace();
+								}
+						} catch (InterruptedException e) {
+							e.printStackTrace();
+						}
+					}
+				}).start();
+			}
 			while ((bytesRead = riffInputStream.read(bytesBuffer, 0, BUFFER_SIZE)) != -1) {
 //				debug("read " + bytesRead + " bytes");
 //				debug("inputStream position: " + inputStream.getPosition());
 				audioLine.write(bytesBuffer, 0, bytesRead);
 //				count += bytesRead;
-				cnt += bytesRead;
-				final int shortsRead = bytesRead / 2;
-				for (int i = 0; i < shortsRead; i++) {
-					final short val = shortBuffer.get(i);
-					sum += val;
-					sumSquare += val * val;
-//					if (val > max)
-//						max = val;
-//					if (val < min)
-//						min = val;
-				}				
-				if (cnt >= 44100) { // 44100 bytes / 4 bytes/frame / 44100 frames/sec = 1/4 sec = 250 ms
-					final int shortCnt = cnt / 2;
-					final double avg = sum / shortCnt, meanSquare = sumSquare / shortCnt - avg * avg,
-//							maxSquare = (max - avg) * (max - avg), minSquare = (min - avg) * (min - avg),
-//							signalLevel = Math.sqrt(meanSquare / (maxSquare > minSquare ? maxSquare : minSquare));
-							signalLevel = 10 * Math.log10( Math.sqrt( meanSquare ) );
-					sumSquare = sum = cnt = 0;
-//					min = Short.MAX_VALUE;
-//					max = Short.MIN_VALUE;
-//					final int available = audioLine.available();
-//					debug("audioLine.available(): " + available + "\t\tplayed: " + (count - (audioLineBufferSize - available)) + " bytes; " + audioLine.getLongFramePosition() + " frames; " + audioLine.getMicrosecondPosition() + " µs");
-					debug("signal level " + signalLevel);
+				if (calcSignalLevel) {
+					cnt += bytesRead;
+					final int shortsRead = bytesRead / 2;
+					for (int i = 0; i < shortsRead; i++) {
+						final short val = shortBuffer.get(i);
+						sum += val;
+						sumSquare += val * val;
+					}				
+					if (cnt >= 44100) { // 44100 bytes / 4 bytes/frame / 44100 frames/sec = 1/4 sec = 250 ms
+						final int shortCnt = cnt / 2;
+						final double avg = sum / shortCnt, rootMeanSquare = Math.sqrt( sumSquare / shortCnt - avg * avg );
+						if (rootMeanSquare < minRootMeanSquare)
+							minRootMeanSquare = rootMeanSquare;
+						final double signal = 10 * Math.log10( rootMeanSquare / minRootMeanSquare );
+						final int signalLevel = (int)Math.floor(signal);
+						if (signalLevel != prevSignalLevel) {
+							signalLevelQueue.offer(prevSignalLevel = signalLevel);
+						}
+						sumSquare = sum = cnt = 0;
+//						final int available = audioLine.available();
+//						debug("audioLine.available(): " + available + "\t\tplayed: " + (count - (audioLineBufferSize - available)) + " bytes; " + audioLine.getLongFramePosition() + " frames; " + audioLine.getMicrosecondPosition() + " µs");
+//						debug("signal " + signal);
+					}
 				}
+			}
+			if (calcSignalLevel) {
+				signalLevelQueue.clear();
+				signalLevelQueue.offer(null);
 			}
 //			debug("inputStream position: " + inputStream.getPosition());
 //			debug("audioLine.drain();");
