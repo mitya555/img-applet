@@ -852,24 +852,31 @@ public class FFmpegProcess extends Observable {
 			final boolean calcSignalLevel = !strEmpty(wavLevelChangeCallback);
 			ArrayBlockingQueue<Integer> signalLevelQueue = null;
 			if (calcSignalLevel) {
-				final ArrayBlockingQueue<Integer> _signalLevelQueue = new ArrayBlockingQueue<Integer>(5);
+				final ArrayBlockingQueue<Integer> _signalLevelQueue = new ArrayBlockingQueue<Integer>(4); // ~ 1 sec. worth = 250 ms * 4
 				signalLevelQueue = _signalLevelQueue;
 				new Thread(new Runnable() {
 					@Override
 					public void run() {
 						Integer _signalLevel;
+						int attempts = 0; 
 						try {
-							while ((_signalLevel = _signalLevelQueue.take()) != null)
+							do {
+								_signalLevel = _signalLevelQueue.take();
 								try {
 									JSObject.getWindow(applet).call(wavLevelChangeCallback, new Object[] { id, _signalLevel.intValue() });
 								} catch (JSException e) {
 									e.printStackTrace();
+									if (++attempts >= 10)
+										break;
 								}
+							} while (_signalLevel != -200);
 						} catch (InterruptedException e) {
 							e.printStackTrace();
 						}
 					}
 				}).start();
+				// start playing
+				signalLevelQueue.offer(-100);
 			}
 			while ((bytesRead = riffInputStream.read(bytesBuffer, 0, BUFFER_SIZE)) != -1) {
 //				debug("read " + bytesRead + " bytes");
@@ -903,7 +910,8 @@ public class FFmpegProcess extends Observable {
 			}
 			if (calcSignalLevel) {
 				signalLevelQueue.clear();
-				signalLevelQueue.offer(null);
+				// end playing
+				signalLevelQueue.offer(-200);
 			}
 //			debug("inputStream position: " + inputStream.getPosition());
 //			debug("audioLine.drain();");

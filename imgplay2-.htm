@@ -311,6 +311,10 @@ function checkboxCallback(ffmpeg_id, playing) {
 		document.getElementById(key).checked = playing;
 }
 
+function audioLevelCallback(ffmpeg_id, level) {
+	console.log("audio level " + level);
+}
+
 function removeFFmpeg(key) {
 	if (ffmpeg_ids[key]) {
 		_applet.stopPlayback(ffmpeg_ids[key]);
@@ -420,6 +424,7 @@ function renewFFmpeg(op, key, p1, p2) {
 			"ffmpeg-vn", "",
 			//"wav-audio-line-buffer-size", "2200",
 			"wav-intermediate-buffer-size", "32",
+			"wav-level-change-callback", "audioLevelCallback",
 			"debug", "yes",
 			//"debug-ffmpeg", "yes",
 		] ); break;
