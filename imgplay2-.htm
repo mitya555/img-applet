@@ -525,6 +525,7 @@ function onLoadHandler() {
 				//'<span>&nbsp;</span>' +
 			'</span>');
 	}
+	function lineHtml(name) { return "<div style='text-align:right;'><span style='float:left;text-align:left;font-weight:bold;min-width:50%;'>" + name + "</span></div>"; }
 	var ldCnt = 0, lsCnt = 0, cardinalPoints = [ "n", "e", "s", "w" ];
 	function listDevices () {
 		$("#deviceContainer select").css("visibility", "hidden");
@@ -634,7 +635,7 @@ function onLoadHandler() {
 			});
 			var $head = $("<div class='boxHead' style='background-color:cyan;'>Capture</div>").appendTo("#deviceContainer");
 			// try to restore current devices
-			var $line = $("<div style='text-align:right;'><span style='float:left;font-weight:bold;'>" + getMyName() + "</span></div>").appendTo("#deviceContainer");
+			var $line = $(lineHtml(getMyName())).appendTo("#deviceContainer");
 			for (var i = 0; i < deviceTypes.length; i++) {
 				deviceTypes[i].appendTo($line).renew();
 			}
@@ -695,7 +696,7 @@ function onLoadHandler() {
 				var rtmpStream = rtmpStreams[i];
 				if (name !== rtmpStream.name) {
 					name = rtmpStream.name;
-					$line = $("<div style='text-align:right;'><span style='float:left;font-weight:bold;'>" + name + "</span></div>").appendTo("#playbackContainer");
+					$line = $(lineHtml(name)).appendTo("#playbackContainer");
 					cnt = 0;
 				}
 				// add missing devices
