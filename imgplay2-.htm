@@ -46,6 +46,24 @@ function deriveFrom (child, parent) {
 	child.prototype.constructor = child; // Reset the constructor from parent to child
 }
 /**
+ * String hash code (Java style)
+ */
+String.prototype.hashCode = function () {
+	var hash = 0, len = this.length;
+	for (var i = 0; i < len; i++) {
+		hash = ((hash << 5) - hash) + this.charCodeAt(i);
+		hash |= 0; // Convert to 32bit integer
+	}
+	return hash >>> 0; // return unsigned
+};
+/**
+ * htmlEncode()
+ */
+String.prototype.replaceAll = function(str1, str2, ignore) {
+	return this.replace(new RegExp(str1.replace(/([\/\,\!\\\^\$\{\}\[\]\(\)\.\*\+\?\|\<\>\-\&])/g,"\\$&"),(ignore?"gi":"g")),(typeof(str2)=="string")?str2.replace(/\$/g,"$$$$"):str2);
+};
+function htmlEncode(str) { return str.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll("'", '&#39;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'); }
+/**
  * String to hex and hex to string.
  */
 String.prototype.hexEncode = function () {
@@ -173,7 +191,9 @@ function strCompare(str1, str2) { return str1 > str2 ? 1 : str1 < str2 ? -1 : 0;
 	}
 
 	.dropdown { display: inline-block; }
-	.dropdown select { border-width: 0; }	
+	.dropdown select { border-width: 0; }
+	
+	label.-bs-icon- { margin-bottom: 0; }
 </style>
 </head>
 <body>
@@ -237,7 +257,10 @@ var applets = [ document.getElementById( 'img-applet' ), document.getElementById
 	sn = 0,
 	ffmpeg_ids = {},
 	devices = {},
-	videos = {};
+	videos = {},
+	keys = {}, // by ffmpeg_id
+	name_hash = {}, // by ffmpeg_id
+	audio_level = {}; // by name_hash
 
 function checkAppletMethod(applet, method) { return applet && (!method || (applet[method] || typeof(applet[method]) === "unknown")); }
 
@@ -300,42 +323,50 @@ function createVideoCanvas (container, resizable) {
 function checkboxClick(checkbox) {
 	_applet[checkbox.checked?'play':'stopPlayback'](ffmpeg_ids[checkbox.id]);
 }
-function findByFFmpegId(ffmpeg_id) {
-	for (var key in ffmpeg_ids)
-		if (ffmpeg_ids[key] === ffmpeg_id)
-			return key;
-}
 function checkboxCallback(ffmpeg_id, playing) {
-	var key = findByFFmpegId(ffmpeg_id);
+	var key = keys[ffmpeg_id];
 	if (key)
 		document.getElementById(key).checked = playing;
 }
 
 function audioLevelCallback(ffmpeg_id, level) {
 	console.log("audio level " + level);
+	var _name_hash = name_hash[ffmpeg_id];
+	audio_level[_name_hash] = level;
+	window.setTimeout(function () { $('#a' + _name_hash).css(audioLevelCss(level)); }, 0);
+}
+function audioLevelCss(level) {
+	var _level = level < 0 ? 0 : level > 10 ? 10 : level;
+	return { 'background': 'linear-gradient(90deg, #ffffff ' + ((10 - _level) * 10) + '%, #26ca28 ' + (_level * 10) + '%)' };
 }
 
 function removeFFmpeg(key) {
-	if (ffmpeg_ids[key]) {
-		_applet.stopPlayback(ffmpeg_ids[key]);
-		_applet.removeFFmpegById(ffmpeg_ids[key]);
+	var ffmpeg_id = ffmpeg_ids[key];
+	if (ffmpeg_id) {
+		_applet.stopPlayback(ffmpeg_id);
+		_applet.removeFFmpegById(ffmpeg_id);
 		delete ffmpeg_ids[key];
 		delete devices[key];
 		if (videos[key])
 			videos[key].destroy();
 		delete videos[key];
+		delete keys[ffmpeg_id];
+		delete name_hash[ffmpeg_id];
 	}
 }
 
 function recreateFFmpeg(key, callback, param_arr) {
 	var playing = false;
-	if (ffmpeg_ids[key]) {
-		playing = _applet.isPlaying(ffmpeg_ids[key]);
+	var ffmpeg_id = ffmpeg_ids[key];
+	if (ffmpeg_id) {
+		playing = _applet.isPlaying(ffmpeg_id);
 		removeFFmpeg(key);
 	}
-	ffmpeg_ids[key] = _applet.createFFmpegId(callback, param_arr);
+	ffmpeg_id = ffmpeg_ids[key] = _applet.createFFmpegId(callback, param_arr);
+	keys[ffmpeg_id] = key;
+	name_hash[ffmpeg_id] = namesFromKey(key).name.hashCode();
 	if (playing)
-		_applet.play(ffmpeg_ids[key]);
+		_applet.play(ffmpeg_id);
 }
 
 var _op = {
@@ -500,13 +531,15 @@ function orderToDeviceType(n) { return n == 1 ? "audio" : n == 2 ? "video" : n =
 
 function deviceToStreamType(a) { return a === "audio" ? "audio" : a === "video" ? "video" : a === "screen" ? "video" : "video"; }
 
+function keyFromNames(deviceType, opName, name) { return (opName || "capture") + "-" + encodeId(name || "my") + "-" + deviceType; }
+
+function namesFromKey(key) { var tmp = key.split('-'); return { opName: tmp[0], name: decodeId(tmp[1]), deviceType: tmp[2] }; }
+
 function onLoadHandler() {
 	// event handler for ready state
 	var rtmp_hostname = getRtmpHostname();
 	function getRtmpUrl(rtmp_app) { return 'rtmp://' + rtmp_hostname + '/rtmp/' + encodeURIComponent(rtmp_app); }
 	// FFmpeg UI functions
-	function keyFromNames(deviceType, opName, name) { return (opName || "capture") + "-" + encodeId(name || "my") + "-" + deviceType; }
-	function namesFromKey(key) { var tmp = key.split('-'); return { opName: tmp[0], name: decodeId(tmp[1]), deviceType: tmp[2] }; }
 	function getCheckeds() { var checkeds = {}; for (var key in ffmpeg_ids) checkeds[key] = $("#" + jqId(key)).is(":checked"); return checkeds; }
 	function create$ffmpegUi(deviceType, checkeds, opName, name) {
 		if (!checkeds) checkeds = {};
@@ -521,11 +554,15 @@ function onLoadHandler() {
 					'<input id="' + key + '" type="checkbox" onclick="checkboxClick(this)"' + (checkeds[key] ? ' checked="checked"' : '') + ' />' +
 					//'<label for="' + key + '">' + '</label>' +
 				//'</div>' +
-				'<label for="' + key + '">' + icon + '</label>' +
+				'<label for="' + key + '" class="-bs-icon-">' + icon + '</label>' +
 				//'<span>&nbsp;</span>' +
 			'</span>');
 	}
-	function lineHtml(name) { return "<div style='text-align:right;'><span style='float:left;text-align:left;font-weight:bold;min-width:50%;'>" + name + "</span></div>"; }
+	function lineHtml(name) {
+		return "<div style='text-align:right;'><span style='float:left;text-align:left;font-weight:bold;/*min-width:50%;*/'>" +
+			htmlEncode(name) +
+			"</span></div>";
+	}
 	var ldCnt = 0, lsCnt = 0, cardinalPoints = [ "n", "e", "s", "w" ];
 	function listDevices () {
 		$("#deviceContainer select").css("visibility", "hidden");
@@ -690,13 +727,25 @@ function onLoadHandler() {
 				return strCompare(a.name, b.name) || (deviceTypeOrder(a.deviceType) - deviceTypeOrder(b.deviceType)) || strCompare(a.deviceType, b.deviceType);
 			});
 			// add header
+			function audioLevelIndicatorHtml(name) {
+				var _name_hash = name.hashCode(), _level = audio_level[_name_hash], _css;
+				if (_level != null)
+					_css = audioLevelCss(_level);
+				function cssToString(css) { var res = ""; for (var i in css) res += i + ":" + css[i] + ";"; return res; }
+				return "<br /><span style='display:inline-block;width:100%;height:2px;" + (_css ? cssToString(_css) : "") + "' id='a" + _name_hash + "'></span>";
+			}
 			var $head = $("<div class='boxHead' style='background-color:magenta;color:white;'>Playback</div>").appendTo("#playbackContainer");
-			var name = "", $line, cnt;
+			var name = "", $line, $contCheckboxes, cnt;
 			for (var i = 0; i < rtmpStreams.length; i++) {
 				var rtmpStream = rtmpStreams[i];
 				if (name !== rtmpStream.name) {
+					if ($contCheckboxes) {
+						// add audio level indicator
+						$(audioLevelIndicatorHtml(name)).appendTo($contCheckboxes);
+					}
 					name = rtmpStream.name;
 					$line = $(lineHtml(name)).appendTo("#playbackContainer");
+					$contCheckboxes = $("<span style='display:inline-block;line-height:0px;margin-top:2px;'></span>").appendTo($line);
 					cnt = 0;
 				}
 				// add missing devices
@@ -711,7 +760,7 @@ function onLoadHandler() {
 					}
 				}
 				if (rtmpStream.rtmp_app) {
-					var $ffmpegUi = create$ffmpegUi(rtmpStream.deviceType, checkeds, "play", name).css("margin-left", "10px").appendTo($line);
+					var $ffmpegUi = create$ffmpegUi(rtmpStream.deviceType, checkeds, "play", name).css("margin-left", "10px").appendTo(/*$line*/$contCheckboxes);
 					if (rtmpStream.unconfirmed)
 						$ffmpegUi.addClass("unconfirmed");
 					var key = keyFromNames(rtmpStream.deviceType, "play", name);
@@ -720,6 +769,8 @@ function onLoadHandler() {
 					}
 				}
 			}
+			// add audio level indicator
+			$(audioLevelIndicatorHtml(name)).appendTo($contCheckboxes);
 			// add refresh button
 			//$("<span class='ui-icon ui-icon-refresh ui-button ui-right' title='Refresh Audio/Video Streams'></span>").appendTo($head).click(listStreams);
 			//$("<span style='display:inline-block;font-size:80%;vertical-align:bottom;float:right;'>" + new Date().toLocaleTimeString() + "</span>").appendTo($head);
@@ -729,7 +780,8 @@ function onLoadHandler() {
 		});
 	}
 	function refresh () {
-		window.setTimeout(refresh, 1000);
+		if (window.location.hash !== "#debug")
+			window.setTimeout(refresh, 1000);
 		listDevices();
 		listStreams();
 	}
