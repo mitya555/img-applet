@@ -330,14 +330,14 @@ function checkboxCallback(ffmpeg_id, playing) {
 }
 
 function audioLevelCallback(ffmpeg_id, level) {
-	console.log("audio level " + level);
+	//console.log("audio level " + level);
 	var _name_hash = name_hash[ffmpeg_id];
 	audio_level[_name_hash] = level;
 	window.setTimeout(function () { $('#a' + _name_hash).css(audioLevelCss(level)); }, 0);
 }
 function audioLevelCss(level) {
-	var _level = level < 0 ? 0 : level > 10 ? 10 : level;
-	return { 'background': 'linear-gradient(90deg, #ffffff ' + ((10 - _level) * 10) + '%, #26ca28 ' + (_level * 10) + '%)' };
+	var _level = level < 0 ? 0 : level > 10 ? 10 : level, _pct = (10 - _level) * 10;
+	return { 'background': 'linear-gradient(90deg, #ffffff ' + _pct + '%, #26ca28 ' + _pct + '%)' };
 }
 
 function removeFFmpeg(key) {
@@ -774,18 +774,22 @@ function onLoadHandler() {
 			// add refresh button
 			//$("<span class='ui-icon ui-icon-refresh ui-button ui-right' title='Refresh Audio/Video Streams'></span>").appendTo($head).click(listStreams);
 			//$("<span style='display:inline-block;font-size:80%;vertical-align:bottom;float:right;'>" + new Date().toLocaleTimeString() + "</span>").appendTo($head);
-			$("<span class='ui-icon ui-icon-arrowrefresh-1-" + cardinalPoints[(lsCnt++) % 4] + " ui-button ui-right' title='Refresh Audio/Video Streams'></span>").appendTo($head).click(listStreams);
+			$("<span class='ui-icon ui-icon-arrowrefresh-1-" + cardinalPoints[(lsCnt++) % 4] + " ui-button ui-right' title='Toggle Auto-Refresh Audio/Video Streams'></span>").appendTo($head).click(function () {
+				autoRefershStreams = !autoRefershStreams;
+				refreshStreams();
+			});
 		}, function (error) {
 			var err = error;
 		});
 	}
-	function refresh () {
-		if (window.location.hash !== "#debug")
-			window.setTimeout(refresh, 1000);
-		listDevices();
+	var autoRefershStreams = true;
+	function refreshStreams () {
+		if (autoRefershStreams)
+			window.setTimeout(refreshStreams, 1000);
 		listStreams();
 	}
-	refresh();
+	listDevices();
+	refreshStreams();
 }
 
 // start the loop				
