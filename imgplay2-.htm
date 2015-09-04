@@ -8,6 +8,7 @@
 <script src="//code.jquery.com/jquery-1.11.3.min.js"></script>
 <script src="//code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
 <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/jquery.ui-contextmenu/1.10.0/jquery.ui-contextmenu.min.js"></script>
 <script>
 //----------------------------------------------------------------------
 //-- guarantees that window.name is a GUID, and that it would
@@ -162,8 +163,11 @@ function strCompare(str1, str2) { return str1 > str2 ? 1 : str1 < str2 ? -1 : 0;
 	.contCenter {  text-align: center; /*margin-top: 50%; float: none;*/ }
 
 	.contRightTop { width: 20%; float: right; clear: both; margin: 4px 4px 0px 0px; min-width: 85px; }
-	.boxHead { text-align: center; /*white-space: nowrap;*/ min-width: 85px; }
+	.boxHead { text-align: center; /*white-space: nowrap;*/ min-width: 85px; border: 1px solid #aaaaaa; border-radius: 3px; /*color: white;*/
+		background: #dadada url("//code.jquery.com/ui/1.11.4/themes/smoothness/images/ui-bg_glass_75_dadada_1x400.png") 50% 50% repeat-x; }
+	/*
 	#playbackContainer .ui-icon { background-image: url("//code.jquery.com/ui/1.11.4/themes/black-tie/images/ui-icons_ededed_256x240.png"); }
+	*/
 
 	.contCheckbox { white-space: nowrap; }
 	.contCheckbox input[type=checkbox] { /*width: 3px; height: 3px; visibility: hidden; margin: 0;*/ display: none; }
@@ -194,6 +198,8 @@ function strCompare(str1, str2) { return str1 > str2 ? 1 : str1 < str2 ? -1 : 0;
 	.dropdown select { border-width: 0; }
 	
 	label.-bs-icon- { margin-bottom: 0; }
+	
+	.ui-contextmenu { font-size: 80%; z-index: 150; }
 </style>
 </head>
 <body>
@@ -284,7 +290,7 @@ function createVideoCanvas (container, resizable) {
 	function createImage() { return $('<img style="visibility: hidden; display: none;" />').appendTo(container)[0]; }
 	image = [ createImage(), createImage() ];
 	if (resizable)
-		$videoImageContainer = $("<div style='position:absolute;width:0px;height:0px;'></div>").appendTo(container);
+		$videoImageContainer = $("<div class='video-container' style='position:absolute;width:0px;height:0px;'></div>").appendTo(container);
 	videoImage = $("<canvas width='0' height='0'></canvas>").appendTo($videoImageContainer || container)[0];
 	// create '2d' context; background color if no video present
 	videoImageContext = videoImage.getContext( '2d' );
@@ -300,15 +306,20 @@ function createVideoCanvas (container, resizable) {
 			if ($videoImageContainer) {
 				$videoImageContainer.width(this.width);
 				$videoImageContainer.height(this.height);
+				$videoImageContainer.data( "size", { width: this.width, height: this.height } );
 			}
 			if (resizable)
 				$videoImageContainer.draggable().resizable({
-					aspectRatio: this.width / this.height,
+					aspectRatio: this.width / this.height/*,
 					resize: function(event, ui) {
 						image[0].width = image[1].width = videoImage.width = ui.size.width;
 						image[0].height = image[1].height = videoImage.height = ui.size.height;
 						videoImageContext.drawImage( image[curImageIndex], 0, 0, videoImage.width, videoImage.height );
-					}
+					}*/
+				}).on( "resize", function(event, ui) {
+					image[0].width = image[1].width = videoImage.width = ui.size.width;
+					image[0].height = image[1].height = videoImage.height = ui.size.height;
+					videoImageContext.drawImage( image[curImageIndex], 0, 0, videoImage.width, videoImage.height );
 				});
 		}
 		curImageIndex = this === image[0] ? 0 : 1;
@@ -670,7 +681,7 @@ function onLoadHandler() {
 			deviceTypes.sort(function(a, b) {
 				return deviceTypeOrder(a.deviceType) - deviceTypeOrder(b.deviceType);
 			});
-			var $head = $("<div class='boxHead' style='background-color:cyan;'>Capture</div>").appendTo("#deviceContainer");
+			var $head = $("<div class='boxHead' style='/*background-color:cyan;*/'>Capture</div>").appendTo("#deviceContainer");
 			// try to restore current devices
 			var $line = $(lineHtml(getMyName())).appendTo("#deviceContainer");
 			for (var i = 0; i < deviceTypes.length; i++) {
@@ -734,7 +745,7 @@ function onLoadHandler() {
 				function cssToString(css) { var res = ""; for (var i in css) res += i + ":" + css[i] + ";"; return res; }
 				return "<br /><span style='display:inline-block;width:100%;height:2px;" + (_css ? cssToString(_css) : "") + "' id='a" + _name_hash + "'></span>";
 			}
-			var $head = $("<div class='boxHead' style='background-color:magenta;color:white;'>Playback</div>").appendTo("#playbackContainer");
+			var $head = $("<div class='boxHead' style='/*background-color:magenta;color:white;*/'>Playback</div>").appendTo("#playbackContainer");
 			var name = "", $line, $contCheckboxes, cnt;
 			for (var i = 0; i < rtmpStreams.length; i++) {
 				var rtmpStream = rtmpStreams[i];
@@ -830,6 +841,33 @@ $(function () {
 	function resize() { $('.contCenter').each(function () { var $this = $(this); $this.css('margin-top', ($(document).height() - $this.height()) / 2); }); }
 	$(window).resize(resize);
 	resize();
+});
+
+$( document ).contextmenu({
+	delegate: ".video-container",
+	menu: [
+		{ title: "Restore Original Size", cmd: "resize", uiIcon: "ui-icon-transfer-e-w" },
+		{ title: "Bring To Front", cmd: "z-index", uiIcon: "ui-icon-newwin" },
+	],
+	select: function(event, ui) {
+		//alert("select " + ui.cmd + " on " + ui.target);
+		var $cont = ui.target.closest(".video-container");
+		switch (ui.cmd) {
+		case "resize":
+			var size = $cont.data( "size" );
+			$cont.width(size.width).height(size.height).triggerHandler( "resize", { size: size });
+			break;
+		case "z-index":
+			var thisZ = 0, maxZ = 0;
+			$(".video-container").each(function () { var $this = $(this), zInd = $this.css("z-index"); zInd = isNaN(zInd) ? 0 : parseInt(zInd); if ($cont[0] === this) thisZ = zInd; else if (zInd > maxZ) maxZ = zInd; });
+			if (thisZ <= maxZ) {
+				$cont.css("z-index", thisZ = maxZ + 1);
+				if (thisZ > 85)
+					$(".video-container").each(function () { var $this = $(this), zInd = $this.css("z-index"); if (!isNaN(zInd)) $this.css("z-index", parseInt(zInd) - 1); });
+			}
+			break;
+		}
+	}
 });
 
 </script>
