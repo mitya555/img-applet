@@ -4,7 +4,7 @@
 <title>imgplay2-</title>
 <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
 <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css">
-<link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
+<link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/start/jquery-ui.css">
 <script src="//code.jquery.com/jquery-1.11.3.min.js"></script>
 <script src="//code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
 <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
@@ -163,11 +163,8 @@ function strCompare(str1, str2) { return str1 > str2 ? 1 : str1 < str2 ? -1 : 0;
 	.contCenter {  text-align: center; /*margin-top: 50%; float: none;*/ }
 
 	.contRightTop { width: 20%; float: right; clear: both; margin: 4px 4px 0px 0px; min-width: 85px; }
-	.boxHead { text-align: center; /*white-space: nowrap;*/ min-width: 85px; border: 1px solid #aaaaaa; border-radius: 3px; /*color: white;*/
-		background: #dadada url("//code.jquery.com/ui/1.11.4/themes/smoothness/images/ui-bg_glass_75_dadada_1x400.png") 50% 50% repeat-x; }
-	/*
-	#playbackContainer .ui-icon { background-image: url("//code.jquery.com/ui/1.11.4/themes/black-tie/images/ui-icons_ededed_256x240.png"); }
-	*/
+	.boxHead { text-align: center; /*white-space: nowrap;*/ min-width: 85px; }
+	/*#playbackContainer .ui-icon { background-image: url("//code.jquery.com/ui/1.11.4/themes/black-tie/images/ui-icons_ededed_256x240.png"); }*/
 
 	.contCheckbox { white-space: nowrap; }
 	.contCheckbox input[type=checkbox] { /*width: 3px; height: 3px; visibility: hidden; margin: 0;*/ display: none; }
@@ -224,9 +221,9 @@ function strCompare(str1, str2) { return str1 > str2 ? 1 : str1 < str2 ? -1 : 0;
 <div id="sign-in-panel">
 <div class="container">
 <div class="form-inline form-group contCenter">
-	<label for="enter-your-name">Please enter your name</label>
-	<input class="form-control" type="text" id="enter-your-name" title="Enter Your Name" />
-	<button type="button" class="btn btn-default" title="Enter the Chat Room" onclick="enterButtonClick(this);">Enter</button>
+	<label for="enter-your-name-txt">Please enter your name</label>
+	<input class="form-control" type="text" id="enter-your-name-txt" title="Enter Your Name" />
+	<button type="button" id="enter-your-name-btn" class="btn btn-default" title="Enter the Chat Room" onclick="enterButtonClick(this);">Enter</button>
 </div>
 </div>
 </div>
@@ -236,11 +233,21 @@ function strCompare(str1, str2) { return str1 > str2 ? 1 : str1 < str2 ? -1 : 0;
 </div>
 <script>
 
+$(function () {
+	$('#enter-your-name-txt').keypress(function (e) {
+		var code = e.keyCode || e.which;
+		if (code === 13) {
+			e.preventDefault();
+			enterButtonClick(document.getElementById('enter-your-name-btn'));
+		}
+	}).focus();
+});
+
 function enterButtonClick(e) {
 	$('#sign-in-panel').find('.alert').remove();
-	var _val = $('#enter-your-name').val(), val = $.trim(_val);
+	var _val = $('#enter-your-name-txt').val(), val = $.trim(_val);
 	if (val !== _val)
-		$('#enter-your-name').val(val);
+		$('#enter-your-name-txt').val(val);
 	if (val)
 	{
 		$.ajax({
@@ -530,7 +537,7 @@ function callFFmpeg(op, p1) {
 
 function getRtmpHostname() { return window.location.hash && window.location.hash.length > 7 ? window.location.hash.substring(1) : window.location.hostname; }
 
-function getMyName() { return $('#enter-your-name').val(); }
+function getMyName() { return $('#enter-your-name-txt').val(); }
 
 function getMyRtmpAppName(deviceType) { return getMyName() + '|' + deviceType; }
 
@@ -681,7 +688,7 @@ function onLoadHandler() {
 			deviceTypes.sort(function(a, b) {
 				return deviceTypeOrder(a.deviceType) - deviceTypeOrder(b.deviceType);
 			});
-			var $head = $("<div class='boxHead' style='/*background-color:cyan;*/'>Capture</div>").appendTo("#deviceContainer");
+			var $head = $("<div class='boxHead ui-state-default ui-corner-all' style='/*background-color:cyan;*/'>Capture</div>").appendTo("#deviceContainer");
 			// try to restore current devices
 			var $line = $(lineHtml(getMyName())).appendTo("#deviceContainer");
 			for (var i = 0; i < deviceTypes.length; i++) {
@@ -745,7 +752,7 @@ function onLoadHandler() {
 				function cssToString(css) { var res = ""; for (var i in css) res += i + ":" + css[i] + ";"; return res; }
 				return "<br /><span style='display:inline-block;width:100%;height:2px;" + (_css ? cssToString(_css) : "") + "' id='a" + _name_hash + "'></span>";
 			}
-			var $head = $("<div class='boxHead' style='/*background-color:magenta;color:white;*/'>Playback</div>").appendTo("#playbackContainer");
+			var $head = $("<div class='boxHead ui-state-default ui-corner-all' style='/*background-color:magenta;color:white;*/'>Playback</div>").appendTo("#playbackContainer");
 			var name = "", $line, $contCheckboxes, cnt;
 			for (var i = 0; i < rtmpStreams.length; i++) {
 				var rtmpStream = rtmpStreams[i];
