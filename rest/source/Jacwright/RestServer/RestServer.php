@@ -200,10 +200,11 @@ class RestServer
 		}
 
 		//$message = $this->codes[$statusCode] . ($errorMessage && $this->mode == 'debug' ? ': ' . $errorMessage : '');
+		$message = ($this->mode == 'debug' ? $statusCode . ': ' . $this->codes[$statusCode] : '') . ($errorMessage ? ($this->mode == 'debug' ? ': ' : '') . $errorMessage : '');
 
 		$this->setStatus($statusCode);
 		//$this->sendData(array('error' => array('code' => $statusCode, 'message' => $message)));
-		$this->sendData($errorMessage, RestFormat::PLAIN);
+		$this->sendData($message, RestFormat::PLAIN);
 	}
 
 	protected function loadCache()
@@ -408,7 +409,7 @@ class RestServer
 			$this->xml_encode($data);
 		} else if ($format == RestFormat::PLAIN) {
 
-                        echo $data;
+                        echo is_array($data) ? implode(', ', $data) : $data;
                 } else {
 
 			$options = 0;

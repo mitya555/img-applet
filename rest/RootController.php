@@ -11,7 +11,14 @@ class RootController
 	 */
 	public function test()
 	{
-		return "Hello World";
+		//return "Hello World";
+		echo "<pre>" .
+			"time(): \t\t\t" . time() . "\r\n" .
+			"microtime(): \t\t\t" . microtime() . "\r\n" .
+			"microtime(true): \t\t" . microtime(true) . "\r\n" . 
+			"round(microtime(true)*1000): \t" . round(microtime(true)*1000) . "\r\n" . 
+			"round(microtime(true)*1000)+1: \t" . (round(microtime(true)*1000)+1) . "\r\n" . 
+			"<script>document.write(\"new Date().getTime(): \\t\\t\" + new Date().getTime() + \"\\r\\n</pre>\");</script>";
 	}
 
 	/**
@@ -146,6 +153,70 @@ class RootController
 		$res = [];
 		foreach (new APCIterator('user', '/^' . $KEYNAME_PREFIX . '/') as $pair) {
 			$res[] = substr($pair['key'], $KEYNAME_PREFIX_LEN);
+		}
+		return $res;
+	}
+
+	/**
+	 * Text Chat
+	 * 
+	 * @url GET /tchat
+	 * @url GET /tchat/$time_msec/$item_num
+	 */
+	public function textChatGet($time_msec = null, $item_num = null) {
+		return RootController::textChat($time_msec, $item_num);
+	}
+	/**
+	 * Text Chat
+	 * 
+	 * @url PUT /tchat
+	 * @url PUT /tchat/$time_msec/$item_num
+	 */
+	public function textChatPut($time_msec = null, $item_num = null, $data) {
+		return RootController::textChat($time_msec, $item_num, $data);
+	}
+	private static function textChat($time_msec = null, $item_num = null, $data = null) {
+		$TTL = 0;
+		$KEYNAME_PREFIX = 'TCHAT_ITEM_';
+		$KEYNAME_PREFIX_LEN = strlen($KEYNAME_PREFIX);
+		if ($data) {
+			retry:
+			$num = apc_inc('TCHAT_CURRENT_NUM');
+			if ($num === false) {
+				$max = 0;
+				foreach (new APCIterator('user', '/^' . $KEYNAME_PREFIX . '/') as $pair) {
+					$num = substr($pair['key'], $KEYNAME_PREFIX_LEN);
+					if ($max < $num) {
+						$max = $num;
+					}
+				}
+				apc_store('TCHAT_CURRENT_NUM', $num = $max + 1);
+			}
+			$data->msec = round(microtime(true) * 1000);
+			$data->num = $num;
+			if (apc_add($KEYNAME_PREFIX . $num, $data) === false) {
+				goto retry;
+			}
+			$min = -1;
+			foreach (new APCIterator('user', '/^' . $KEYNAME_PREFIX . '/') as $pair) {
+				$tmp = substr($pair['key'], $KEYNAME_PREFIX_LEN);
+				if ($min > $tmp || $min < 0) {
+					$min = $tmp;
+				}
+			}
+			if ($min >= 0) {
+				for ($i = $min; $i <= $num - 100; $i++) {
+					apc_delete($KEYNAME_PREFIX . $i);
+				}
+			}
+		}
+		$res = [];
+		foreach (new APCIterator('user', '/^' . $KEYNAME_PREFIX . '/') as $pair) {
+			$val = $pair['value'];
+			if (!$time_msec || !$item_num || $time_msec < $val->msec || 
+				($time_msec == $val->msec && $item_num < $val->num)) {
+					$res[] = $val;
+			}
 		}
 		return $res;
 	}
