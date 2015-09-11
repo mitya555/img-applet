@@ -102,6 +102,12 @@ function decodeId (str) {
 }
 function jqId ( id ) { return id.replace( /(:|\.|\[|\]|,)/g, "\\$1" ); }
 function strCompare(str1, str2) { return str1 > str2 ? 1 : str1 < str2 ? -1 : 0; }
+function $trimVal(selector) {
+	var $txt = $(selector).first(), _val = $txt.val(), val = $.trim(_val);
+	if (val !== _val)
+		$txt.val(val);
+	return val;
+}
 </script>
 <style>
 	.ui-resizable-handle { cursor: nw-resize; }
@@ -230,8 +236,46 @@ function strCompare(str1, str2) { return str1 > str2 ? 1 : str1 < str2 ? -1 : 0;
 <div id="video-chat-panel" style="display:none;">
 	<div id="deviceContainer" class="contRightTop"></div>
 	<div id="playbackContainer" class="contRightTop"></div>
+	<div id="textchatContainer" class="contRightTop">
+		<div class='boxHead ui-state-default ui-corner-all' style='/*background-color:cyan;*/'>
+			Chat
+			<span class='ui-icon ui-icon-arrowrefresh-1-w ui-button ui-right' title='Refresh Text Chat'></span>
+		</div>
+		<textarea id='text-chat-text' class='form-control input-sm' rows='5'></textarea>
+		<button type="button" id="text-chat-btn" title="Send" style='float:right;width:100%;'><!--  class="btn btn-default btn-xs" -->
+			<i class='fa fa-send-o'></i>
+			Send
+		</button>
+	</div>
 </div>
 <script>
+
+$(function () {
+	$('#text-chat-text').keypress(function (e) {
+		var code = e.keyCode || e.which;
+		if (code === 13) {
+			e.preventDefault();
+			sendButtonClick();
+		}
+	}).focus();
+	$('#text-chat-btn').click(sendButtonClick).button();
+});
+
+function sendButtonClick() {
+	var val = $trimVal('#text-chat-text');
+	if (val)
+	{
+		$.ajax({
+			url: 'http://' + getRtmpHostname() + '/rest/tchat',
+			cache: false,
+			dataType: 'json'
+		}).then(function (data) {
+			alert('sent...');
+		}, function (error) {
+			var err = error;
+		});
+	}
+}
 
 $(function () {
 	$('#enter-your-name-txt').keypress(function (e) {
@@ -245,9 +289,7 @@ $(function () {
 
 function enterButtonClick(e) {
 	$('#sign-in-panel').find('.alert').remove();
-	var _val = $('#enter-your-name-txt').val(), val = $.trim(_val);
-	if (val !== _val)
-		$('#enter-your-name-txt').val(val);
+	var val = $trimVal('#enter-your-name-txt');
 	if (val)
 	{
 		$.ajax({
@@ -581,7 +623,9 @@ function onLoadHandler() {
 			htmlEncode(name) +
 			"</span></div>";
 	}
-	var ldCnt = 0, lsCnt = 0, cardinalPoints = [ "n", "e", "s", "w" ];
+	var cardinalPoints = [ "n", "e", "s", "w" ];
+	// list devices
+	var ldCnt = 0;
 	function listDevices () {
 		$("#deviceContainer select").css("visibility", "hidden");
 		callFFmpeg(_op.list_devices).then(function (res) {
@@ -700,6 +744,8 @@ function onLoadHandler() {
 			$("<span class='ui-icon ui-icon-arrowrefresh-1-" + cardinalPoints[(ldCnt++) % 4] + " ui-button ui-right' title='Refresh Audio/Video Devices'></span>").appendTo($head).click(listDevices);
 		});
 	}
+	// list streams
+	var lsCnt = 0;
 	function listStreams () {
 		$.when(
 			$.ajax({
@@ -792,22 +838,48 @@ function onLoadHandler() {
 			// add refresh button
 			//$("<span class='ui-icon ui-icon-refresh ui-button ui-right' title='Refresh Audio/Video Streams'></span>").appendTo($head).click(listStreams);
 			//$("<span style='display:inline-block;font-size:80%;vertical-align:bottom;float:right;'>" + new Date().toLocaleTimeString() + "</span>").appendTo($head);
-			$("<span class='ui-icon ui-icon-arrowrefresh-1-" + cardinalPoints[(lsCnt++) % 4] + " ui-button ui-right' title='Toggle Auto-Refresh Audio/Video Streams'></span>").appendTo($head).click(function () {
-				autoRefershStreams = !autoRefershStreams;
+			$("<span class='ui-icon ui-icon-arrowrefresh-1-" + cardinalPoints[(lsCnt++) % 4] + " ui-button ui-right' title='Refresh Audio/Video Streams'></span>").appendTo($head).click(function () {
+				autoRefreshStreams = true; // !autoRefreshStreams;
 				refreshStreams();
 			});
 		}, function (error) {
 			var err = error;
 		});
 	}
-	var autoRefershStreams = true;
+	var autoRefreshStreams = true;
 	function refreshStreams () {
-		if (autoRefershStreams)
+		if (autoRefreshStreams)
 			window.setTimeout(refreshStreams, 1000);
 		listStreams();
 	}
+	// text chat
+	var tcCnt = 0;
+	function textChat () {
+		$.ajax({
+			url: 'http://' + rtmp_hostname + '/rest/tchat',
+			cache: false,
+			dataType: 'json'
+		}).then(function (data) {
+			// refresh refresh button
+			$textChatHead.attr("class", "ui-icon ui-icon-arrowrefresh-1-" + cardinalPoints[(tcCnt++) % 4] + " ui-button ui-right");
+		}, function (error) {
+			var err = error;
+		});
+	}
+	var autoRefreshTextChat = true;
+	function refreshTextChat () {
+		if (autoRefreshTextChat)
+			window.setTimeout(refreshTextChat, 500);
+		textChat();
+	}
+	var $textChatHead = $('#textchatContainer .boxHead .ui-icon').click(function () {
+		autoRefreshTextChat = true; // !autoRefreshTextChat;
+		refreshTextChat();
+	});
+	// start everything
 	listDevices();
 	refreshStreams();
+	refreshTextChat();
 }
 
 // start the loop				
