@@ -208,6 +208,8 @@ function $trimVal(selector) {
 	label.-bs-icon- { margin-bottom: 0; }
 	
 	.ui-contextmenu { font-size: 80%; z-index: 150; }
+	
+	.hidden { display: none; }
 </style>
 </head>
 <body>
@@ -247,6 +249,8 @@ function $trimVal(selector) {
 			<span class='ui-icon ui-icon-arrowrefresh-1-w ui-button ui-right' title='Refresh Text Chat'></span>
 		</div>
 		<textarea id='text-chat-text' class='form-control input-sm' rows='5'></textarea>
+		<input type='checkbox' id='text-chat-timestamp' style='/*float:right;*//*font-size:90%;*/width:10px;height:10px;' /> 
+		<label for='text-chat-timestamp' style='/*float:right;*/font-size:90%;'>Timestamp</label>
 		<button type="button" id="text-chat-btn" title="Send" style='float:right;font-size:80%;'><!--  class="btn btn-default btn-xs" -->
 			<i class='fa fa-send-o'></i>
 			Send
@@ -854,7 +858,7 @@ function onLoadHandler() {
 			}).then(function (data) {
 				//alert('sent...');
 				$('#text-chat-text').val('');
-				textChatText($('#textContainer'), data);
+				textChatText($textChatTxtCont, data);
 			}, function (error) {
 				var err = error;
 			});
@@ -865,10 +869,11 @@ function onLoadHandler() {
 	function textChatText($cont, data) {
 		//$cont.empty();
 		data.sort(function (a, b) { var res = a.msec - b.msec; return res != 0 ? res : a.num - b.num; });
+		var showTs = $textChatTsCheckbox[0].checked;
 		for (var i in data) {
 			var item = lastTextChatDataItem = data[i];
-			$('<p style="overflow:auto;line-height:1.2;"></p>').prependTo($cont)
-				.append($('<div style="font-size:80%;/*margin-bottom:-3px;margin-top:3px;*/"></div>').text(new Date(item.msec).toLocaleString()))
+			$('<p style="overflow:auto;line-height:1.2;font-size:90%;"></p>').prependTo($cont)
+				.append($('<div class="tc-ts' + (showTs ? '' : ' hidden') + '" style="font-size:80%;/*margin-bottom:-3px;margin-top:3px;*/"></div>').text(new Date(item.msec).toLocaleString()))
 				.append($('<strong></strong>').text(item.name + ': '))
 				.append($('<span></span>').text(item.text));
 		}
@@ -896,6 +901,8 @@ function onLoadHandler() {
 	var $textChatHeadIcon = $('#textchatContainer .boxHead .ui-icon').click(function () {
 		autoRefreshTextChat = true; // !autoRefreshTextChat;
 		refreshTextChat();
+	}), $textChatTsCheckbox = $('#text-chat-timestamp').click(function () {
+		$('.tc-ts')[this.checked ? 'removeClass' : 'addClass']('hidden');
 	}), $textChatTxtCont = $('#textContainer');
 	// start everything
 	listDevices();
