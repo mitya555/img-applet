@@ -8,6 +8,11 @@
 <script src="//code.jquery.com/jquery-1.11.3.min.js"></script>
 <script src="//code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
 <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+<script>
+// resolve conflict between bootstrap .button() and jquery-ui .button()
+var bootstrapButton = $.fn.button.noConflict(); // return $.fn.button to previously assigned value
+$.fn.bootstrapBtn = bootstrapButton;            // give $().bootstrapBtn the Bootstrap functionality
+</script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/jquery.ui-contextmenu/1.10.0/jquery.ui-contextmenu.min.js"></script>
 <script>
 //----------------------------------------------------------------------
@@ -164,7 +169,7 @@ function $trimVal(selector) {
 	}
 *************** end round checkbox ****************/
 
-	/*body { color: #508; }*/
+	body { /*color: #508; line-height: 1.2;*/ }
 
 	.contCenter {  text-align: center; /*margin-top: 50%; float: none;*/ }
 
@@ -242,40 +247,15 @@ function $trimVal(selector) {
 			<span class='ui-icon ui-icon-arrowrefresh-1-w ui-button ui-right' title='Refresh Text Chat'></span>
 		</div>
 		<textarea id='text-chat-text' class='form-control input-sm' rows='5'></textarea>
-		<button type="button" id="text-chat-btn" title="Send" style='float:right;width:100%;'><!--  class="btn btn-default btn-xs" -->
+		<button type="button" id="text-chat-btn" title="Send" style='float:right;font-size:80%;'><!--  class="btn btn-default btn-xs" -->
 			<i class='fa fa-send-o'></i>
 			Send
 		</button>
+		<div id="textContainer" style='clear:both;/*overflow:auto;*/'>
+		</div>
 	</div>
 </div>
 <script>
-
-$(function () {
-	$('#text-chat-text').keypress(function (e) {
-		var code = e.keyCode || e.which;
-		if (code === 13) {
-			e.preventDefault();
-			sendButtonClick();
-		}
-	}).focus();
-	$('#text-chat-btn').click(sendButtonClick).button();
-});
-
-function sendButtonClick() {
-	var val = $trimVal('#text-chat-text');
-	if (val)
-	{
-		$.ajax({
-			url: 'http://' + getRtmpHostname() + '/rest/tchat',
-			cache: false,
-			dataType: 'json'
-		}).then(function (data) {
-			alert('sent...');
-		}, function (error) {
-			var err = error;
-		});
-	}
-}
 
 $(function () {
 	$('#enter-your-name-txt').keypress(function (e) {
@@ -853,15 +833,56 @@ function onLoadHandler() {
 		listStreams();
 	}
 	// text chat
+	$('#text-chat-text').keypress(function (e) {
+		var code = e.keyCode || e.which;
+		if (code === 13) {
+			e.preventDefault();
+			sendButtonClick();
+		}
+	}).focus();
+	$('#text-chat-btn').click(sendButtonClick).button();
+	function sendButtonClick() {
+		var val = $trimVal('#text-chat-text');
+		if (val)
+		{
+			$.ajax({
+				url: textChatUrl(),
+				method: 'PUT',
+				data: JSON.stringify({ name: getMyName(), text: val }),
+				cache: false,
+				dataType: 'json'
+			}).then(function (data) {
+				//alert('sent...');
+				$('#text-chat-text').val('');
+				textChatText($('#textContainer'), data);
+			}, function (error) {
+				var err = error;
+			});
+		}
+	}
+	var lastTextChatDataItem;
+	function textChatUrl() { return 'http://' + rtmp_hostname + '/rest/tchat' + (lastTextChatDataItem ? '/' + lastTextChatDataItem.msec + '/' + lastTextChatDataItem.num : ''); }
+	function textChatText($cont, data) {
+		//$cont.empty();
+		data.sort(function (a, b) { var res = a.msec - b.msec; return res != 0 ? res : a.num - b.num; });
+		for (var i in data) {
+			var item = lastTextChatDataItem = data[i];
+			$('<p style="overflow:auto;line-height:1.2;"></p>').prependTo($cont)
+				.append($('<div style="font-size:80%;/*margin-bottom:-3px;margin-top:3px;*/"></div>').text(new Date(item.msec).toLocaleString()))
+				.append($('<strong></strong>').text(item.name + ': '))
+				.append($('<span></span>').text(item.text));
+		}
+	}
 	var tcCnt = 0;
 	function textChat () {
 		$.ajax({
-			url: 'http://' + rtmp_hostname + '/rest/tchat',
+			url: textChatUrl(),
 			cache: false,
 			dataType: 'json'
 		}).then(function (data) {
+			textChatText($textChatTxtCont, data);
 			// refresh refresh button
-			$textChatHead.attr("class", "ui-icon ui-icon-arrowrefresh-1-" + cardinalPoints[(tcCnt++) % 4] + " ui-button ui-right");
+			$textChatHeadIcon.attr("class", "ui-icon ui-icon-arrowrefresh-1-" + cardinalPoints[(tcCnt++) % 4] + " ui-button ui-right");
 		}, function (error) {
 			var err = error;
 		});
@@ -872,10 +893,10 @@ function onLoadHandler() {
 			window.setTimeout(refreshTextChat, 500);
 		textChat();
 	}
-	var $textChatHead = $('#textchatContainer .boxHead .ui-icon').click(function () {
+	var $textChatHeadIcon = $('#textchatContainer .boxHead .ui-icon').click(function () {
 		autoRefreshTextChat = true; // !autoRefreshTextChat;
 		refreshTextChat();
-	});
+	}), $textChatTxtCont = $('#textContainer');
 	// start everything
 	listDevices();
 	refreshStreams();
