@@ -325,6 +325,10 @@ class RestServer
 				}
 			}
 		}
+		
+		foreach ($this->map as $key => $arr) {
+			uksort($this->map[$key], function ($a, $b) { return (strstr($a, '$') ? 1 : 0) - (strstr($b, '$') ? 1 : 0); });
+		}
 	}
 
 	public function getPath()
@@ -409,7 +413,10 @@ class RestServer
 			$this->xml_encode($data);
 		} else if ($format == RestFormat::PLAIN) {
 
-                        echo is_array($data) ? implode(', ', $data) : $data;
+                        //echo is_array($data) ? implode(', ', $data) : $data;
+			//var_dump($data);
+			//var_export($data);
+			print_r($data);
                 } else {
 
 			$options = 0;

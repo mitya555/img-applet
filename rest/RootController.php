@@ -169,13 +169,21 @@ class RootController
 	/**
 	 * Text Chat
 	 * 
+	 * @url GET /tchat/clear
+	 */
+	public function textChatClear() {
+		return RootController::textChat(null, null, null, true);
+	}
+	/**
+	 * Text Chat
+	 * 
 	 * @url PUT /tchat
 	 * @url PUT /tchat/$time_msec/$item_num
 	 */
 	public function textChatPut($time_msec = null, $item_num = null, $data) {
 		return RootController::textChat($time_msec, $item_num, $data);
 	}
-	private static function textChat($time_msec = null, $item_num = null, $data = null) {
+	private static function textChat($time_msec = null, $item_num = null, $data = null, $clear = false) {
 		$TTL = 0;
 		$KEYNAME_PREFIX = 'TCHAT_ITEM_';
 		$KEYNAME_PREFIX_LEN = strlen($KEYNAME_PREFIX);
@@ -217,6 +225,9 @@ class RootController
 				($time_msec == $val->msec && $item_num < $val->num)) {
 					$res[] = $val;
 			}
+		}
+		if ($clear) {
+			apc_delete(new APCIterator('user', '/^' . $KEYNAME_PREFIX . '/'));
 		}
 		return $res;
 	}
