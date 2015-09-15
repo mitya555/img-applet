@@ -184,7 +184,7 @@ class RootController
 		return RootController::textChat($time_msec, $item_num, $data);
 	}
 	private static function textChat($time_msec = null, $item_num = null, $data = null, $clear = false) {
-		$TTL = 0;
+		$TTL = 43200; // 12 hours in seconds: 12 * 60 * 60
 		$KEYNAME_PREFIX = 'TCHAT_ITEM_';
 		$KEYNAME_PREFIX_LEN = strlen($KEYNAME_PREFIX);
 		if ($data) {
@@ -202,7 +202,7 @@ class RootController
 			}
 			$data->msec = round(microtime(true) * 1000);
 			$data->num = $num;
-			if (apc_add($KEYNAME_PREFIX . $num, $data) === false) {
+			if (apc_add($KEYNAME_PREFIX . $num, $data, $TTL) === false) {
 				goto retry;
 			}
 			$min = -1;
