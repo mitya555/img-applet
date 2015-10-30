@@ -241,21 +241,35 @@ function $trimVal(selector) {
 </div>
 </div>
 <div id="video-chat-panel" style="display:none;">
-	<div id="deviceContainer" class="contRightTop"></div>
-	<div id="playbackContainer" class="contRightTop"></div>
+	<div id="deviceContainer" class="contRightTop">
+		<div class='boxHead ui-state-default ui-corner-all' style='/*background-color:cyan;*/'>
+			Capture
+			<span class='ui-icon ui-icon-arrowrefresh-1-w ui-button ui-right' title='Refresh Audio/Video Devices'></span>
+		</div>
+		<div></div>
+	</div>
+	<div id="playbackContainer" class="contRightTop">
+		<div class='boxHead ui-state-default ui-corner-all' style='/*background-color:magenta;color:white;*/'>
+			Playback
+			<span class='ui-icon ui-icon-arrowrefresh-1-w ui-right' title='Refresh Audio/Video Streams'></span>
+		</div>
+		<div></div>
+	</div>
 	<div id="textchatContainer" class="contRightTop">
 		<div class='boxHead ui-state-default ui-corner-all' style='/*background-color:cyan;*/'>
 			Chat
-			<span class='ui-icon ui-icon-arrowrefresh-1-w ui-button ui-right' title='Refresh Text Chat'></span>
+			<span class='ui-icon ui-icon-arrowrefresh-1-w ui-right' title='Refresh Text Chat'></span>
 		</div>
-		<textarea id='text-chat-text' class='form-control input-sm' rows='5'></textarea>
-		<input type='checkbox' id='text-chat-timestamp' style='/*float:right;*//*font-size:90%;*/width:10px;height:10px;' /> 
-		<label for='text-chat-timestamp' style='/*float:right;*/font-size:90%;'>Timestamp</label>
-		<button type="button" id="text-chat-btn" title="Send" style='float:right;font-size:80%;'><!--  class="btn btn-default btn-xs" -->
-			<i class='fa fa-send-o'></i>
-			Send
-		</button>
-		<div id="textContainer" style='clear:both;/*overflow:auto;*/'>
+		<div>
+			<textarea id='text-chat-text' class='form-control input-sm' rows='5'></textarea>
+			<input type='checkbox' id='text-chat-timestamp' style='/*float:right;*//*font-size:90%;*/width:10px;height:10px;' /> 
+			<label for='text-chat-timestamp' style='/*float:right;*/font-size:90%;'>Timestamp</label>
+			<button type="button" id="text-chat-btn" title="Send" style='float:right;font-size:80%;'><!--  class="btn btn-default btn-xs" -->
+				<i class='fa fa-send-o'></i>
+				Send
+			</button>
+			<div id="textContainer" style='clear:both;/*overflow:auto;*/'>
+			</div>
 		</div>
 	</div>
 </div>
@@ -433,13 +447,13 @@ function renewFFmpeg(op, key, p1, p2) {
 			'ffmpeg-c:v', 'libx264',
 			'ffmpeg-preset', 'ultrafast',
 			'ffmpeg-tune', 'zerolatency',
-			'ffmpeg-pix_fmt', 'yuv420p',
+			//'ffmpeg-pix_fmt', 'yuv420p',
 			'ffmpeg-g', '50',
 			'ffmpeg-an', '',
 			'ffmpeg-f:o', 'flv',
 			'ffmpeg-o', p2,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/v"
 			'debug', 'yes',
-			//'debug-ffmpeg', 'yes',
+			'debug-ffmpeg', debugFFmpeg(), // 'yes',
 		] ); devices[key] = p1; break;
 
 	case _op.playback_video: recreateFFmpeg( key, 'checkboxCallback', [
@@ -469,7 +483,7 @@ function renewFFmpeg(op, key, p1, p2) {
 			//"ffmpeg-loglevel", "warning",
 			"drop-unused-frames", "yes",
 			"debug", "yes",
-			//"debug-ffmpeg", "yes",
+			"debug-ffmpeg", debugFFmpeg(), // 'yes',
 		] ); videos[key] = createVideoCanvas(p2, true); break; // p2 - container's selector or jQuery object
 
 	case _op.capture_audio: recreateFFmpeg( key, 'checkboxCallback', [
@@ -482,7 +496,7 @@ function renewFFmpeg(op, key, p1, p2) {
 			'ffmpeg-f:o', 'flv',
 			'ffmpeg-o', p2,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/a"
 			'debug', 'yes',
-			//'debug-ffmpeg', 'yes',
+			'debug-ffmpeg', debugFFmpeg(), // 'yes',
 		] ); devices[key] = p1; break;
 
 	case _op.playback_audio: recreateFFmpeg( key, 'checkboxCallback', [
@@ -501,7 +515,7 @@ function renewFFmpeg(op, key, p1, p2) {
 			"wav-intermediate-buffer-size", "32",
 			"wav-level-change-callback", "audioLevelCallback",
 			"debug", "yes",
-			//"debug-ffmpeg", "yes",
+			"debug-ffmpeg", debugFFmpeg(), // 'yes',
 		] ); break;
 
 	case _op.capture_screen: recreateFFmpeg( key, 'checkboxCallback', [
@@ -513,13 +527,13 @@ function renewFFmpeg(op, key, p1, p2) {
 			'ffmpeg-c:v', 'libx264',
 			'ffmpeg-preset', 'ultrafast',
 			'ffmpeg-tune', 'zerolatency',
-			'ffmpeg-pix_fmt', 'yuv420p',
+			//'ffmpeg-pix_fmt', 'yuv420p',
 			'ffmpeg-g', '50',
 			'ffmpeg-an', '',
 			'ffmpeg-f:o', 'flv',
 			'ffmpeg-o', p1,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/s"
 			'debug', 'yes',
-			//'debug-ffmpeg', 'yes',
+			'debug-ffmpeg', debugFFmpeg(), // 'yes',
 		] ); break;
 	}
 }
@@ -544,7 +558,7 @@ function callFFmpeg(op, p1) {
 			'ffmpeg-f:i', 'dshow',
 			'ffmpeg-i', 'dummy',
 			'ffmpeg-o', '',
-			//'debug', 'yes',
+			'debug', debugFFmpeg(), // 'yes',
 		] ); break;
 
 	case _op.list_options: _ffmpeg_id = _applet.createFFmpegId( 'dataCallback', [
@@ -552,7 +566,7 @@ function callFFmpeg(op, p1) {
 			'ffmpeg-f:i', 'dshow',
 			'ffmpeg-i', p1,			// device, e.g. 'video=Logitech QuickCam Communicate STX', or 'audio=Logitech Mic (Communicate STX)'
 			'ffmpeg-o', '',
-			//'debug', 'yes',
+			'debug', debugFFmpeg(), // 'yes',
 		] ); break;
 	}
 	if (_ffmpeg_id) {
@@ -560,6 +574,8 @@ function callFFmpeg(op, p1) {
 	}
 	return defer.promise();
 }
+
+function debugFFmpeg() { return window.location.search && window.location.search.indexOf('debug-ffmpeg') != -1 ? 'yes' : 'no'; }
 
 function getRtmpHostname() { return window.location.hash && window.location.hash.length > 7 ? window.location.hash.substring(1) : window.location.hostname; }
 
@@ -607,7 +623,7 @@ function onLoadHandler() {
 			htmlEncode(name) +
 			"</span></div>";
 	}
-	var cardinalPoints = [ "n", "e", "s", "w" ];
+	var cardinalPoints = [ "n", "e", "s", "w" ], arrowrefreshClasses = $.map(cardinalPoints, function (val, i) { return "ui-icon-arrowrefresh-1-" + val; }), arrowrefreshClassStr = arrowrefreshClasses.join(" ");
 	// list devices
 	var ldCnt = 0;
 	function listDevices () {
@@ -689,7 +705,7 @@ function onLoadHandler() {
 			
 			// recreate UI
 			var checkeds = getCheckeds();
-			$("#deviceContainer").empty();
+			var $lineCont = $("#deviceContainer .boxHead + div").empty();
 			var deviceTypes = [];
 			// parse DirectShow output
 			var re = /\[\s*dshow\s*@\s*[a-fA-F0-9]+\s*\]\s*"?(.*?)"?\s*\r?\n/ig, match, arr = [];
@@ -716,18 +732,17 @@ function onLoadHandler() {
 			deviceTypes.sort(function(a, b) {
 				return deviceTypeOrder(a.deviceType) - deviceTypeOrder(b.deviceType);
 			});
-			var $head = $("<div class='boxHead ui-state-default ui-corner-all' style='/*background-color:cyan;*/'>Capture</div>").appendTo("#deviceContainer");
 			// try to restore current devices
-			var $line = $(lineHtml(getMyName())).appendTo("#deviceContainer");
+			var $line = $(lineHtml(getMyName())).appendTo($lineCont);
 			for (var i = 0; i < deviceTypes.length; i++) {
 				deviceTypes[i].appendTo($line).renew();
 			}
-			// add refresh button
-			//$("<span class='ui-icon ui-icon-refresh ui-button ui-right' title='Refresh Audio/Video Devices'></span>").appendTo($head).click(listDevices);
-			//$("<span style='display:inline-block;font-size:80%;vertical-align:bottom;float:right;'>" + new Date().toLocaleTimeString() + "</span>").appendTo($head);
-			$("<span class='ui-icon ui-icon-arrowrefresh-1-" + cardinalPoints[(ldCnt++) % 4] + " ui-button ui-right' title='Refresh Audio/Video Devices'></span>").appendTo($head).click(listDevices);
+			// refresh refresh button
+			$("#deviceContainer .boxHead .ui-icon.ui-right").removeClass(arrowrefreshClassStr).addClass(arrowrefreshClasses[(ldCnt++) % 4]);
 		});
 	}
+	// add refresh button click handler
+	$("#deviceContainer .boxHead .ui-icon.ui-right").click(function () { listDevices(); event.stopPropagation(); });
 	// list streams
 	var lsCnt = 0;
 	function listStreams () {
@@ -749,7 +764,7 @@ function onLoadHandler() {
 				return parseFloat($video.find("> width").text()) > 0 && parseFloat($video.find("> height").text()) > 0 ? "video" : $stream.find("> meta > audio").has("*") ? "audio" : "unknown";
 			}
 			var checkeds = getCheckeds(), opName = "play";
-			$("#playbackContainer").empty();
+			var $lineCont = $("#playbackContainer .boxHead + div").empty();
 			for (var key in ffmpeg_ids) {
 				var names = namesFromKey(key);
 				if (names.opName === "play" && !checkeds[key]) {
@@ -782,7 +797,6 @@ function onLoadHandler() {
 				function cssToString(css) { var res = ""; for (var i in css) res += i + ":" + css[i] + ";"; return res; }
 				return "<br /><span style='display:inline-block;width:100%;height:2px;" + (_css ? cssToString(_css) : "") + "' id='a" + _name_hash + "'></span>";
 			}
-			var $head = $("<div class='boxHead ui-state-default ui-corner-all' style='/*background-color:magenta;color:white;*/'>Playback</div>").appendTo("#playbackContainer");
 			var name = "", $line, $contCheckboxes, cnt;
 			for (var i = 0; i < rtmpStreams.length; i++) {
 				var rtmpStream = rtmpStreams[i];
@@ -792,7 +806,7 @@ function onLoadHandler() {
 						$(audioLevelIndicatorHtml(name)).appendTo($contCheckboxes);
 					}
 					name = rtmpStream.name;
-					$line = $(lineHtml(name)).appendTo("#playbackContainer");
+					$line = $(lineHtml(name)).appendTo($lineCont);
 					$contCheckboxes = $("<span style='display:inline-block;line-height:0px;margin-top:2px;'></span>").appendTo($line);
 					cnt = 0;
 				}
@@ -819,21 +833,14 @@ function onLoadHandler() {
 			}
 			// add audio level indicator
 			$(audioLevelIndicatorHtml(name)).appendTo($contCheckboxes);
-			// add refresh button
-			//$("<span class='ui-icon ui-icon-refresh ui-button ui-right' title='Refresh Audio/Video Streams'></span>").appendTo($head).click(listStreams);
-			//$("<span style='display:inline-block;font-size:80%;vertical-align:bottom;float:right;'>" + new Date().toLocaleTimeString() + "</span>").appendTo($head);
-			$("<span class='ui-icon ui-icon-arrowrefresh-1-" + cardinalPoints[(lsCnt++) % 4] + " ui-button ui-right' title='Refresh Audio/Video Streams'></span>").appendTo($head).click(function () {
-				autoRefreshStreams = true; // !autoRefreshStreams;
-				refreshStreams();
-			});
+			// refresh refresh button
+			$("#playbackContainer .boxHead .ui-icon.ui-right").removeClass(arrowrefreshClassStr).addClass(arrowrefreshClasses[(lsCnt++) % 4]);
 		}, function (error) {
 			var err = error;
 		});
 	}
-	var autoRefreshStreams = true;
 	function refreshStreams () {
-		if (autoRefreshStreams)
-			window.setTimeout(refreshStreams, 1000);
+		window.setTimeout(refreshStreams, 1000);
 		listStreams();
 	}
 	// text chat
@@ -887,20 +894,18 @@ function onLoadHandler() {
 		}).then(function (data) {
 			textChatText($textChatTxtCont, data);
 			// refresh refresh button
-			$textChatHeadIcon.attr("class", "ui-icon ui-icon-arrowrefresh-1-" + cardinalPoints[(tcCnt++) % 4] + " ui-button ui-right");
+			//$textChatHeadIcon.attr("class", "ui-icon ui-icon-arrowrefresh-1-" + cardinalPoints[(tcCnt++) % 4] + " ui-button ui-right");
+			$textChatHeadIcon.removeClass(arrowrefreshClassStr).addClass(arrowrefreshClasses[(tcCnt++) % 4]);
 		}, function (error) {
 			var err = error;
 		});
 	}
-	var autoRefreshTextChat = true;
 	function refreshTextChat () {
-		if (autoRefreshTextChat)
-			window.setTimeout(refreshTextChat, 500);
+		window.setTimeout(refreshTextChat, 500);
 		textChat();
 	}
 	var $textChatHeadIcon = $('#textchatContainer .boxHead .ui-icon').click(function () {
-		autoRefreshTextChat = true; // !autoRefreshTextChat;
-		refreshTextChat();
+		//textChat();
 	}), $textChatTsCheckbox = $('#text-chat-timestamp').click(function () {
 		$('.tc-ts')[this.checked ? 'removeClass' : 'addClass']('hidden');
 	}), $textChatTxtCont = $('#textContainer');
@@ -975,6 +980,10 @@ $( document ).contextmenu({
 			break;
 		}
 	}
+});
+
+$( "#video-chat-panel .contRightTop .boxHead" ).on( "click", function () {
+	$(this).next("div").slideToggle();
 });
 
 </script>
