@@ -309,7 +309,7 @@ var applets = [ document.getElementById( 'img-applet' ), document.getElementById
 	_applet,
 	sn = 0,
 	ffmpeg_ids = {},
-	devices = {},
+	current_device_name = {},
 	videos = {},
 	keys = {}, // by ffmpeg_id
 	name_hash = {}, // by ffmpeg_id
@@ -404,7 +404,7 @@ function removeFFmpeg(key) {
 		_applet.stopPlayback(ffmpeg_id);
 		_applet.removeFFmpegById(ffmpeg_id);
 		delete ffmpeg_ids[key];
-		delete devices[key];
+		delete current_device_name[key];
 		if (videos[key])
 			videos[key].destroy();
 		delete videos[key];
@@ -441,20 +441,20 @@ function renewFFmpeg(op, key, p1, p2) {
 	switch (op) {
 
 	case _op.capture_video: recreateFFmpeg( key, 'checkboxCallback', [
-			'ffmpeg-r', '25',
+			//'ffmpeg-r', '25',
 			'ffmpeg-f:i', 'dshow',
 			'ffmpeg-i', 'video=' + p1,		// video device, e.g. "Logitech QuickCam E3500"
 			'ffmpeg-c:v', 'libx264',
 			'ffmpeg-preset', 'ultrafast',
 			'ffmpeg-tune', 'zerolatency',
-			//'ffmpeg-pix_fmt', 'yuv420p',
+			//'ffmpeg-pix_fmt', 'yuv422p', // 'yuv420p',
 			'ffmpeg-g', '50',
 			'ffmpeg-an', '',
 			'ffmpeg-f:o', 'flv',
 			'ffmpeg-o', p2,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/v"
 			'debug', 'yes',
 			'debug-ffmpeg', debugFFmpeg(), // 'yes',
-		] ); devices[key] = p1; break;
+		] ); current_device_name[key] = p1; break;
 
 	case _op.playback_video: recreateFFmpeg( key, 'checkboxCallback', [
 			//"ffmpeg-re", "",
@@ -497,7 +497,7 @@ function renewFFmpeg(op, key, p1, p2) {
 			'ffmpeg-o', p2,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/a"
 			'debug', 'yes',
 			'debug-ffmpeg', debugFFmpeg(), // 'yes',
-		] ); devices[key] = p1; break;
+		] ); current_device_name[key] = p1; break;
 
 	case _op.playback_audio: recreateFFmpeg( key, 'checkboxCallback', [
 			"ffmpeg-re", "no",
@@ -527,7 +527,7 @@ function renewFFmpeg(op, key, p1, p2) {
 			'ffmpeg-c:v', 'libx264',
 			'ffmpeg-preset', 'ultrafast',
 			'ffmpeg-tune', 'zerolatency',
-			//'ffmpeg-pix_fmt', 'yuv420p',
+			//'ffmpeg-pix_fmt', 'yuv422p', // 'yuv420p',
 			'ffmpeg-g', '50',
 			'ffmpeg-an', '',
 			'ffmpeg-f:o', 'flv',
@@ -632,76 +632,118 @@ function onLoadHandler() {
 			// DeviceType class
 			function DeviceType(deviceType) {
 				this.deviceType = deviceType;
+				this.key = keyFromNames(deviceType);
 				this.$ffmpegUi = create$ffmpegUi(deviceType, checkeds);
 			}
 			DeviceType.prototype.appendTo = function(container) { this.$ffmpegUi.appendTo(container); return this; };
 			DeviceType.prototype.renew = function() {
-				var key = keyFromNames(this.deviceType);
-				if (!checkeds[key])
-					renewFFmpeg(_op["capture_" + this.deviceType], key, getRtmpUrl(getMyRtmpAppName(this.deviceType)));
+				if (!checkeds[this.key])
+					renewFFmpeg(_op["capture_" + this.deviceType], this.key, getRtmpUrl(getMyRtmpAppName(this.deviceType)));
 			};
 			// DirectShowDevice class
 			deriveFrom(DirectShowDevice, DeviceType);
 			function DirectShowDevice(deviceType) {
 				this.baseclass.constructor.call(this, deviceType);
-				var key = keyFromNames(deviceType);
+				this.devices = [];
 				this.$dropdown = $(
 					'<div class="dropdown">' +
-						'<a id="'+ key + '-trigger" href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">' +
+						'<a id="'+ this.key + '-trigger" href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">' +
 							'<span class="caret"></span>' +
 						'</a>' +
-						'<div class="dropdown-menu pull-right" aria-labelledby="'+ key + '-trigger">' +
+						'<div class="dropdown-menu pull-right" aria-labelledby="'+ this.key + '-trigger">' +
 							'<select></select>' +
 						'</div>' +
 					'</div>');
 				var self = this;
-				this.$select = DirectShowDevice.$select = this.$dropdown.find("select").change(function () {
-					self.updateUi(self.setDeviceName($(this).val()));
-				});
+				this.$select = this.$dropdown.find("select").change(function () { self._updateDevice($(this).val()); });
 				this.$dropdown.insertAfter(this.$ffmpegUi.find("label"));
 			}
-			DirectShowDevice.prototype.renew = function() {
-				this.updateUi(this.restoreDeviceName());
-				if (this.$select.find("option").filter(function () { return this.value; }).length < 2)
-					this.$dropdown.css("visibility", "hidden");
+			DirectShowDevice.prototype._getDevice = function(deviceName) {
+				for (var i = 0; i < this.devices.length; i++)
+					if (this.devices[i].name === deviceName)
+						return this.devices[i];
 			};
-			DirectShowDevice.prototype.updateUi = function(deviceName) {
-				var key = keyFromNames(this.deviceType);
-				var $checkbox = $("#" + jqId(key)).prop("disabled", !deviceName);
+			DirectShowDevice.prototype.renew = function() {
+				if (current_device_name[this.key] && this._getDevice(current_device_name[this.key])) {
+					this.$select.val(current_device_name[this.key]);
+				}
+				this._updateDevice(this.$select.val());
+			};
+			DirectShowDevice.prototype._updateDevice = function(deviceName) {
+				var self = this;
+				this._getOptions(deviceName).then(function (options) {
+					self._updateDropdownUi(options);
+					self._updateFFmpeg(deviceName);
+					self._updateUi(deviceName);
+				});
+			};
+			DirectShowDevice.prototype._getOptions = function(deviceName) {
+				var _device;
+				return $.when(this.deviceType === "video" && (_device = this._getDevice(deviceName)) && (_device.options || callFFmpeg(_op.list_options, this.deviceType + "=" + _device.name).then(function (res) {
+					// parse DirectShow output
+					var re = /\[\s*dshow\s*@\s*[a-fA-F0-9]+\s*\]\s*"?(.*?)"?\s*\r?\n/ig, match, arr = [];
+					while ((match = re.exec(res)) !== null) {
+						arr.push(match[1]);
+					}
+					re = /^\s*(pixel_format|vcodec)\s*=\s*(.*?)\s+min\s+s\s*=\s*(.*?)\s+fps\s*=\s*(.*?)\s+max\s+s\s*=\s*(.*?)\s+fps\s*=\s*(.*?)\s*$/i;
+					// add DirectShow device options
+					for (var i in arr) {
+						if (re.test(arr[i])) {
+							if (!_device.options)
+								_device.options = [];
+							match = re.exec(arr[i]);
+							if (res.type !== match[1] || res.name !== match[2]) {
+								_device.options.push(res = { type: match[1], name: match[2], type_name: match[1] + "=" + match[2], options: [] });
+							}
+							res.options.push({ min_s: match[3], min_fps: parseInt(match[4]), max_s: match[5], max_fps: parseInt(match[6]),
+								s: match[3], px: eval(match[3].replace("x","*")) });
+						}
+					}
+					return _device.options
+				})));
+			};
+			DirectShowDevice.prototype._findOption = function(options, type_name) {
+				for (var i in options)
+					if (options[i].type_name === type_name)
+						return options[i];
+			};
+			DirectShowDevice.prototype._updateDropdownUi = function(options) {
+				if (options) {
+					if (!this.$select2)
+						this.$select2 = $("<select style='float:right;display:inline-block;'></select").appendTo(this.$div2 = $("<div></div>").insertAfter(this.$select));
+					this.$select2.empty();
+					for (var i in options)
+						$("<option></option>").attr("value", options[i].type_name).text(options[i].type + ": " + options[i].name).appendTo(this.$select2);
+
+					if (!this.$select3)
+						this.$select3 = $("<select style='float:right;display:inline-block;'></select").appendTo(this.$div3 = $("<div></div>").insertAfter(this.$div2));
+					this.$select3.empty();
+					var option = this._findOption(options, this.$select2.val());
+					if (option) {
+						var arr = option.options.slice();
+						arr.sort(function (p1, p2) { return p1.px - p2.px; });
+						for (var i in arr)
+							$("<option></option>").attr("value", arr[i].s).text(arr[i].s).prop("selected", arr[i].s === option.options[0].s).appendTo(this.$select3);
+					}
+				} else if (this.devices.length < 2) {
+					this.$dropdown.css("visibility", "hidden");
+				}
+			};
+			DirectShowDevice.prototype._updateUi = function(deviceName) {
+				var $checkbox = $("#" + jqId(this.key)).prop("disabled", !deviceName);
 				if (!deviceName)
 					$checkbox.prop("checked", false);
-				var $label = $("label[for=" + jqId(key) + "]");
+				var $label = $("label[for=" + jqId(this.key) + "]");
 				$label.attr("title", deviceName);
-			}
-			DirectShowDevice.prototype.renewFFmpeg = function(key, val) { renewFFmpeg(_op["capture_" + this.deviceType], key, val, getRtmpUrl(getMyRtmpAppName(this.deviceType))); }
-			DirectShowDevice.prototype.restoreDeviceName = function() {
-				var key = keyFromNames(this.deviceType), deviceName = devices[key], val;
+			};
+			DirectShowDevice.prototype._updateFFmpeg = function(deviceName) {
 				if (deviceName) {
-					if (this.$select.find("option").filter(function () { return this.value === deviceName; }).length > 0) {
-						this.$select.val(deviceName);
-					}
-					val = this.$select.val();
-					if (val) {
-						if (deviceName !== val)
-							this.renewFFmpeg(key, val);
-					} else {
-						removeFFmpeg(key);
-					}
-				} else if (val = this.$select.val()) {
-					this.renewFFmpeg(key, val);
+					if (current_device_name[this.key] !== deviceName)
+						renewFFmpeg(_op["capture_" + this.deviceType], this.key, deviceName, getRtmpUrl(getMyRtmpAppName(this.deviceType)));
+				} else if (current_device_name[this.key]) {
+					removeFFmpeg(this.key);
 				}
-				return val || "";
-			}
-			DirectShowDevice.prototype.setDeviceName = function(val) {
-				var key = keyFromNames(this.deviceType), deviceName = devices[key];
-				if (val) {
-					if (deviceName !== val)
-						this.renewFFmpeg(key, val);
-				} else if (deviceName) {
-					removeFFmpeg(key);
-				}
-				return val || "";
-			}
+			};
 			
 			// recreate UI
 			var checkeds = getCheckeds();
@@ -718,12 +760,13 @@ function onLoadHandler() {
 			for (var i in arr) {
 				if (re.test(arr[i])) {
 					var deviceType = re.exec(arr[i])[1].toLowerCase();
-					deviceTypes.push(new DirectShowDevice(deviceType));
-					$("<option></option>").attr({ "value": "", "disabled": "disabled" }).text(arr[i]).appendTo(DirectShowDevice.$select);
+					deviceTypes.push(DirectShowDevice.current = new DirectShowDevice(deviceType));
+					$("<option></option>").attr({ "value": "", "disabled": "disabled" }).text(arr[i]).appendTo(DirectShowDevice.current.$select);
 				} else if (re1.test(arr[i])) {
-					$("<option></option>").attr({ "value": "", "disabled": "disabled" }).text(arr[i]).appendTo(DirectShowDevice.$select);
+					$("<option></option>").attr({ "value": "", "disabled": "disabled" }).text(arr[i]).appendTo(DirectShowDevice.current.$select);
 				} else {
-					$("<option></option>").attr("value", arr[i]).text(arr[i]).appendTo(DirectShowDevice.$select);
+					$("<option></option>").attr("value", arr[i]).text(arr[i]).appendTo(DirectShowDevice.current.$select);
+					DirectShowDevice.current.devices.push({ name: arr[i], index: DirectShowDevice.current.devices.length });
 				}
 			}
 			// add screen grab
@@ -945,7 +988,7 @@ function render() {
 	}
 }
 
-$( document ).on( "click", ".dropdown-menu select", function() {
+$( document ).on( "click", ".dropdown-menu select", function(event) {
 	event.stopPropagation();
 });
 
