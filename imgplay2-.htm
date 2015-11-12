@@ -207,7 +207,9 @@ function $trimVal(selector) {
 	
 	label.-bs-icon- { margin-bottom: 0; }
 	
-	.ui-contextmenu { font-size: 80%; z-index: 150; }
+	.ui-contextmenu, .dropdown-menu { font-size: 80%; z-index: 150; }
+	.dropdown-menu { padding-right: 2px; }
+	.menu-container { /*clear: both;*/ text-align: right; white-space: nowrap; }
 	
 	.hidden { display: none; }
 </style>
@@ -651,11 +653,14 @@ function onLoadHandler() {
 							'<span class="caret"></span>' +
 						'</a>' +
 						'<div class="dropdown-menu pull-right" aria-labelledby="'+ this.key + '-trigger">' +
-							'<select></select>' +
+							'<div class="menu-container">' +
+								'<select></select>' +
+							'</div>' +
 						'</div>' +
 					'</div>');
 				var self = this;
 				this.$select = this.$dropdown.find("select").change(function () { self._updateDevice($(this).val()); });
+				this.$div = this.$select.parent();
 				this.$dropdown.insertAfter(this.$ffmpegUi.find("label"));
 			}
 			DirectShowDevice.prototype._getDevice = function(deviceName) {
@@ -687,8 +692,10 @@ function onLoadHandler() {
 					}
 					re = /^\s*(pixel_format|vcodec)\s*=\s*(.*?)\s+min\s+s\s*=\s*(.*?)\s+fps\s*=\s*(.*?)\s+max\s+s\s*=\s*(.*?)\s+fps\s*=\s*(.*?)\s*$/i;
 					// add DirectShow device options
+					var tmp = {};
 					for (var i in arr) {
-						if (re.test(arr[i])) {
+						if (re.test(arr[i]) && !tmp[arr[i]]) {
+							tmp[arr[i]] = arr[i]; // filter out duplicates
 							if (!_device.options)
 								_device.options = [];
 							match = re.exec(arr[i]);
@@ -710,13 +717,17 @@ function onLoadHandler() {
 			DirectShowDevice.prototype._updateDropdownUi = function(options) {
 				if (options) {
 					if (!this.$select2)
-						this.$select2 = $("<select style='float:right;display:inline-block;'></select").appendTo(this.$div2 = $("<div></div>").insertAfter(this.$select));
+						this.$select2 = $("<select></select").appendTo(
+							this.$div2 = $("<div class='menu-container'></div>").insertAfter(this.$div)
+							.append("<div style='margin-left:2px;display:inline-block;text-align:left;'>Mode:</div>"));
 					this.$select2.empty();
 					for (var i in options)
 						$("<option></option>").attr("value", options[i].type_name).text(options[i].type + ": " + options[i].name).appendTo(this.$select2);
 
 					if (!this.$select3)
-						this.$select3 = $("<select style='float:right;display:inline-block;'></select").appendTo(this.$div3 = $("<div></div>").insertAfter(this.$div2));
+						this.$select3 = $("<select style='float:right;'></select").appendTo(
+							this.$div3 = $("<div style='clear:both;white-space:nowrap;'></div>").insertAfter(this.$div2)
+							.append("<div style='margin-left:2px;display:inline-block;text-align:left;'>Resolution:</div>"));
 					this.$select3.empty();
 					var option = this._findOption(options, this.$select2.val());
 					if (option) {
