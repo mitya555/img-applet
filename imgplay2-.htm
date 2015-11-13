@@ -210,6 +210,7 @@ function $trimVal(selector) {
 	.ui-contextmenu, .dropdown-menu { font-size: 80%; z-index: 150; }
 	.dropdown-menu { padding-right: 2px; }
 	.menu-container { /*clear: both;*/ text-align: right; white-space: nowrap; }
+	.menu-label { margin-left: 2px; display: inline-block; /*text-align: left;*/ float: left; }
 	
 	.hidden { display: none; }
 </style>
@@ -709,25 +710,28 @@ function onLoadHandler() {
 					return _device.options
 				})));
 			};
-			DirectShowDevice.prototype._findOption = function(options, type_name) {
+			DirectShowDevice.prototype._findOption = function(options, value, name) {
+				if (!name)
+					name = "type_name";
 				for (var i in options)
-					if (options[i].type_name === type_name)
+					if (options[i][name] === value)
 						return options[i];
 			};
 			DirectShowDevice.prototype._updateDropdownUi = function(options) {
 				if (options) {
+
 					if (!this.$select2)
 						this.$select2 = $("<select></select").appendTo(
 							this.$div2 = $("<div class='menu-container'></div>").insertAfter(this.$div)
-							.append("<div style='margin-left:2px;display:inline-block;text-align:left;'>Mode:</div>"));
+							.append("<div class='menu-label'>Mode:</div>"));
 					this.$select2.empty();
 					for (var i in options)
 						$("<option></option>").attr("value", options[i].type_name).text(options[i].type + ": " + options[i].name).appendTo(this.$select2);
 
 					if (!this.$select3)
-						this.$select3 = $("<select style='float:right;'></select").appendTo(
-							this.$div3 = $("<div style='clear:both;white-space:nowrap;'></div>").insertAfter(this.$div2)
-							.append("<div style='margin-left:2px;display:inline-block;text-align:left;'>Resolution:</div>"));
+						this.$select3 = $("<select></select").appendTo(
+							this.$div3 = $("<div class='menu-container'></div>").insertAfter(this.$div2)
+							.append("<div class='menu-label'>Resolution:</div>"));
 					this.$select3.empty();
 					var option = this._findOption(options, this.$select2.val());
 					if (option) {
@@ -736,6 +740,26 @@ function onLoadHandler() {
 						for (var i in arr)
 							$("<option></option>").attr("value", arr[i].s).text(arr[i].s).prop("selected", arr[i].s === option.options[0].s).appendTo(this.$select3);
 					}
+
+					//if (!this.$slider)
+					//	this.$slider = $("<div></div").insertAfter(this.$div3).slider();
+					//option = this._findOption(option.options, this.$select3.val(), "s");
+					//this.$slider.slider("option", {
+					//	min: option.min_fps,
+					//	max: option.max_fps,
+					//	value: 30 < option.min_fps ? option.min_fps : 30 > option.max_fps ? option.max_fps : 30
+					//});
+					if (!this.$select4)
+						this.$select4 = $("<select></select").appendTo(
+							this.$div4 = $("<div class='menu-container'></div>").insertAfter(this.$div3)
+							.append("<div class='menu-label'>Fps:</div>"));
+					this.$select4.empty();
+					option = this._findOption(option.options, this.$select3.val(), "s");
+					if (option) {
+						for (var i = option.min_fps; i <= option.max_fps; i++)
+							$("<option></option>").attr("value", i).text(i).prop("selected", i === 30 < option.min_fps ? option.min_fps : 30 > option.max_fps ? option.max_fps : 30).appendTo(this.$select4);
+					}
+
 				} else if (this.devices.length < 2) {
 					this.$dropdown.css("visibility", "hidden");
 				}
