@@ -720,18 +720,19 @@ function onLoadHandler() {
 			DirectShowDevice.prototype._updateDropdownUi = function(options) {
 				if (options) {
 
+					function $menuContainer(insertAfter, label) {
+						return $("<div class='menu-container'></div>").insertAfter(insertAfter)
+							.append("<div class='menu-label'>" + label + ":</div>");
+					}
+
 					if (!this.$select2)
-						this.$select2 = $("<select></select").appendTo(
-							this.$div2 = $("<div class='menu-container'></div>").insertAfter(this.$div)
-							.append("<div class='menu-label'>Mode:</div>"));
+						this.$select2 = $("<select></select").appendTo(this.$div2 = $menuContainer(this.$div, "Mode"));
 					this.$select2.empty();
 					for (var i in options)
-						$("<option></option>").attr("value", options[i].type_name).text(options[i].type + ": " + options[i].name).appendTo(this.$select2);
+						$("<option></option>").attr("value", options[i].type_name).text(/*options[i].type + ": " + options[i].name*/options[i].type_name).appendTo(this.$select2);
 
 					if (!this.$select3)
-						this.$select3 = $("<select></select").appendTo(
-							this.$div3 = $("<div class='menu-container'></div>").insertAfter(this.$div2)
-							.append("<div class='menu-label'>Resolution:</div>"));
+						this.$select3 = $("<select></select").appendTo(this.$div3 = $menuContainer(this.$div2, "Resolution"));
 					this.$select3.empty();
 					var option = this._findOption(options, this.$select2.val());
 					if (option) {
@@ -750,15 +751,20 @@ function onLoadHandler() {
 					//	value: 30 < option.min_fps ? option.min_fps : 30 > option.max_fps ? option.max_fps : 30
 					//});
 					if (!this.$select4)
-						this.$select4 = $("<select></select").appendTo(
-							this.$div4 = $("<div class='menu-container'></div>").insertAfter(this.$div3)
-							.append("<div class='menu-label'>Fps:</div>"));
+						this.$select4 = $("<select></select").appendTo(this.$div4 = $menuContainer(this.$div3, "Fps"));
 					this.$select4.empty();
 					option = this._findOption(option.options, this.$select3.val(), "s");
 					if (option) {
 						for (var i = option.min_fps; i <= option.max_fps; i++)
 							$("<option></option>").attr("value", i).text(i).prop("selected", i === 30 < option.min_fps ? option.min_fps : 30 > option.max_fps ? option.max_fps : 30).appendTo(this.$select4);
 					}
+					
+					this.$dropdown.on("shown.bs.dropdown", function () {
+						function childrenWidth($e) { var w = 0; $e.children().each(function () { w += $(this).outerWidth(true); }); return w; }
+						var $e = $(this).find(".dropdown-menu .menu-container"), w = 0;
+						$e.each(function () { var _w = childrenWidth($(this)); if (w < _w) w = _w; });
+						$e.each(function () { var $this = $(this); if ($this.width() < w) $this.width(w); });
+					});
 
 				} else if (this.devices.length < 2) {
 					this.$dropdown.css("visibility", "hidden");
