@@ -645,6 +645,8 @@ public class FFmpegProcess extends Observable {
 		addOptNV("f:i", "f", command/*, "flv"*/);
 		addOptNV("show_region", command);
 		addOptNV("framerate", command);
+		addOptNV("pixel_format", command);
+		addOptNV("vcodec", command);
 		addOptNV("offset_x", command);
 		addOptNV("offset_y", command);
 		addOptNV("video_size", command);

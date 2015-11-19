@@ -312,7 +312,7 @@ var applets = [ document.getElementById( 'img-applet' ), document.getElementById
 	_applet,
 	sn = 0,
 	ffmpeg_ids = {},
-	current_device_name = {},
+	current_device_name = {}, current_device_mode = {}, current_device_resolution = {}, current_device_fps = {},
 	videos = {},
 	keys = {}, // by ffmpeg_id
 	name_hash = {}, // by ffmpeg_id
@@ -337,7 +337,7 @@ function registerAppletStateHandler() {
 
 function createVideoCanvas (container, resizable) {
 	var image, videoImage, $videoImageContainer, videoImageContext, last_img = -1;
-	function createImage() { return $('<img style="visibility: hidden; display: none;" />').appendTo(container)[0]; }
+	function createImage() { return /*$('<img style="visibility: hidden; display: none;" />').appendTo(container)[0]*/ new Image(); }
 	image = [ createImage(), createImage() ];
 	if (resizable)
 		$videoImageContainer = $("<div class='video-container' style='position:absolute;width:0px;height:0px;'></div>").appendTo(container);
@@ -347,37 +347,35 @@ function createVideoCanvas (container, resizable) {
 	videoImageContext.fillStyle = '#005337';
 	videoImageContext.fillRect( 0, 0, videoImage.width, videoImage.height );				
 	// assign image elements onload handler
-	var setDimensions = true, curImageIndex;
+	var init = true, curImage;
 	image[0].onload = image[1].onload = function() {
-		if (setDimensions) {
-			setDimensions = false;
+		if (init) {
+			init = false;
 			videoImage.width = this.width;
 			videoImage.height = this.height;
 			if ($videoImageContainer) {
 				$videoImageContainer.width(this.width);
 				$videoImageContainer.height(this.height);
-				$videoImageContainer.data( "size", { width: this.width, height: this.height } );
+				$videoImageContainer[0].resetToImageNaturalSize = function () {
+					var _size = { width: curImage.naturalWidth, height: curImage.naturalHeight };
+					$(this).width(_size.width).height(_size.height).triggerHandler( "resize", { size: _size });
+				};
 			}
 			if (resizable)
 				$videoImageContainer.draggable().resizable({
-					aspectRatio: this.width / this.height/*,
-					resize: function(event, ui) {
-						image[0].width = image[1].width = videoImage.width = ui.size.width;
-						image[0].height = image[1].height = videoImage.height = ui.size.height;
-						videoImageContext.drawImage( image[curImageIndex], 0, 0, videoImage.width, videoImage.height );
-					}*/
+					aspectRatio: this.width / this.height
 				}).on( "resize", function(event, ui) {
 					image[0].width = image[1].width = videoImage.width = ui.size.width;
 					image[0].height = image[1].height = videoImage.height = ui.size.height;
-					videoImageContext.drawImage( image[curImageIndex], 0, 0, videoImage.width, videoImage.height );
+					videoImageContext.drawImage( curImage, 0, 0, videoImage.width, videoImage.height );
 				});
 		}
-		curImageIndex = this === image[0] ? 0 : 1;
+		curImage = this;
 		videoImageContext.drawImage( this, 0, 0, videoImage.width, videoImage.height );
 	};
 	return {
 		drawUri:	function (uri) { image[last_img = (last_img + 1) % 2].src = uri; },
-		destroy:	function () { ($videoImageContainer || $(videoImage)).remove(); $(image[0]).remove(); $(image[1]).remove(); }
+		destroy:	function () { ($videoImageContainer || $(videoImage)).remove(); /*$(image[0]).remove(); $(image[1]).remove();*/ $videoImageContainer = videoImage = image[0] = image[1] = null; }
 	};
 }
 
@@ -386,8 +384,8 @@ function checkboxClick(checkbox) {
 }
 function checkboxCallback(ffmpeg_id, playing) {
 	var key = keys[ffmpeg_id];
-	if (key)
-		document.getElementById(key).checked = playing;
+	function setChecked() { var cb = document.getElementById(key); if (cb) { cb.checked = playing; } else { window.setTimeout(setChecked, 20); } }
+	if (key) setChecked();
 }
 
 function audioLevelCallback(ffmpeg_id, level) {
@@ -408,6 +406,9 @@ function removeFFmpeg(key) {
 		_applet.removeFFmpegById(ffmpeg_id);
 		delete ffmpeg_ids[key];
 		delete current_device_name[key];
+		delete current_device_mode[key];
+		delete current_device_resolution[key];
+		delete current_device_fps[key];
 		if (videos[key])
 			videos[key].destroy();
 		delete videos[key];
@@ -440,10 +441,11 @@ var _op = {
 	capture_screen: 7
 };
 
-function renewFFmpeg(op, key, p1, p2) {
+function renewFFmpeg(op, key, p1, p2, mode, resolution, fps) {
 	switch (op) {
 
-	case _op.capture_video: recreateFFmpeg( key, 'checkboxCallback', [
+	case _op.capture_video:
+		var options = [
 			//'ffmpeg-r', '25',
 			'ffmpeg-f:i', 'dshow',
 			'ffmpeg-i', 'video=' + p1,		// video device, e.g. "Logitech QuickCam E3500"
@@ -457,7 +459,34 @@ function renewFFmpeg(op, key, p1, p2) {
 			'ffmpeg-o', p2,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/v"
 			'debug', 'yes',
 			'debug-ffmpeg', debugFFmpeg(), // 'yes',
-		] ); current_device_name[key] = p1; break;
+		];
+		current_device_name[key] = p1;
+		var tmp;
+		if (mode && ((tmp = mode.split("="))[0] === "pixel_format" || tmp[0] === "vcodec") && tmp.length > 1 && tmp[1]) {
+			current_device_mode[key] = mode;
+			options.push("ffmpeg-" + tmp[0]);
+			options.push(tmp[1]);
+		} else {
+			delete current_device_mode[key];
+		}
+		if (resolution) {
+			current_device_resolution[key] = resolution;
+			options.push("ffmpeg-video_size");
+			options.push(resolution);
+		} else {
+			delete current_device_resolution[key];
+		}
+		if (fps) {
+			current_device_fps[key] = fps;
+			options.push("ffmpeg-framerate");
+			options.push(fps);
+			options.push("ffmpeg-r");
+			options.push(fps);
+		} else {
+			delete current_device_fps[key];
+		}
+		recreateFFmpeg( key, 'checkboxCallback', options );
+		break;
 
 	case _op.playback_video: recreateFFmpeg( key, 'checkboxCallback', [
 			//"ffmpeg-re", "",
@@ -660,7 +689,7 @@ function onLoadHandler() {
 						'</div>' +
 					'</div>');
 				var self = this;
-				this.$select = this.$dropdown.find("select").change(function () { self._updateDevice($(this).val()); });
+				this.$select = this.$dropdown.find("select").change(function () { self._updateDevice(); });
 				this.$div = this.$select.parent();
 				this.$dropdown.insertAfter(this.$ffmpegUi.find("label"));
 			}
@@ -673,14 +702,20 @@ function onLoadHandler() {
 				if (current_device_name[this.key] && this._getDevice(current_device_name[this.key])) {
 					this.$select.val(current_device_name[this.key]);
 				}
-				this._updateDevice(this.$select.val());
+				this._updateDevice();
 			};
-			DirectShowDevice.prototype._updateDevice = function(deviceName) {
-				var self = this;
+			DirectShowDevice.prototype._updateDevice = function() {
+				var deviceName = this.$select.val(), self = this;
 				this._getOptions(deviceName).then(function (options) {
 					self._updateDropdownUi(options);
-					self._updateFFmpeg(deviceName);
+					self._updateFFmpeg(deviceName, options);
 					self._updateUi(deviceName);
+				});
+			};
+			DirectShowDevice.prototype._updateOption = function() {
+				var deviceName = this.$select.val(), self = this;
+				this._getOptions(deviceName).then(function (options) {
+					self._updateFFmpeg(deviceName, options);
 				});
 			};
 			DirectShowDevice.prototype._getOptions = function(deviceName) {
@@ -721,18 +756,20 @@ function onLoadHandler() {
 				if (options) {
 
 					function $menuContainer(insertAfter, label) {
-						return $("<div class='menu-container'></div>").insertAfter(insertAfter)
-							.append("<div class='menu-label'>" + label + ":</div>");
+						return $("<div class='menu-container'></div>").insertAfter(insertAfter).append("<div class='menu-label'>" + htmlEncode(label) + ":</div>");
+					}
+					function create$select(self, contPropName, insertAfter, label) {
+						return $("<select></select").appendTo(self[contPropName] = $menuContainer(insertAfter, label)).change(function () { self._updateOption(); });
 					}
 
 					if (!this.$select2)
-						this.$select2 = $("<select></select").appendTo(this.$div2 = $menuContainer(this.$div, "Mode"));
+						this.$select2 = create$select(this, "$div2", this.$div, "Mode");
 					this.$select2.empty();
 					for (var i in options)
 						$("<option></option>").attr("value", options[i].type_name).text(/*options[i].type + ": " + options[i].name*/options[i].type_name).appendTo(this.$select2);
 
 					if (!this.$select3)
-						this.$select3 = $("<select></select").appendTo(this.$div3 = $menuContainer(this.$div2, "Resolution"));
+						this.$select3 = create$select(this, "$div3", this.$div2, "Resolution");
 					this.$select3.empty();
 					var option = this._findOption(options, this.$select2.val());
 					if (option) {
@@ -742,21 +779,13 @@ function onLoadHandler() {
 							$("<option></option>").attr("value", arr[i].s).text(arr[i].s).prop("selected", arr[i].s === option.options[0].s).appendTo(this.$select3);
 					}
 
-					//if (!this.$slider)
-					//	this.$slider = $("<div></div").insertAfter(this.$div3).slider();
-					//option = this._findOption(option.options, this.$select3.val(), "s");
-					//this.$slider.slider("option", {
-					//	min: option.min_fps,
-					//	max: option.max_fps,
-					//	value: 30 < option.min_fps ? option.min_fps : 30 > option.max_fps ? option.max_fps : 30
-					//});
 					if (!this.$select4)
-						this.$select4 = $("<select></select").appendTo(this.$div4 = $menuContainer(this.$div3, "Fps"));
+						this.$select4 = create$select(this, "$div4", this.$div3, "Fps");
 					this.$select4.empty();
 					option = this._findOption(option.options, this.$select3.val(), "s");
 					if (option) {
 						for (var i = option.min_fps; i <= option.max_fps; i++)
-							$("<option></option>").attr("value", i).text(i).prop("selected", i === 30 < option.min_fps ? option.min_fps : 30 > option.max_fps ? option.max_fps : 30).appendTo(this.$select4);
+							$("<option></option>").attr("value", i).text(i).prop("selected", i === (30 < option.min_fps ? option.min_fps : 30 > option.max_fps ? option.max_fps : 30)).appendTo(this.$select4);
 					}
 					
 					this.$dropdown.on("shown.bs.dropdown", function () {
@@ -777,10 +806,23 @@ function onLoadHandler() {
 				var $label = $("label[for=" + jqId(this.key) + "]");
 				$label.attr("title", deviceName);
 			};
-			DirectShowDevice.prototype._updateFFmpeg = function(deviceName) {
+			DirectShowDevice.prototype._updateFFmpeg = function(deviceName, options) {
 				if (deviceName) {
-					if (current_device_name[this.key] !== deviceName)
-						renewFFmpeg(_op["capture_" + this.deviceType], this.key, deviceName, getRtmpUrl(getMyRtmpAppName(this.deviceType)));
+					var deviceMode, deviceResolution, deviceFps;
+					if (options) {
+						deviceMode = this.$select2.val();
+						deviceResolution = this.$select3.val();
+						deviceFps = this.$select4.val();
+					}
+					if (current_device_name[this.key] !== deviceName || (options && (
+						current_device_mode[this.key] !== deviceMode ||
+						current_device_resolution[this.key] !== deviceResolution ||
+						current_device_fps[this.key] !== deviceFps))) {
+						if (options)
+							renewFFmpeg(_op["capture_" + this.deviceType], this.key, deviceName, getRtmpUrl(getMyRtmpAppName(this.deviceType)), deviceMode, deviceResolution, deviceFps);
+						else
+							renewFFmpeg(_op["capture_" + this.deviceType], this.key, deviceName, getRtmpUrl(getMyRtmpAppName(this.deviceType)));
+					}
 				} else if (current_device_name[this.key]) {
 					removeFFmpeg(this.key);
 				}
@@ -1050,8 +1092,7 @@ $( document ).contextmenu({
 		var $cont = ui.target.closest(".video-container");
 		switch (ui.cmd) {
 		case "resize":
-			var size = $cont.data( "size" );
-			$cont.width(size.width).height(size.height).triggerHandler( "resize", { size: size });
+			$cont[0].resetToImageNaturalSize();
 			break;
 		case "z-index":
 			var thisZ = 0, maxZ = 0;
