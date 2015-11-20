@@ -980,6 +980,7 @@ function onLoadHandler() {
 	$('#text-chat-btn').click(sendButtonClick).button();
 	function sendButtonClick() {
 		var val = $trimVal('#text-chat-text');
+		$('#text-chat-text').val('');
 		if (val)
 		{
 			$.ajax({
@@ -989,11 +990,9 @@ function onLoadHandler() {
 				cache: false,
 				dataType: 'json'
 			}).then(function (data) {
-				//alert('sent...');
-				$('#text-chat-text').val('');
 				textChatText($textChatTxtCont, data);
 			}, function (error) {
-				var err = error;
+				$('#text-chat-text').val(val); // restore the value
 			});
 		}
 	}
