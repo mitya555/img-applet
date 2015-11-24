@@ -514,6 +514,8 @@ function renewFFmpeg(op, key, p1, p2, mode, resolution, fps) {
 			//"ffmpeg-muxdelay", "10",
 			//"ffmpeg-loglevel", "warning",
 			"drop-unused-frames", "yes",
+			"process-frame-callback", "showVideoFrame",
+			"process-frame-number-of-consumer-threads", "3",
 			"debug", "yes",
 			"debug-ffmpeg", debugFFmpeg(), // 'yes',
 		] ); videos[key] = createVideoCanvas(p2, true); break; // p2 - container's selector or jQuery object
@@ -1040,8 +1042,15 @@ function onLoadHandler() {
 	refreshTextChat();
 }
 
+// frame consumer threads in Java with the callback function below.
+// has to be configured in function renewFFmpeg(op, key, p1, p2, mode, resolution, fps) { ... case _op.playback_video:
+function showVideoFrame(ffmpeg_id, dataUri) {
+	videos[keys[ffmpeg_id]].drawUri(dataUri);
+}
+
+// frame consumer in javascript:
 // start the loop				
-animate();
+//animate();
 
 function animate() {
 	requestAnimationFrame( animate );

@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Observable;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
@@ -88,6 +89,15 @@ public class FFmpegProcess extends Observable {
 		abstract Buffer getCurrentBufferWait() throws InterruptedException;
 		abstract void getCurrentBufferNotify();
 		abstract int getQueueLength();
+		// producer / consumer pattern:
+		public BlockingQueue<Integer> notifyQueue;
+		protected int numberOfConsumerThreads;
+		public void startConsumerThreads(int numOfThreads, Runnable runnable) {
+			numberOfConsumerThreads = numOfThreads;
+			for (int i = 0; i < numOfThreads; i++) {
+				new Thread(runnable).start();
+			}
+		}
 	}
 	
 	static abstract class MediaReader extends FilterInputStream implements ReaderToBuffer {
@@ -128,12 +138,18 @@ public class FFmpegProcess extends Observable {
 				synchronized (b1) {
 					res = b1.len = in.read(b1);
 					b1.sn = ++sn;
+					if (notifyQueue != null) {
+						notifyQueue.offer(sn);
+					}
 				}
 			}
 			else {
 				synchronized (b2) {
 					res = b2.len = in.read(b2);
 					b2.sn = ++sn;
+					if (notifyQueue != null) {
+						notifyQueue.offer(sn);
+					}
 				}
 			}
 			return res;
@@ -176,7 +192,14 @@ public class FFmpegProcess extends Observable {
 		@Override
 		int getQueueLength() { return 2; }
 		@Override
-		public void close() throws IOException {}
+		public void close() throws IOException {
+			if (notifyQueue != null) {
+				notifyQueue.clear();
+				for (int i = 0; i < numberOfConsumerThreads; i++) {
+					notifyQueue.offer(-200);
+				}
+			}
+		}
 	}
 	
 	static class BufferList extends MultiBuffer
@@ -383,7 +406,7 @@ public class FFmpegProcess extends Observable {
 			dataUriStringBuilder = new StringBuilder("data:" + contentType + ";base64,");
 			dataUriPrefixLength = dataUriStringBuilder.length();
 		}
-		public void resetStringBuilder() { dataUriStringBuilder.setLength(dataUriPrefixLength); }
+		public StringBuilder resetStringBuilder() { dataUriStringBuilder.setLength(dataUriPrefixLength); return dataUriStringBuilder; }
 	}
 	
 	static public class TrackInfo { public int timeScale, width, height; public boolean hasAudio; }
@@ -402,11 +425,16 @@ public class FFmpegProcess extends Observable {
 			return multiBuffer.getCurrentBytes();
 		}
 		
+		public String _getDataURI() throws IOException {
+			byte[] buf = multiBuffer.getCurrentBytes();
+			return dataOut.resetStringBuilder().append(DatatypeConverter.printBase64Binary(buf)).toString();
+		}
+		
 		public String getDataURI() throws IOException {
 			if (multiBuffer.getSN() == 0)
 				return null;
-			dataOut.resetStringBuilder();
-			return dataOut.dataUriStringBuilder.append(DatatypeConverter.printBase64Binary(multiBuffer.getCurrentBytes())).toString();
+			byte[] buf = multiBuffer.getCurrentBytes();
+			return dataOut.resetStringBuilder().append(DatatypeConverter.printBase64Binary(buf)).toString();
 		}
 		
 		public void multiBufferNotify() { multiBuffer.getCurrentBufferNotify(); }
@@ -533,8 +561,9 @@ public class FFmpegProcess extends Observable {
 //	private volatile boolean ffm_stop;
 
 	private boolean demux_fMP4, dropUnusedFrames;
-	private int bufferSize, vBufferSize, aBufferSize, maxMemoryBufferCount, maxVideoBufferCount, mp3FramesPerChunk, wavAudioLineBufferSize, wavIntermediateBufferSize;
-	private String wavLevelChangeCallback;
+	private int bufferSize, vBufferSize, aBufferSize, maxMemoryBufferCount, maxVideoBufferCount, mp3FramesPerChunk,
+		wavAudioLineBufferSize, wavIntermediateBufferSize, processFrameNumberOfConsumerThreads;
+	private String wavLevelChangeCallback, processFrameCallback;
 	private double bufferGrowFactor, bufferShrinkThresholdFactor;
 	private MediaStream mediaStream, demuxVideoStream;
 	
@@ -581,6 +610,10 @@ public class FFmpegProcess extends Observable {
 		wavIntermediateBufferSize = parseInt(getParameter("wav-intermediate-buffer-size"));
 
 		wavLevelChangeCallback = getParameter("wav-level-change-callback");
+
+		processFrameCallback = getParameter("process-frame-callback");
+		processFrameNumberOfConsumerThreads = parseInt(getParameter("process-frame-number-of-consumer-threads"));
+		if (processFrameNumberOfConsumerThreads <= 0) processFrameNumberOfConsumerThreads = 1; 
 		
 		return this;
 	}
@@ -799,6 +832,37 @@ public class FFmpegProcess extends Observable {
 			mediaStream = new MediaStream(contentType, dropUnusedFrames ? new DoubleBuffer(DEBUG, "Frame") :
 					new BufferList(maxMemoryBufferCount, video ? maxVideoBufferCount : 0, DEBUG, "Frame"));
 			demuxVideoStream = null;
+			final boolean processFrameCallbackSet = !strEmpty(processFrameCallback);
+			if (processFrameCallbackSet) {
+				final BlockingQueue<Integer> _notifyQueue = mediaStream.multiBuffer.notifyQueue = new ArrayBlockingQueue<Integer>(5);
+				mediaStream.multiBuffer.startConsumerThreads(processFrameNumberOfConsumerThreads, new Runnable() {
+					@Override
+					public void run() {
+						MediaStream _mediaStream;
+						int attempts = 0; 
+						try {
+							while (mediaStream != null) {
+								if (_notifyQueue.take() == -200)
+									break;
+								try {
+									if ((_mediaStream = mediaStream) != null)
+										JSObject.getWindow(applet).call(processFrameCallback, new Object[] { id, _mediaStream._getDataURI() });
+									else
+										break;
+									if (attempts > 0)
+										attempts = 0; // counts consecutive failures; reset for success
+								} catch (JSException | IOException e) {
+									e.printStackTrace();
+									if (++attempts >= 10)
+										break;
+								}
+							}
+						} catch (InterruptedException e) {
+							e.printStackTrace();
+						}
+					}
+				});
+			}
 			while (true/* && !ffm_stop*/)
 				try {
 					int res = mediaStream.multiBuffer.readToBuffer(in_);
@@ -866,6 +930,8 @@ public class FFmpegProcess extends Observable {
 								_signalLevel = _signalLevelQueue.take();
 								try {
 									JSObject.getWindow(applet).call(wavLevelChangeCallback, new Object[] { id, _signalLevel.intValue() });
+									if (attempts > 0)
+										attempts = 0; // counts consecutive failures; reset for success
 								} catch (JSException e) {
 									e.printStackTrace();
 									if (++attempts >= 10)
