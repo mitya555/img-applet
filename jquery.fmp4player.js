@@ -45,7 +45,8 @@ var defaults = {
 /*	"ffmpeg-muxpreload": "10",
 	"ffmpeg-muxdelay": "10",
 	"ffmpeg-loglevel": "warning",*/
-	"debug": "yes"
+	"debug": "yes",
+	"debug-ffmpeg": "yes",
 /* 
 	"ffmpeg-map": "0:0",
 	"ffmpeg-an": "",
