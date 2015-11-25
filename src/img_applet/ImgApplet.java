@@ -1,5 +1,6 @@
 package img_applet;
 
+import ffmpeg.FFmpeg;
 import img_applet.FFmpegProcess.TrackInfo;
 
 import java.applet.Applet;
@@ -124,6 +125,8 @@ public class ImgApplet extends JApplet {
 	public void init() {
 		
 		super.init();
+		
+		FFmpeg.load(getCodeBase());
 		
 		DEBUG = !isNo(getParameter("debug"));
 		
