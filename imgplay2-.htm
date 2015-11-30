@@ -174,7 +174,7 @@ function $trimVal(selector) {
 	.contCenter {  text-align: center; /*margin-top: 50%; float: none;*/ }
 
 	.contRightTop { width: 20%; float: right; clear: both; margin: 4px 4px 0px 0px; min-width: 85px; }
-	.boxHead { text-align: center; /*white-space: nowrap;*/ min-width: 85px; }
+	.boxHead { text-align: center; /*white-space: nowrap;*/ min-width: 85px; cursor: default; }
 	/*#playbackContainer .ui-icon { background-image: url("//code.jquery.com/ui/1.11.4/themes/black-tie/images/ui-icons_ededed_256x240.png"); }*/
 
 	.contCheckbox { white-space: nowrap; }
@@ -460,32 +460,26 @@ function renewFFmpeg(op, key, p1, p2, mode, resolution, fps) {
 			'debug', 'yes',
 			'debug-ffmpeg', debugFFmpeg(), // 'yes',
 		];
-		current_device_name[key] = p1;
-		var tmp;
-		if (mode && ((tmp = mode.split("="))[0] === "pixel_format" || tmp[0] === "vcodec") && tmp.length > 1 && tmp[1]) {
-			current_device_mode[key] = mode;
+		var tmp, isMode = (mode && ((tmp = mode.split("="))[0] === "pixel_format" || tmp[0] === "vcodec") && tmp.length > 1 && tmp[1]);
+		if (isMode) {
 			options.push("ffmpeg-" + tmp[0]);
 			options.push(tmp[1]);
-		} else {
-			delete current_device_mode[key];
 		}
 		if (resolution) {
-			current_device_resolution[key] = resolution;
 			options.push("ffmpeg-video_size");
 			options.push(resolution);
-		} else {
-			delete current_device_resolution[key];
 		}
 		if (fps) {
-			current_device_fps[key] = fps;
 			options.push("ffmpeg-framerate");
 			options.push(fps);
 			options.push("ffmpeg-r");
 			options.push(fps);
-		} else {
-			delete current_device_fps[key];
 		}
 		recreateFFmpeg( key, 'checkboxCallback', options );
+		current_device_name[key] = p1;
+		if (isMode) { current_device_mode[key] = mode; } else { delete current_device_mode[key]; }
+		if (resolution) { current_device_resolution[key] = resolution; } else { delete current_device_resolution[key]; }
+		if (fps) { current_device_fps[key] = fps; } else { delete current_device_fps[key]; }
 		break;
 
 	case _op.playback_video: recreateFFmpeg( key, 'checkboxCallback', [
@@ -769,6 +763,8 @@ function onLoadHandler() {
 					this.$select2.empty();
 					for (var i in options)
 						$("<option></option>").attr("value", options[i].type_name).text(/*options[i].type + ": " + options[i].name*/options[i].type_name).appendTo(this.$select2);
+					if (current_device_mode[this.key] && this._findOption(options, current_device_mode[this.key]))
+						this.$select2.val(current_device_mode[this.key]);
 
 					if (!this.$select3)
 						this.$select3 = create$select(this, "$div3", this.$div2, "Resolution");
@@ -779,6 +775,8 @@ function onLoadHandler() {
 						arr.sort(function (p1, p2) { return p1.px - p2.px; });
 						for (var i in arr)
 							$("<option></option>").attr("value", arr[i].s).text(arr[i].s).prop("selected", arr[i].s === option.options[0].s).appendTo(this.$select3);
+						if (current_device_resolution[this.key] && this._findOption(option.options, current_device_resolution[this.key], "s"))
+							this.$select3.val(current_device_resolution[this.key]);
 					}
 
 					if (!this.$select4)
@@ -788,6 +786,9 @@ function onLoadHandler() {
 					if (option) {
 						for (var i = option.min_fps; i <= option.max_fps; i++)
 							$("<option></option>").attr("value", i).text(i).prop("selected", i === (30 < option.min_fps ? option.min_fps : 30 > option.max_fps ? option.max_fps : 30)).appendTo(this.$select4);
+						var _fps;
+						if (current_device_fps[this.key] && (_fps = parseInt(current_device_fps[this.key])) >= option.min_fps && _fps <= option.max_fps)
+							this.$select4.val(current_device_fps[this.key]);
 					}
 					
 					this.$dropdown.on("shown.bs.dropdown", function () {
@@ -805,8 +806,9 @@ function onLoadHandler() {
 				var $checkbox = $("#" + jqId(this.key)).prop("disabled", !deviceName);
 				if (!deviceName)
 					$checkbox.prop("checked", false);
-				var $label = $("label[for=" + jqId(this.key) + "]");
-				$label.attr("title", deviceName);
+				var $label = $("label[for=" + jqId(this.key) + "]"),
+					_device = this._getDevice(deviceName);
+				$label.attr("title", _device ? _device.display : deviceName);
 			};
 			DirectShowDevice.prototype._updateFFmpeg = function(deviceName, options) {
 				if (deviceName) {
@@ -839,19 +841,25 @@ function onLoadHandler() {
 			while ((match = re.exec(res)) !== null) {
 				arr.push(match[1]);
 			}
-			re = /^\s*Direct\s*Show\s*(video|audio)\s*devices\s*$/i;
-			var re1 = /^\s*Could\s*not\s*enumerate\s*(video|audio)\s*devices\.?\s*$/i;
+			re = /^\s*Direct\s*Show\s*(video|audio)\s*devices\s*.*$/i;
+			var re1 = /^\s*Could\s*not\s*enumerate\s*(video|audio)\s*devices\.?\s*$/i,
+				re2 = /^\s*Alternative\s+name\s*"?(.*?)"?\s*$/i;
 			// add DirectShow devices
-			for (var i in arr) {
+			for (var i = 0; i < arr.length; i++) {
 				if (re.test(arr[i])) {
 					var deviceType = re.exec(arr[i])[1].toLowerCase();
 					deviceTypes.push(DirectShowDevice.current = new DirectShowDevice(deviceType));
 					$("<option></option>").attr({ "value": "", "disabled": "disabled" }).text(arr[i]).appendTo(DirectShowDevice.current.$select);
 				} else if (re1.test(arr[i])) {
 					$("<option></option>").attr({ "value": "", "disabled": "disabled" }).text(arr[i]).appendTo(DirectShowDevice.current.$select);
+				} else if (re2.test(arr[i + 1])) {
+					var altName = re2.exec(arr[i + 1])[1];
+					$("<option></option>").attr("value", altName).text(arr[i]).appendTo(DirectShowDevice.current.$select);
+					DirectShowDevice.current.devices.push({ name: altName, display: arr[i], index: DirectShowDevice.current.devices.length });
+					i++;
 				} else {
 					$("<option></option>").attr("value", arr[i]).text(arr[i]).appendTo(DirectShowDevice.current.$select);
-					DirectShowDevice.current.devices.push({ name: arr[i], index: DirectShowDevice.current.devices.length });
+					DirectShowDevice.current.devices.push({ name: arr[i], display: arr[i], index: DirectShowDevice.current.devices.length });
 				}
 			}
 			// add screen grab

@@ -15,7 +15,7 @@ public class FFmpeg {
 			String localVer = JarLib.getLocal("ffmpeg.build.txt"), remoteVer = null;
 			if (localVer != null)
 				remoteVer = JarLib.getUrl(new URL(baseUrl, "ffmpeg.build.txt"));
-			if (localVer == null || remoteVer.compareToIgnoreCase(localVer) > 0) {
+			if (localVer == null || remoteVer.compareToIgnoreCase(localVer) != 0) {
 				JarLib.deleteLocal("ffmpeg.build.txt");
 				JarLib.deleteLocal("ffmpeg.exe");
 			}
