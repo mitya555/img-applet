@@ -63,9 +63,15 @@ public class FFmpegProcess extends Observable {
 			return this.size;
 		}
 		public boolean persistent;
+		@Override
+		public String toString() { return " # " + sn + (persistent ? " \t f/s" : " \t mem"); }
 	}
 
-	static class VideoBuffer extends Buffer { public volatile long timestamp; }
+	static class VideoBuffer extends Buffer {
+		public volatile long timestamp;
+		@Override
+		public String toString() { return super.toString() + " \t ts: " + timestamp; }
+	}
 	
 	static interface BufferFactory { Buffer newBuffer(); }
 	
@@ -307,16 +313,20 @@ public class FFmpegProcess extends Observable {
 		@Override
 		int readToBuffer(ReaderToBuffer in) throws IOException, InterruptedException {
 
-			while (maxBufferCount > 0 && filledBufferList.count >= maxBufferCount)
-				getCurrentBytes();
+			while (maxBufferCount > 0 && filledBufferList.count >= maxBufferCount) {
+				Buffer buf_ = filledBufferList.remove();
+				if (buf_ != null) {
+					if (DEBUG)
+						errOut.println(" - " + name + buf_);
+					releaseBuffer_(buf_);
+				}
+			}
 
 			Buffer buf = emptyBufferList.remove();
 			if (buf == null) {
 				buf = bufferFactory.newBuffer();
 				if (bufferCount < maxMemoryBufferCount) {
 					bufferCount++;
-					if (DEBUG)
-						errOut.println(name + " buffer # " + bufferCount + " allocated");
 				} else {
 					buf.persistent = true;
 				}
@@ -333,6 +343,8 @@ public class FFmpegProcess extends Observable {
 				}
 			} else
 				(res != -1 ? filledBufferList : emptyBufferList).add(buf);
+			if (DEBUG && res != -1)
+				errOut.println(" + " + name + buf);
 			return res;
 		}
 		@Override
@@ -359,20 +371,19 @@ public class FFmpegProcess extends Observable {
 		}
 		private void getCurrentBuffer_() { if (currentBuffer == null) currentBuffer = filledBufferList.remove(); }
 		private void getCurrentBufferWait_() throws InterruptedException { if (currentBuffer == null) currentBuffer = filledBufferList.removeWait(); }
-		private void releaseCurrentBuffer_() {
-			if (currentBuffer.persistent)
-				currentBuffer = null;
-			else {
-				Buffer buf = currentBuffer;
-				currentBuffer = null;
+		private void releaseBuffer_(Buffer buf) {
+			if (!buf.persistent) {
 				if (bufferCount > maxMemoryBufferCount / 2 && emptyBufferList.count > maxMemoryBufferCount / 2) {
-					if (DEBUG)
-						try { errOut.println(name + " buffer # " + bufferCount + " discarded"); } catch (IOException e) { e.printStackTrace(); }
 					bufferCount--;
 					return;
 				}
 				emptyBufferList.add(buf);
 			}
+		}
+		private void releaseCurrentBuffer_() {
+			Buffer buf = currentBuffer;
+			currentBuffer = null;
+			releaseBuffer_(buf);
 		}
 		@Override
 		Buffer getCurrentBuffer() { getCurrentBuffer_(); return currentBuffer; }
