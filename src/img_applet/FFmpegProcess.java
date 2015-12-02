@@ -257,8 +257,7 @@ public class FFmpegProcess extends Observable {
 					}
 				return res;
 			}
-			@Override
-			public void close() throws IOException {
+			public boolean tryDelete() throws IOException {
 				bb.clear();
 				bb = null;
 				fc.close();
@@ -266,8 +265,10 @@ public class FFmpegProcess extends Observable {
 //				if (!file.delete())
 //					throw new IOException("File " + file.getName() + " couldn't be deleted.");
 //				Files.deleteIfExists(file.toPath());
-				file.delete();
+				return file.delete();
 			}
+			@Override
+			public void close() throws IOException { tryDelete(); }
 			@Override
 			protected void finalize() throws Throwable { file.delete(); super.finalize(); }
 		}
@@ -316,6 +317,10 @@ public class FFmpegProcess extends Observable {
 			while (maxBufferCount > 0 && filledBufferList.count >= maxBufferCount) {
 				Buffer buf_ = filledBufferList.remove();
 				if (buf_ != null) {
+					if (buf_.persistent) {
+						byte[] tmp = new byte[buf_.len];
+						fileBuffer.read(tmp, 0, buf_.len); // release the file buffer
+					}
 					if (DEBUG)
 						errOut.println(" - " + name + buf_);
 					releaseBuffer_(buf_);
@@ -399,10 +404,13 @@ public class FFmpegProcess extends Observable {
 		public void close() throws IOException {
 			if (fileBuffer != null) {
 				_File _file;
+				int closed = 0, deleted = 0;
 				while ((_file = fileBuffer.remove()) != null) {
 					debug("Closing file " + _file.file.getName());
-					try { _file.close(); } catch (Throwable e) { e.printStackTrace(); }
+					closed++;
+					try { if (_file.tryDelete()) deleted++; } catch (Throwable e) { e.printStackTrace(); }
 				}
+				errOut.println("FileBuffer: closed " + closed + "; deleted " + deleted + " files");
 				fileBuffer = null;
 			}
 		}
@@ -550,7 +558,7 @@ public class FFmpegProcess extends Observable {
     private static boolean strEmpty(String str) { return str == null || str.length() == 0; }
     private static boolean isNo(String str) { return str == null || "No".equalsIgnoreCase(str) || "False".equalsIgnoreCase(str); }
 
-    private boolean DEBUG = true, DEBUG_FFMPEG = false;
+    private boolean DEBUG = true, DEBUG_FFMPEG = false, DEBUG_BUFFERLIST = false;
     private void debug(String dbg) { if (DEBUG) System.out.println(dbg); }
     private void debug(String dbg, String inf) { if (DEBUG) System.out.println(dbg); else System.out.println(inf); }
 
@@ -598,6 +606,7 @@ public class FFmpegProcess extends Observable {
 		
 		DEBUG = !isNo(getParameter("debug"));
 		DEBUG_FFMPEG = !isNo(getParameter("debug-ffmpeg"));
+		DEBUG_BUFFERLIST = !isNo(getParameter("debug-bufferlist"));
 		
 		demux_fMP4 = !isNo(getParameter("demux-fMP4"));
 		dropUnusedFrames = !isNo(getParameter("drop-unused-frames"));
@@ -841,7 +850,7 @@ public class FFmpegProcess extends Observable {
 				break; 
 			}
 			mediaStream = new MediaStream(contentType, dropUnusedFrames ? new DoubleBuffer(DEBUG, "Frame") :
-					new BufferList(maxMemoryBufferCount, video ? maxVideoBufferCount : 0, DEBUG, "Frame"));
+					new BufferList(maxMemoryBufferCount, video ? maxVideoBufferCount : 0, DEBUG_BUFFERLIST, "Frame"));
 			demuxVideoStream = null;
 			final boolean processFrameCallbackSet = !strEmpty(processFrameCallback);
 			if (processFrameCallbackSet) {
@@ -1008,11 +1017,11 @@ public class FFmpegProcess extends Observable {
 		try {
 			mediaStream = hasAudio ? new MediaStream("audio/mpeg", dropUnusedFrames ?
 					new DoubleBuffer(DEBUG, "Audio") :
-						new BufferList(maxMemoryBufferCount, 0, DEBUG, "Audio")) : null;
+						new BufferList(maxMemoryBufferCount, 0, DEBUG_BUFFERLIST, "Audio")) : null;
 			demuxVideoStream = hasVideo ? new MediaStream("image/jpeg", dropUnusedFrames ?
 					new DoubleBuffer(new BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } }, DEBUG, "Video") :
 						new BufferList(new BufferFactory() { @Override public Buffer newBuffer() { return new VideoBuffer(); } },
-								maxMemoryBufferCount, maxVideoBufferCount, DEBUG, "Video")) : null;
+								maxMemoryBufferCount, maxVideoBufferCount, DEBUG_BUFFERLIST, "Video")) : null;
 			in_ = new fMP4DemuxerInputStream(/*new FileBackedAutoReadingInputStream(*/ffmp.getInputStream()/*)*/,
 					bufferGrowFactor, bufferShrinkThresholdFactor,
 					hasVideo ? demuxVideoStream.multiBuffer : null, hasAudio ? mediaStream.multiBuffer : null,
