@@ -49,7 +49,7 @@ import netscape.javascript.JSException;
 import netscape.javascript.JSObject;
 
 public class FFmpegProcess extends Observable {
-	
+
 	static class Buffer
 	{
 		public volatile byte[] b;
@@ -76,6 +76,14 @@ public class FFmpegProcess extends Observable {
 	static interface BufferFactory { Buffer newBuffer(); }
 	
 	static interface ReaderToBuffer { int read(Buffer b) throws IOException; }
+	
+	static class FrameData
+	{
+		public byte[] bytes;
+		public int sn;
+		public FrameData() {}
+		public FrameData(int sn, byte[] bytes) { this.sn = sn; this.bytes = bytes; }
+	}
 
 	static abstract class MultiBuffer implements Closeable
 	{
@@ -90,6 +98,7 @@ public class FFmpegProcess extends Observable {
 		abstract int readToBuffer(ReaderToBuffer in) throws IOException, InterruptedException;
 		abstract byte[] getBytes(Buffer b) throws IOException;
 		abstract byte[] getCurrentBytes() throws IOException;
+		abstract FrameData getCurrentFrameData() throws IOException;
 		abstract Buffer getCurrentBuffer();
 		abstract void releaseCurrentBuffer();
 		abstract Buffer getCurrentBufferWait() throws InterruptedException;
@@ -184,6 +193,29 @@ public class FFmpegProcess extends Observable {
 						prev_sn = sn;
 					}
 					return getBytes(currentBuffer);
+				}
+			}
+		}
+		@Override
+		FrameData getCurrentFrameData() throws IOException {
+			Buffer currentBuffer = getCurrentBuffer();
+			while (true) {
+				synchronized (currentBuffer) {
+					Buffer newCurrentBuffer = getCurrentBuffer();
+					if (currentBuffer != newCurrentBuffer) {
+						currentBuffer = newCurrentBuffer;
+						if (DEBUG) {
+							errOut.println("Re-lock buffer");
+						}
+						continue;
+					}
+					if (DEBUG) {
+						if (sn - prev_sn > 1) {
+							errOut.println("Dropped frame" + (sn - prev_sn == 2 ? " " + (sn - 1) : "s " + (prev_sn + 1) + " - " + (sn - 1)));
+						}
+						prev_sn = sn;
+					}
+					return new FrameData(currentBuffer.sn, getBytes(currentBuffer));
 				}
 			}
 		}
@@ -374,6 +406,16 @@ public class FFmpegProcess extends Observable {
 			}
 			return null;
 		}
+		@Override
+		FrameData getCurrentFrameData() throws IOException {
+			getCurrentBuffer_();
+			if (currentBuffer != null) {
+				FrameData ret = new FrameData(currentBuffer.sn, getBytes(currentBuffer));
+				releaseCurrentBuffer_();
+				return ret;
+			}
+			return null;
+		}
 		private void getCurrentBuffer_() { if (currentBuffer == null) currentBuffer = filledBufferList.remove(); }
 		private void getCurrentBufferWait_() throws InterruptedException { if (currentBuffer == null) currentBuffer = filledBufferList.removeWait(); }
 		private void releaseBuffer_(Buffer buf) {
@@ -425,7 +467,10 @@ public class FFmpegProcess extends Observable {
 			dataUriStringBuilder = new StringBuilder("data:" + contentType + ";base64,");
 			dataUriPrefixLength = dataUriStringBuilder.length();
 		}
-		public StringBuilder resetStringBuilder() { dataUriStringBuilder.setLength(dataUriPrefixLength); return dataUriStringBuilder; }
+		public String toDataUri(byte[] buf) {
+			dataUriStringBuilder.setLength(dataUriPrefixLength);
+			return dataUriStringBuilder.append(DatatypeConverter.printBase64Binary(buf)).toString();
+		}
 	}
 	
 	static public class TrackInfo { public int timeScale, width, height; public boolean hasAudio; }
@@ -444,16 +489,10 @@ public class FFmpegProcess extends Observable {
 			return multiBuffer.getCurrentBytes();
 		}
 		
-		public String _getDataURI() throws IOException {
-			byte[] buf = multiBuffer.getCurrentBytes();
-			return dataOut.resetStringBuilder().append(DatatypeConverter.printBase64Binary(buf)).toString();
-		}
-		
 		public String getDataURI() throws IOException {
 			if (multiBuffer.getSN() == 0)
 				return null;
-			byte[] buf = multiBuffer.getCurrentBytes();
-			return dataOut.resetStringBuilder().append(DatatypeConverter.printBase64Binary(buf)).toString();
+			return dataOut.toDataUri(multiBuffer.getCurrentBytes());
 		}
 		
 		public void multiBufferNotify() { multiBuffer.getCurrentBufferNotify(); }
@@ -855,19 +894,22 @@ public class FFmpegProcess extends Observable {
 			final boolean processFrameCallbackSet = !strEmpty(processFrameCallback);
 			if (processFrameCallbackSet) {
 				final BlockingQueue<Integer> _notifyQueue = mediaStream.multiBuffer.notifyQueue = new ArrayBlockingQueue<Integer>(5);
+				final String _contentType = contentType; 
 				mediaStream.multiBuffer.startConsumerThreads(processFrameNumberOfConsumerThreads, new Runnable() {
 					@Override
 					public void run() {
 						MediaStream _mediaStream;
+						DataOut dataOut = new DataOut(_contentType);
 						int attempts = 0; 
 						try {
 							while (mediaStream != null) {
 								if (_notifyQueue.take() == -200)
 									break;
 								try {
-									if ((_mediaStream = mediaStream) != null)
-										JSObject.getWindow(applet).call(processFrameCallback, new Object[] { id, _mediaStream._getDataURI() });
-									else
+									if ((_mediaStream = mediaStream) != null) {
+										FrameData fd = _mediaStream.multiBuffer.getCurrentFrameData();
+										JSObject.getWindow(applet).call(processFrameCallback, new Object[] { id, fd.sn, dataOut.toDataUri(fd.bytes) });
+									} else
 										break;
 									if (attempts > 0)
 										attempts = 0; // counts consecutive failures; reset for success
