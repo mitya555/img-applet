@@ -107,11 +107,13 @@ public class FFmpegProcess extends Observable {
 		// producer / consumer pattern:
 		public BlockingQueue<Integer> notifyQueue;
 		protected int numberOfConsumerThreads;
-		public void startConsumerThreads(int numOfThreads, Runnable runnable) {
+		public Thread[] startConsumerThreads(int numOfThreads, Runnable runnable) {
 			numberOfConsumerThreads = numOfThreads;
+			Thread[] threads = new Thread[numOfThreads];
 			for (int i = 0; i < numOfThreads; i++) {
-				new Thread(runnable).start();
+				(threads[i] = new Thread(runnable)).start();
 			}
+			return threads;
 		}
 	}
 	
@@ -849,6 +851,7 @@ public class FFmpegProcess extends Observable {
 	private void playMediaReader() throws InterruptedException {
 		setChanged(); notifyObservers(Event.START);
 		MediaReader in_ = null;
+		Thread[] consumerThreads = null;
 		try {
 			String contentType = "application/octet-stream";
 			boolean video = false;
@@ -895,22 +898,16 @@ public class FFmpegProcess extends Observable {
 			if (processFrameCallbackSet) {
 				final BlockingQueue<Integer> _notifyQueue = mediaStream.multiBuffer.notifyQueue = new ArrayBlockingQueue<Integer>(5);
 				final String _contentType = contentType; 
-				mediaStream.multiBuffer.startConsumerThreads(processFrameNumberOfConsumerThreads, new Runnable() {
+				consumerThreads = mediaStream.multiBuffer.startConsumerThreads(processFrameNumberOfConsumerThreads, new Runnable() {
 					@Override
 					public void run() {
-						MediaStream _mediaStream;
 						DataOut dataOut = new DataOut(_contentType);
 						int attempts = 0; 
 						try {
-							while (mediaStream != null) {
-								if (_notifyQueue.take() == -200)
-									break;
+							while (_notifyQueue.take() != -200)
 								try {
-									if ((_mediaStream = mediaStream) != null) {
-										FrameData fd = _mediaStream.multiBuffer.getCurrentFrameData();
-										JSObject.getWindow(applet).call(processFrameCallback, new Object[] { id, fd.sn, dataOut.toDataUri(fd.bytes) });
-									} else
-										break;
+									FrameData fd = mediaStream.multiBuffer.getCurrentFrameData();
+									JSObject.getWindow(applet).call(processFrameCallback, new Object[] { id, fd.sn, dataOut.toDataUri(fd.bytes) });
 									if (attempts > 0)
 										attempts = 0; // counts consecutive failures; reset for success
 								} catch (JSException | IOException e) {
@@ -918,7 +915,6 @@ public class FFmpegProcess extends Observable {
 									if (++attempts >= 10)
 										break;
 								}
-							}
 						} catch (InterruptedException e) {
 							e.printStackTrace();
 						}
@@ -941,7 +937,11 @@ public class FFmpegProcess extends Observable {
 		}
 		finally {
 			if (in_ != null) try { in_.close(); } catch (IOException e) { e.printStackTrace(); }
-			if (mediaStream != null) { try { mediaStream.close(); } catch (IOException e) { e.printStackTrace(); } mediaStream = null; }
+			if (mediaStream != null) {
+				try { mediaStream.close(); } catch (IOException e) { e.printStackTrace(); }
+				if (consumerThreads != null) for (Thread thread : consumerThreads) thread.join();
+				mediaStream = null;
+			}
 			setChanged(); notifyObservers(Event.STOP);
 			debug("FFMPEG output thread ended."/*, "FFMPEG process terminated."*/);
 		}

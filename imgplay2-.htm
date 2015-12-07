@@ -23,10 +23,10 @@ $.fn.bootstrapBtn = bootstrapButton;            // give $().bootstrapBtn the Boo
 //----------------------------------------------------------------------
 function guid () {
 	function s4 () { return Math.floor( Math.random() * 0x10000 /* 65536 */ ).toString(16); }
-    return s4() + s4() + "-" + s4() + "-" + s4() + "-" + s4() + "-" + s4() + s4() + s4();
+	return s4() + s4() + "-" + s4() + "-" + s4() + "-" + s4() + "-" + s4() + s4() + s4();
 }
 if (!window.name.match(/^GUID-/)) {
-    window.name = "GUID-" + guid();
+	window.name = "GUID-" + guid();
 }
 /**
  * Provides requestAnimationFrame in a cross browser way.
@@ -335,10 +335,102 @@ function registerAppletStateHandler() {
 	}
 }
 
-function createVideoCanvas (container, resizable) {
-	var image, videoImage, $videoImageContainer, videoImageContext, last_img = -1;
+function getAdjustableRingBuffer(n) {
+	var isObj = typeof n === 'object', len = 0;
+	var status = isObj ? {} : typeof n === 'number' ? new Array(len = n) : new Array(len = parseInt(n)), pool = [];
+	if (isObj)
+		for (var i in n) {
+			status[n[i]] = 0;
+			pool.push({ i: n[i] });
+			len++;
+		}
+	else
+		for (var i = n - 1; i >= 0; i--) {
+			status[i] = 0;
+			pool.push({ i: i });
+		}
+	function logLenMsg() { if (debug_js && console) console.log('RingBuffer Length = ' + (len - pool.length)); }
+	var list = pool.pop();
+	list.next = list;
+	var frames = { n: 0 };
+	frames.next = frames;
+	logLenMsg();
+	return {
+		get: function(frame_n) {
+			var next = list.next;
+			var min_n = frames.next.n, next_status, found;
+			while (!(found = ((next_status = status[next.i]) === 0 || next_status < min_n)) && next !== list)
+				next = next.next;
+			if (!found) {
+				if (pool.length > 0) {
+					next = pool.pop();
+					next.next = list.next;
+					list.next = next;
+					frames.next = { next: frames.next };
+					logLenMsg();
+				} else {
+					next = list.next;
+				}
+			}/* else if (next !== list) {
+				var _next = next;
+				while (_next.next !== list) {
+					if (status[_next.next.i]) === 0) {
+						pool.push(_next.next);
+						_next.next = _next.next.next;
+						frames.next = frames.next.next;
+					} else {
+						_next = _next.next;
+					}
+				}
+			}*/ // commented out above: releasing resources from the list back to the pool
+			if (debug_js && status[next.i])
+				console.log('Dropped Frame # ' + status[next.i]);
+			status[(list = next).i] = (frames = frames.next).n = frame_n;
+			return list.i;
+		},
+		release: function(i) { status[i] = 0; }
+	};
+} 
+
+function getRingBuffer(n) {
+	var len = 0, status = {}, list = {}, frames = {};
+	function listAddItem(list, item) { list._list = !list.list_ ? (list.list_ = item) : (list._list.next = item); }
+	function listClose(list) { list._list.next = list.list_; return list.list_; }
+	for (var i in n) {
+		status[n[i]] = 0;
+		listAddItem(list, { i: n[i] });
+		listAddItem(frames, { n: 0 });
+		len++;
+	}
+	list = listClose(list);
+	frames = listClose(frames);
+	if (debug_js && console)
+		console.log('RingBuffer Length = ' + len);
+	return {
+		get: function(frame_n) {
+			var next = list.next;
+			var min_n = frames.next.n, next_status, found;
+			while (!(found = ((next_status = status[next.i]) === 0 || next_status < min_n)) && next !== list)
+				next = next.next;
+			if (!found)
+				next = list.next;
+			if (debug_js && status[next.i])
+				console.log('Dropped Frame # ' + status[next.i]);
+			status[(list = next).i] = (frames = frames.next).n = frame_n;
+			return list.i;
+		},
+		release: function(i) { status[i] = 0; }
+	};
+} 
+
+function createVideoCanvas (container, resizable, imgnum) {
 	function createImage() { return /*$('<img style="visibility: hidden; display: none;" />').appendTo(container)[0]*/ new Image(); }
-	image = [ createImage(), createImage() ];
+	if (!imgnum || typeof imgnum !== 'number') imgnum = 4;
+	var image = [];
+	for (var i = 0; i < imgnum; i++) image.push( createImage() );
+	var // n = image.length, last_img = -1,
+		videoImage, $videoImageContainer, videoImageContext,
+		ringBuffer = getRingBuffer(image);
 	if (resizable)
 		$videoImageContainer = $("<div class='video-container' style='position:absolute;width:0px;height:0px;'></div>").appendTo(container);
 	videoImage = $("<canvas width='0' height='0'></canvas>").appendTo($videoImageContainer || container)[0];
@@ -348,44 +440,62 @@ function createVideoCanvas (container, resizable) {
 	videoImageContext.fillRect( 0, 0, videoImage.width, videoImage.height );				
 	// assign image elements onload handler
 	var init = true, curImage;
-	image[0].onload = image[1].onload = function() {
+	function imageOnload() {
 		if (init) {
-			init = false;
 			videoImage.width = this.width;
 			videoImage.height = this.height;
+		}
+		videoImageContext.drawImage( curImage = this, 0, 0, videoImage.width, videoImage.height );
+		ringBuffer.release(this);
+		if (init) {
+			init = false;
 			if ($videoImageContainer) {
 				$videoImageContainer.width(this.width);
 				$videoImageContainer.height(this.height);
-				$videoImageContainer[0].resetToImageNaturalSize = function () {
+				$videoImageContainer.draggable().resizable({ aspectRatio: this.width / this.height }).on( "resize", function(event, ui) {
+					var w = videoImage.width = ui.size.width, h = videoImage.height = ui.size.height;
+					for (var i in image) { image[i].width = w; image[i].height = h; }
+					videoImageContext.drawImage( curImage, 0, 0, w, h );
+				})[0].resetToImageNaturalSize = function () {
 					var _size = { width: curImage.naturalWidth, height: curImage.naturalHeight };
 					$(this).width(_size.width).height(_size.height).triggerHandler( "resize", { size: _size });
 				};
 			}
-			if (resizable)
-				$videoImageContainer.draggable().resizable({
-					aspectRatio: this.width / this.height
-				}).on( "resize", function(event, ui) {
-					image[0].width = image[1].width = videoImage.width = ui.size.width;
-					image[0].height = image[1].height = videoImage.height = ui.size.height;
-					videoImageContext.drawImage( curImage, 0, 0, videoImage.width, videoImage.height );
-				});
 		}
-		curImage = this;
-		videoImageContext.drawImage( this, 0, 0, videoImage.width, videoImage.height );
-	};
+	}
+	for (var i in image) image[i].onload = imageOnload;
 	return {
-		drawUri:	function (uri) { image[last_img = (last_img + 1) % 2].src = uri; },
-		destroy:	function () { ($videoImageContainer || $(videoImage)).remove(); /*$(image[0]).remove(); $(image[1]).remove();*/ $videoImageContainer = videoImage = image[0] = image[1] = null; }
+		drawUri: function (frame_sn, uri) { /*image[last_img = (last_img + 1) % n]*/ringBuffer.get(frame_sn).src = uri; },
+		destroy: function () {
+			for (var i in image) image[i] = image[i].onload = null;
+			//if ($videoImageContainer)
+			//	$videoImageContainer.resizable( "destroy" ).draggable( "destroy" );
+			($videoImageContainer || $(videoImage)).remove();
+			$videoImageContainer = videoImage = null;
+		}
 	};
 }
 
 function checkboxClick(checkbox) {
-	_applet[checkbox.checked?'play':'stopPlayback'](ffmpeg_ids[checkbox.id]);
+	var key = checkbox.id, play = checkbox.checked;
+	if (play) {
+		var names = namesFromKey(key);
+		if (names.opName ==="play" && names.deviceType === "video")
+			videos[key] = createVideoCanvas("#video-chat-panel", true, 5);
+	}
+	_applet[play?'play':'stopPlayback'](ffmpeg_ids[key]);
 }
 function checkboxCallback(ffmpeg_id, playing) {
-	var key = keys[ffmpeg_id];
 	function setChecked() { var cb = document.getElementById(key); if (cb) { cb.checked = playing; } else { window.setTimeout(setChecked, 20); } }
+	var key = keys[ffmpeg_id];
 	if (key) setChecked();
+	if (!playing) {
+		var names = namesFromKey(key);
+		if (names.opName ==="play" && names.deviceType === "video") {
+			if (videos[key]) videos[key].destroy();
+			delete videos[key];
+		}
+	}
 }
 
 function audioLevelCallback(ffmpeg_id, level) {
@@ -409,8 +519,7 @@ function removeFFmpeg(key) {
 		delete current_device_mode[key];
 		delete current_device_resolution[key];
 		delete current_device_fps[key];
-		if (videos[key])
-			videos[key].destroy();
+		if (videos[key]) videos[key].destroy();
 		delete videos[key];
 		delete keys[ffmpeg_id];
 		delete name_hash[ffmpeg_id];
@@ -458,7 +567,7 @@ function renewFFmpeg(op, key, p1, p2, mode, resolution, fps) {
 			'ffmpeg-f:o', 'flv',
 			'ffmpeg-o', p2,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/v"
 			'debug', 'yes',
-			'debug-ffmpeg', debugFFmpeg(), // 'yes',
+			'debug-ffmpeg', debug_ffmpeg, // 'yes',
 		];
 		var tmp, isMode = (mode && ((tmp = mode.split("="))[0] === "pixel_format" || tmp[0] === "vcodec") && tmp.length > 1 && tmp[1]);
 		if (isMode) {
@@ -509,10 +618,10 @@ function renewFFmpeg(op, key, p1, p2, mode, resolution, fps) {
 			//"ffmpeg-loglevel", "warning",
 			"drop-unused-frames", "yes",
 			"process-frame-callback", "showVideoFrame",
-			"process-frame-number-of-consumer-threads", "3",
+			"process-frame-number-of-consumer-threads", "4",
 			"debug", "yes",
-			"debug-ffmpeg", debugFFmpeg(), // 'yes',
-		] ); videos[key] = createVideoCanvas(p2, true); break; // p2 - container's selector or jQuery object
+			"debug-ffmpeg", debug_ffmpeg, // 'yes',
+		] ); break;
 
 	case _op.capture_audio: recreateFFmpeg( key, 'checkboxCallback', [
 			'ffmpeg-f:i', 'dshow',
@@ -524,7 +633,7 @@ function renewFFmpeg(op, key, p1, p2, mode, resolution, fps) {
 			'ffmpeg-f:o', 'flv',
 			'ffmpeg-o', p2,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/a"
 			'debug', 'yes',
-			'debug-ffmpeg', debugFFmpeg(), // 'yes',
+			'debug-ffmpeg', debug_ffmpeg, // 'yes',
 		] ); current_device_name[key] = p1; break;
 
 	case _op.playback_audio: recreateFFmpeg( key, 'checkboxCallback', [
@@ -543,7 +652,7 @@ function renewFFmpeg(op, key, p1, p2, mode, resolution, fps) {
 			"wav-intermediate-buffer-size", "32",
 			"wav-level-change-callback", "audioLevelCallback",
 			"debug", "yes",
-			"debug-ffmpeg", debugFFmpeg(), // 'yes',
+			"debug-ffmpeg", debug_ffmpeg, // 'yes',
 		] ); break;
 
 	case _op.capture_screen: recreateFFmpeg( key, 'checkboxCallback', [
@@ -561,7 +670,7 @@ function renewFFmpeg(op, key, p1, p2, mode, resolution, fps) {
 			'ffmpeg-f:o', 'flv',
 			'ffmpeg-o', p1,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/s"
 			'debug', 'yes',
-			'debug-ffmpeg', debugFFmpeg(), // 'yes',
+			'debug-ffmpeg', debug_ffmpeg, // 'yes',
 		] ); break;
 	}
 }
@@ -586,7 +695,7 @@ function callFFmpeg(op, p1) {
 			'ffmpeg-f:i', 'dshow',
 			'ffmpeg-i', 'dummy',
 			'ffmpeg-o', '',
-			'debug', debugFFmpeg(), // 'yes',
+			'debug', debug_ffmpeg, // 'yes',
 		] ); break;
 
 	case _op.list_options: _ffmpeg_id = _applet.createFFmpegId( 'dataCallback', [
@@ -594,7 +703,7 @@ function callFFmpeg(op, p1) {
 			'ffmpeg-f:i', 'dshow',
 			'ffmpeg-i', p1,			// device, e.g. 'video=Logitech QuickCam Communicate STX', or 'audio=Logitech Mic (Communicate STX)'
 			'ffmpeg-o', '',
-			'debug', debugFFmpeg(), // 'yes',
+			'debug', debug_ffmpeg, // 'yes',
 		] ); break;
 	}
 	if (_ffmpeg_id) {
@@ -603,7 +712,8 @@ function callFFmpeg(op, p1) {
 	return defer.promise();
 }
 
-function debugFFmpeg() { return window.location.search && window.location.search.indexOf('debug-ffmpeg') != -1 ? 'yes' : 'no'; }
+var debug_ffmpeg = window.location.search && window.location.search.indexOf('debug-ffmpeg') != -1 ? 'yes' : 'no',
+	debug_js = window.location.search && window.location.search.indexOf('debug-js') != -1;
 
 function getRtmpHostname() { return window.location.hash && window.location.hash.length > 7 ? window.location.hash.substring(1) : window.location.hostname; }
 
@@ -754,12 +864,14 @@ function onLoadHandler() {
 					function $menuContainer(insertAfter, label) {
 						return $("<div class='menu-container'></div>").insertAfter(insertAfter).append("<div class='menu-label'>" + htmlEncode(label) + ":</div>");
 					}
-					function create$select(self, contPropName, insertAfter, label) {
-						return $("<select></select").appendTo(self[contPropName] = $menuContainer(insertAfter, label)).change(function () { self._updateOption(); });
+					function create$select(self, contPropName, insertAfter, label, isMode) {
+						return $("<select></select").appendTo(self[contPropName] = $menuContainer(insertAfter, label)).change( isMode ? 
+							function () { current_device_mode[self.key] = $(this).val(); self._updateDevice(); } :
+							function () { self._updateOption(); } );
 					}
 
 					if (!this.$select2)
-						this.$select2 = create$select(this, "$div2", this.$div, "Mode");
+						this.$select2 = create$select(this, "$div2", this.$div, "Mode", true);
 					this.$select2.empty();
 					for (var i in options)
 						$("<option></option>").attr("value", options[i].type_name).text(/*options[i].type + ": " + options[i].name*/options[i].type_name).appendTo(this.$select2);
@@ -899,12 +1011,15 @@ function onLoadHandler() {
 				var $video = $stream.find("> meta > video"), $audio;
 				return parseFloat($video.find("> width").text()) > 0 && parseFloat($video.find("> height").text()) > 0 ? "video" : $stream.find("> meta > audio").has("*") ? "audio" : "unknown";
 			}
-			var checkeds = getCheckeds(), opName = "play";
+			var checkeds = getCheckeds();
 			var $lineCont = $("#playbackContainer .boxHead + div").empty();
+			// mark ffmpeg_ids for removal
+			var remove_ffmpeg = {};
 			for (var key in ffmpeg_ids) {
 				var names = namesFromKey(key);
-				if (names.opName === "play" && !checkeds[key]) {
-					removeFFmpeg(key);
+				if (names.opName === "play"/* && !checkeds[key]*/) {
+					//removeFFmpeg(key);
+					remove_ffmpeg[key] = true;
 				}
 			}
 			var rtmpStreams = [], names = {};
@@ -962,9 +1077,16 @@ function onLoadHandler() {
 					if (rtmpStream.unconfirmed)
 						$ffmpegUi.addClass("unconfirmed");
 					var key = keyFromNames(rtmpStream.deviceType, "play", name);
-					if (!checkeds[key]) {
-						renewFFmpeg(_op["playback_" + rtmpStream.streamType], key, getRtmpUrl(rtmpStream.rtmp_app), "#video-chat-panel");
+					if (/*!checkeds[key]*/!ffmpeg_ids[key]) {
+						renewFFmpeg(_op["playback_" + rtmpStream.streamType], key, getRtmpUrl(rtmpStream.rtmp_app));
 					}
+					remove_ffmpeg[key] = false;
+				}
+			}
+			// remove ffmpeg_ids
+			for (var key in remove_ffmpeg) {
+				if (remove_ffmpeg[key]) {
+					removeFFmpeg(key);
 				}
 			}
 			// add audio level indicator
@@ -1052,8 +1174,8 @@ function onLoadHandler() {
 
 // frame consumer threads in Java with the callback function below.
 // has to be configured in function renewFFmpeg(op, key, p1, p2, mode, resolution, fps) { ... case _op.playback_video:
-function showVideoFrame(ffmpeg_id, dataUri) {
-	videos[keys[ffmpeg_id]].drawUri(dataUri);
+function showVideoFrame(ffmpeg_id, frame_sn, dataUri) {
+	videos[keys[ffmpeg_id]].drawUri(frame_sn, dataUri);
 }
 
 // frame consumer in javascript:
@@ -1081,7 +1203,7 @@ function render() {
 				}
 */ // we do it in the applet now when drop-unused-frames="yes"
 				// assign image src
-				videos[key].drawUri(dataURI);
+				videos[key].drawUri(sn, dataURI);
 			}
 		}
 	}
