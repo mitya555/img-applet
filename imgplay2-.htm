@@ -383,7 +383,7 @@ function getAdjustableRingBuffer(n) {
 					}
 				}
 			}*/ // commented out above: releasing resources from the list back to the pool
-			if (debug_js && status[next.i])
+			if (debug_js && status[next.i] !== 0)
 				console.log('Dropped Frame # ' + status[next.i]);
 			status[(list = next).i] = (frames = frames.next).n = frame_n;
 			return list.i;
@@ -414,7 +414,7 @@ function getRingBuffer(n) {
 				next = next.next;
 			if (!found)
 				next = list.next;
-			if (debug_js && status[next.i])
+			if (debug_js && status[next.i] !== 0)
 				console.log('Dropped Frame # ' + status[next.i]);
 			status[(list = next).i] = (frames = frames.next).n = frame_n;
 			return list.i;
@@ -423,14 +423,48 @@ function getRingBuffer(n) {
 	};
 } 
 
+function getSimpleRingBuffer(n) {
+	var len = n.length, ind = -1, status = {};
+	var total = 0, dropped = 0, _dropped = 0;
+	if (debug_js && console) {
+		for (var i in n)
+			status[n[i]] = 0;
+		console.log('RingBuffer Length = ' + len);
+		return {
+			get: function(frame_n) {
+				var i = n[ind = (ind + 1) % len];
+				total++;
+				if (status[i] !== 0) {
+					_dropped++;
+					//console.log('Dropped Frame # ' + status[i]);
+				}
+				if (total % 100 === 0) {
+					dropped += _dropped;
+					console.log('Total: ' + total + '; \t Dropped: ' + dropped + '; \t Ratio: ' + (total/dropped).toFixed(2) + '; \t Dropped (last 100): ' + _dropped + '; \t Ratio (last 100): ' + (100./_dropped).toFixed(2));
+					_dropped = 0;
+				}
+				status[i] = frame_n;
+				return i;
+			},
+			release: function(i) { status[i] = 0; }
+		};
+	} else {
+		return {
+			get: function(frame_n) { return n[ind = (ind + 1) % len]; },
+			release: function(i) {}
+		};
+	}
+} 
+
 function createVideoCanvas (container, resizable, imgnum) {
 	function createImage() { return /*$('<img style="visibility: hidden; display: none;" />').appendTo(container)[0]*/ new Image(); }
-	if (!imgnum || typeof imgnum !== 'number') imgnum = 4;
+	if (!imgnum || typeof imgnum !== 'number')
+		imgnum = 3; // browsers (at least IE) have internal image loaders pooling so Image elements pooling in javascript gives almost no gain in performance
 	var image = [];
 	for (var i = 0; i < imgnum; i++) image.push( createImage() );
 	var // n = image.length, last_img = -1,
 		videoImage, $videoImageContainer, videoImageContext,
-		ringBuffer = getRingBuffer(image);
+		ringBuffer = getSimpleRingBuffer(image); // getRingBuffer(image);
 	if (resizable)
 		$videoImageContainer = $("<div class='video-container' style='position:absolute;width:0px;height:0px;'></div>").appendTo(container);
 	videoImage = $("<canvas width='0' height='0'></canvas>").appendTo($videoImageContainer || container)[0];
@@ -478,23 +512,21 @@ function createVideoCanvas (container, resizable, imgnum) {
 
 function checkboxClick(checkbox) {
 	var key = checkbox.id, play = checkbox.checked;
-	if (play) {
-		var names = namesFromKey(key);
-		if (names.opName ==="play" && names.deviceType === "video")
-			videos[key] = createVideoCanvas("#video-chat-panel", true, 5);
-	}
 	_applet[play?'play':'stopPlayback'](ffmpeg_ids[key]);
 }
 function checkboxCallback(ffmpeg_id, playing) {
-	function setChecked() { var cb = document.getElementById(key); if (cb) { cb.checked = playing; } else { window.setTimeout(setChecked, 20); } }
 	var key = keys[ffmpeg_id];
+	function setChecked() { var cb = document.getElementById(key); if (cb) { cb.checked = playing; } else { window.setTimeout(setChecked, 20); } }
 	if (key) setChecked();
-	if (!playing) {
-		var names = namesFromKey(key);
-		if (names.opName ==="play" && names.deviceType === "video") {
-			if (videos[key]) videos[key].destroy();
-			delete videos[key];
-		}
+}
+
+function videoCallback(ffmpeg_id, playing) {
+	var key = keys[ffmpeg_id];
+	if (playing) {
+		videos[key] = createVideoCanvas("#video-chat-panel", true, img_num);
+	} else {
+		if (videos[key]) videos[key].destroy();
+		delete videos[key];
 	}
 }
 
@@ -591,7 +623,7 @@ function renewFFmpeg(op, key, p1, p2, mode, resolution, fps) {
 		if (fps) { current_device_fps[key] = fps; } else { delete current_device_fps[key]; }
 		break;
 
-	case _op.playback_video: recreateFFmpeg( key, 'checkboxCallback', [
+	case _op.playback_video: recreateFFmpeg( key, 'checkboxCallback,videoCallback', [
 			//"ffmpeg-re", "",
 			//"ffmpeg-f:i", "",
 			"ffmpeg-i", p1,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/v",
@@ -713,7 +745,10 @@ function callFFmpeg(op, p1) {
 }
 
 var debug_ffmpeg = window.location.search && window.location.search.indexOf('debug-ffmpeg') != -1 ? 'yes' : 'no',
-	debug_js = window.location.search && window.location.search.indexOf('debug-js') != -1;
+	debug_js = window.location.search && window.location.search.indexOf('debug-js') != -1,
+	query_string = $.map((window.location.search || "").split(/[\?&]/), function (v, i) { var a = v.split("="), r = a[0] ? { name: decodeURIComponent(a[0]) } : null; if (r && a.length > 1) r.value = decodeURIComponent(a[1]); return r; }),
+	img_num = 3;
+$.each(query_string, function (i, v) { if (v.name === "img-num") { img_num = parseInt(v.value); return false; } });
 
 function getRtmpHostname() { return window.location.hash && window.location.hash.length > 7 ? window.location.hash.substring(1) : window.location.hostname; }
 

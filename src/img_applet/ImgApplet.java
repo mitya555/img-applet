@@ -80,19 +80,21 @@ public class ImgApplet extends JApplet {
 			_params.put(params[i], params[i + 1]);
 		}
 		final Applet _applet = this;
-		return AccessController.doPrivileged(new PrivilegedAction<FFmpegProcess>() {
-			@Override
-			public FFmpegProcess run() {
+//		return AccessController.doPrivileged(new PrivilegedAction<FFmpegProcess>() {
+//			@Override
+//			public FFmpegProcess run() {
 				final FFmpegProcess ffmpeg = new FFmpegProcess();
 				if (registerFFmpeg(ffmpeg, _params, _applet) != null && !strEmpty(jsCallback)) {
+					final String[] _jsCallback = jsCallback.split("[,;]");
 					ffmpeg.addObserver(new Observer() { @Override public void update(Observable o, Object arg) {
 						boolean playing = FFmpegProcess.Event.START.equals(arg);
-						JSObject.getWindow(_applet).call(jsCallback, new Object[] { ffmpeg, playing });
+						for (String jsFunc : _jsCallback)
+							JSObject.getWindow(_applet).call(jsFunc, new Object[] { ffmpeg, playing });
 					} });
 				}
 				return ffmpeg;
-			}
-		}); /* doPrivileged() */
+//			}
+//		}); /* doPrivileged() */
 	}
 	
 	public int createFFmpegId(final String jsCallback, String... params) {
@@ -109,9 +111,11 @@ public class ImgApplet extends JApplet {
 				if (res != null) {
 					final int id = res;
 					if (!strEmpty(jsCallback)) {
+						final String[] _jsCallback = jsCallback.split("[,;]");
 						ffmpeg.addObserver(new Observer() { @Override public void update(Observable o, Object arg) {
 							boolean playing = FFmpegProcess.Event.START.equals(arg);
-							JSObject.getWindow(_applet).call(jsCallback, new Object[] { id, playing });
+							for (String jsFunc : _jsCallback)
+								JSObject.getWindow(_applet).call(jsFunc, new Object[] { id, playing });
 						} });
 					}
 					return id;

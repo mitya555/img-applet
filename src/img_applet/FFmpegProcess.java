@@ -901,13 +901,14 @@ public class FFmpegProcess extends Observable {
 				consumerThreads = mediaStream.multiBuffer.startConsumerThreads(processFrameNumberOfConsumerThreads, new Runnable() {
 					@Override
 					public void run() {
+						JSObject jsWindow = JSObject.getWindow(applet);
 						DataOut dataOut = new DataOut(_contentType);
 						int attempts = 0; 
 						try {
 							while (_notifyQueue.take() != -200)
 								try {
 									FrameData fd = mediaStream.multiBuffer.getCurrentFrameData();
-									JSObject.getWindow(applet).call(processFrameCallback, new Object[] { id, fd.sn, dataOut.toDataUri(fd.bytes) });
+									jsWindow.call(processFrameCallback, new Object[] { id, fd.sn, dataOut.toDataUri(fd.bytes) });
 									if (attempts > 0)
 										attempts = 0; // counts consecutive failures; reset for success
 								} catch (JSException | IOException e) {
@@ -986,12 +987,13 @@ public class FFmpegProcess extends Observable {
 					@Override
 					public void run() {
 						Integer _signalLevel;
+						JSObject jsWindow = JSObject.getWindow(applet);
 						int attempts = 0; 
 						try {
 							do {
 								_signalLevel = _signalLevelQueue.take();
 								try {
-									JSObject.getWindow(applet).call(wavLevelChangeCallback, new Object[] { id, _signalLevel.intValue() });
+									jsWindow.call(wavLevelChangeCallback, new Object[] { id, _signalLevel.intValue() });
 									if (attempts > 0)
 										attempts = 0; // counts consecutive failures; reset for success
 								} catch (JSException e) {
