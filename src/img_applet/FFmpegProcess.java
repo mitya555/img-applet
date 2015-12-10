@@ -979,21 +979,24 @@ public class FFmpegProcess extends Observable {
 			double sumSquare = 0, minRootMeanSquare = 200;
 			int prevSignalLevel = 0;
 			final boolean calcSignalLevel = !strEmpty(wavLevelChangeCallback);
+			int calcSignalLevelThreshold = 44100; // 44100 bytes / 4 bytes/frame / 44100 frames/sec = 1/4 sec = 250 ms
 			ArrayBlockingQueue<Integer> signalLevelQueue = null;
 			if (calcSignalLevel) {
-				final ArrayBlockingQueue<Integer> _signalLevelQueue = new ArrayBlockingQueue<Integer>(4); // ~ 1 sec. worth = 250 ms * 4
+				final double calcSignalLevelInterval = 0.1; // sampling interval in seconds: 0.1 sec = 100 ms
+				calcSignalLevelThreshold = (int)(calcSignalLevelInterval * audioFormat.getFrameSize() * audioFormat.getFrameRate()); // 17640 bytes = 0.1 sec * 4 bytes/frame * 44100 frames/sec
+				final ArrayBlockingQueue<Integer> _signalLevelQueue = new ArrayBlockingQueue<Integer>(10); // ~ 1 sec. worth = 100 ms * 10
 				signalLevelQueue = _signalLevelQueue;
 				new Thread(new Runnable() {
 					@Override
 					public void run() {
-						Integer _signalLevel;
+						int _signalLevel;
 						JSObject jsWindow = JSObject.getWindow(applet);
 						int attempts = 0; 
 						try {
 							do {
 								_signalLevel = _signalLevelQueue.take();
 								try {
-									jsWindow.call(wavLevelChangeCallback, new Object[] { id, _signalLevel.intValue() });
+									jsWindow.call(wavLevelChangeCallback, new Object[] { id, _signalLevel });
 									if (attempts > 0)
 										attempts = 0; // counts consecutive failures; reset for success
 								} catch (JSException e) {
@@ -1023,7 +1026,7 @@ public class FFmpegProcess extends Observable {
 						sum += val;
 						sumSquare += val * val;
 					}				
-					if (cnt >= 44100) { // 44100 bytes / 4 bytes/frame / 44100 frames/sec = 1/4 sec = 250 ms
+					if (cnt >= /*44100*/calcSignalLevelThreshold) { // 44100 bytes / 4 bytes/frame / 44100 frames/sec = 1/4 sec = 250 ms
 						final int shortCnt = cnt / 2;
 						final double avg = sum / shortCnt, rootMeanSquare = Math.sqrt( sumSquare / shortCnt - avg * avg );
 						if (rootMeanSquare < minRootMeanSquare)
@@ -1057,6 +1060,7 @@ public class FFmpegProcess extends Observable {
 	private void playMediaDemuxer() throws InterruptedException {
 		setChanged(); notifyObservers(Event.START);
 		MediaDemuxer in_ = null;
+		Thread[] consumerThreads = null;
 		boolean hasAudio = !NoAudio(), hasVideo = !NoVideo();
 		try {
 			mediaStream = hasAudio ? new MediaStream("audio/mpeg", dropUnusedFrames ?
@@ -1079,6 +1083,34 @@ public class FFmpegProcess extends Observable {
 					} } : null,
 					null, null,
 					DEBUG);
+			final boolean processFrameCallbackSet = !strEmpty(processFrameCallback);
+			if (demuxVideoStream != null && processFrameCallbackSet) {
+				final BlockingQueue<Integer> _notifyQueue = demuxVideoStream.multiBuffer.notifyQueue = new ArrayBlockingQueue<Integer>(5);
+				final String _contentType = "image/jpeg"; 
+				consumerThreads = demuxVideoStream.multiBuffer.startConsumerThreads(processFrameNumberOfConsumerThreads, new Runnable() {
+					@Override
+					public void run() {
+						JSObject jsWindow = JSObject.getWindow(applet);
+						DataOut dataOut = new DataOut(_contentType);
+						int attempts = 0; 
+						try {
+							while (_notifyQueue.take() != -200)
+								try {
+									FrameData fd = demuxVideoStream.multiBuffer.getCurrentFrameData();
+									jsWindow.call(processFrameCallback, new Object[] { id, fd.sn, dataOut.toDataUri(fd.bytes) });
+									if (attempts > 0)
+										attempts = 0; // counts consecutive failures; reset for success
+								} catch (JSException | IOException e) {
+									e.printStackTrace();
+									if (++attempts >= 10)
+										break;
+								}
+						} catch (InterruptedException e) {
+							e.printStackTrace();
+						}
+					}
+				});
+			}
 			int res = 0;
 			while (res != -1/* && !ffm_stop*/)
 				try {
@@ -1092,7 +1124,11 @@ public class FFmpegProcess extends Observable {
 		finally {
 			if (in_ != null) try { in_.close(); } catch (IOException e) { e.printStackTrace(); }
 			if (mediaStream != null) { try { mediaStream.close(); } catch (IOException e) { e.printStackTrace(); } mediaStream = null; }
-			if (demuxVideoStream != null) { try { demuxVideoStream.close(); } catch (IOException e) { e.printStackTrace(); } demuxVideoStream = null; } 
+			if (demuxVideoStream != null) {
+				try { demuxVideoStream.close(); } catch (IOException e) { e.printStackTrace(); }
+				if (consumerThreads != null) for (Thread thread : consumerThreads) thread.join();
+				demuxVideoStream = null;
+			} 
 			setChanged(); notifyObservers(Event.STOP);
 			debug("FFMPEG output thread ended.", "FFMPEG process terminated.");
 		}

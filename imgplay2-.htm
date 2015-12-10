@@ -598,7 +598,7 @@ function renewFFmpeg(op, key, p1, p2, mode, resolution, fps) {
 			'ffmpeg-an', '',
 			'ffmpeg-f:o', 'flv',
 			'ffmpeg-o', p2,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/v"
-			'debug', 'yes',
+			'debug', debug_java, // 'yes',
 			'debug-ffmpeg', debug_ffmpeg, // 'yes',
 		];
 		var tmp, isMode = (mode && ((tmp = mode.split("="))[0] === "pixel_format" || tmp[0] === "vcodec") && tmp.length > 1 && tmp[1]);
@@ -651,7 +651,7 @@ function renewFFmpeg(op, key, p1, p2, mode, resolution, fps) {
 			"drop-unused-frames", "yes",
 			"process-frame-callback", "showVideoFrame",
 			"process-frame-number-of-consumer-threads", "4",
-			"debug", "yes",
+			"debug", debug_java, // "yes",
 			"debug-ffmpeg", debug_ffmpeg, // 'yes',
 		] ); break;
 
@@ -664,7 +664,7 @@ function renewFFmpeg(op, key, p1, p2, mode, resolution, fps) {
 			'ffmpeg-vn', '',
 			'ffmpeg-f:o', 'flv',
 			'ffmpeg-o', p2,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/a"
-			'debug', 'yes',
+			'debug', debug_java, // 'yes',
 			'debug-ffmpeg', debug_ffmpeg, // 'yes',
 		] ); current_device_name[key] = p1; break;
 
@@ -683,7 +683,7 @@ function renewFFmpeg(op, key, p1, p2, mode, resolution, fps) {
 			//"wav-audio-line-buffer-size", "2200",
 			"wav-intermediate-buffer-size", "32",
 			"wav-level-change-callback", "audioLevelCallback",
-			"debug", "yes",
+			"debug", debug_java, // "yes",
 			"debug-ffmpeg", debug_ffmpeg, // 'yes',
 		] ); break;
 
@@ -701,7 +701,7 @@ function renewFFmpeg(op, key, p1, p2, mode, resolution, fps) {
 			'ffmpeg-an', '',
 			'ffmpeg-f:o', 'flv',
 			'ffmpeg-o', p1,			// rtmp url, e.g. "rtmp://10.44.43.244/rtmp/s"
-			'debug', 'yes',
+			'debug', debug_java, // 'yes',
 			'debug-ffmpeg', debug_ffmpeg, // 'yes',
 		] ); break;
 	}
@@ -745,6 +745,7 @@ function callFFmpeg(op, p1) {
 }
 
 var debug_ffmpeg = window.location.search && window.location.search.indexOf('debug-ffmpeg') != -1 ? 'yes' : 'no',
+	debug_java = window.location.search && window.location.search.indexOf('debug-java') != -1 ? 'yes' : 'no',
 	debug_js = window.location.search && window.location.search.indexOf('debug-js') != -1,
 	query_string = $.map((window.location.search || "").split(/[\?&]/), function (v, i) { var a = v.split("="), r = a[0] ? { name: decodeURIComponent(a[0]) } : null; if (r && a.length > 1) r.value = decodeURIComponent(a[1]); return r; }),
 	img_num = 3;
@@ -990,7 +991,7 @@ function onLoadHandler() {
 			}
 			re = /^\s*Direct\s*Show\s*(video|audio)\s*devices\s*.*$/i;
 			var re1 = /^\s*Could\s*not\s*enumerate\s*(video|audio)\s*devices\.?\s*$/i,
-				re2 = /^\s*Alternative\s+name\s*"?(.*?)"?\s*$/i;
+				re2 = /^\s*Alternative\s+name\s*"?(.*?\s*)"?\s*$/i;
 			// add DirectShow devices
 			for (var i = 0; i < arr.length; i++) {
 				if (re.test(arr[i])) {

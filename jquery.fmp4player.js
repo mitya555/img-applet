@@ -148,8 +148,9 @@ $.fn.fmp4player = function (options) {
 			break;
 		case 2: // played
 			timeranges = " played:";
-			for (var i = 0; i < e.played.length; i++)
-				timeranges += " time range " + i + ": start=" + e.played.start(i) + "; end=" + e.played.end(i) + (i == e.played.length - 1 ? "" : ";");
+			if (e.played != null)
+				for (var i = 0; i < e.played.length; i++)
+					timeranges += " time range " + i + ": start=" + e.played.start(i) + "; end=" + e.played.end(i) + (i == e.played.length - 1 ? "" : ";");
 			break;
 		}
 		return " readyState: " + e.readyState + "(" + trs(e.readyState) + "); networkState: " + e.networkState + "(" + tns(e.networkState) + ");" + timeranges; 
@@ -205,9 +206,12 @@ $.fn.fmp4player = function (options) {
 		render();
 	}
 
+	var old_ontimeupdate = audio.ontimeupdate;
 	audio.ontimeupdate = function() {
 		if (this.played != null && this.played.length > 0 && timeLine > 0)
 			timeLine = performance.now() - (this.played.end(0) - this.played.start(0)) * 1000;
+		if (old_ontimeupdate)
+			old_ontimeupdate.call(this);
 	};
 
 	function startAudioIfAppletIsPlaying() {
