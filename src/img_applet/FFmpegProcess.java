@@ -1,6 +1,7 @@
 package img_applet;
 
 import ffmpeg.FFmpeg;
+import img_applet.FFmpegProcess.FrameData;
 import img_applet.FFmpegProcess.MediaDemuxer.Gettable;
 
 import java.applet.Applet;
@@ -63,12 +64,15 @@ public class FFmpegProcess extends Observable {
 			return this.size;
 		}
 		public boolean persistent;
+		public FrameData getFrameData(byte[] bytes) throws IOException { return new FrameData(sn, bytes); }
 		@Override
 		public String toString() { return " # " + sn + (persistent ? " \t f/s" : " \t mem"); }
 	}
 
 	static class VideoBuffer extends Buffer {
 		public volatile long timestamp;
+		@Override
+		public FrameData getFrameData(byte[] bytes) throws IOException { return new VideoFrameData(sn, bytes, timestamp); }
 		@Override
 		public String toString() { return super.toString() + " \t ts: " + timestamp; }
 	}
@@ -81,8 +85,12 @@ public class FFmpegProcess extends Observable {
 	{
 		public byte[] bytes;
 		public int sn;
-		public FrameData() {}
 		public FrameData(int sn, byte[] bytes) { this.sn = sn; this.bytes = bytes; }
+	}
+
+	static class VideoFrameData extends FrameData {
+		public long timestamp;
+		public VideoFrameData(int sn, byte[] bytes, long timestamp) { super(sn, bytes); this.timestamp = timestamp; }
 	}
 
 	static abstract class MultiBuffer implements Closeable
@@ -107,13 +115,26 @@ public class FFmpegProcess extends Observable {
 		// producer / consumer pattern:
 		public BlockingQueue<Integer> notifyQueue;
 		protected int numberOfConsumerThreads;
-		public Thread[] startConsumerThreads(int numOfThreads, Runnable runnable) {
+		protected Thread[] consumerThreads;
+		public void startConsumerThreads(int numOfThreads, Runnable runnable) {
 			numberOfConsumerThreads = numOfThreads;
-			Thread[] threads = new Thread[numOfThreads];
+			consumerThreads = new Thread[numOfThreads];
 			for (int i = 0; i < numOfThreads; i++) {
-				(threads[i] = new Thread(runnable)).start();
+				(consumerThreads[i] = new Thread(runnable)).start();
 			}
-			return threads;
+		}
+		@Override
+		public void close() throws IOException {
+			if (notifyQueue != null) {
+				notifyQueue.clear();
+				for (int i = 0; i < numberOfConsumerThreads; i++) {
+					notifyQueue.offer(-200);
+				}
+			}
+			if (consumerThreads != null)
+				for (Thread thread : consumerThreads)
+					try { thread.join(); } catch (InterruptedException e) { e.printStackTrace(); }
+			consumerThreads = null;
 		}
 	}
 	
@@ -217,7 +238,7 @@ public class FFmpegProcess extends Observable {
 						}
 						prev_sn = sn;
 					}
-					return new FrameData(currentBuffer.sn, getBytes(currentBuffer));
+					return currentBuffer.getFrameData(getBytes(currentBuffer));
 				}
 			}
 		}
@@ -231,15 +252,6 @@ public class FFmpegProcess extends Observable {
 		void getCurrentBufferNotify() {}
 		@Override
 		int getQueueLength() { return 2; }
-		@Override
-		public void close() throws IOException {
-			if (notifyQueue != null) {
-				notifyQueue.clear();
-				for (int i = 0; i < numberOfConsumerThreads; i++) {
-					notifyQueue.offer(-200);
-				}
-			}
-		}
 	}
 	
 	static class BufferList extends MultiBuffer
@@ -379,9 +391,18 @@ public class FFmpegProcess extends Observable {
 					fileBuffer.write(buf.b, 0, buf.len);
 					buf.b = null;
 					filledBufferList.add(buf);
+					if (notifyQueue != null) {
+						notifyQueue.offer(sn);
+					}
 				}
-			} else
-				(res != -1 ? filledBufferList : emptyBufferList).add(buf);
+			} else if (res != -1) {
+				filledBufferList.add(buf);
+				if (notifyQueue != null) {
+					notifyQueue.offer(sn);
+				}
+			} else {
+				 emptyBufferList.add(buf);
+			}
 			if (DEBUG && res != -1)
 				errOut.println(" + " + name + buf);
 			return res;
@@ -412,7 +433,7 @@ public class FFmpegProcess extends Observable {
 		FrameData getCurrentFrameData() throws IOException {
 			getCurrentBuffer_();
 			if (currentBuffer != null) {
-				FrameData ret = new FrameData(currentBuffer.sn, getBytes(currentBuffer));
+				FrameData ret = currentBuffer.getFrameData(getBytes(currentBuffer));
 				releaseCurrentBuffer_();
 				return ret;
 			}
@@ -446,6 +467,7 @@ public class FFmpegProcess extends Observable {
 		int getQueueLength() { return filledBufferList.count + (currentBuffer != null ? 1 : 0); }
 		@Override
 		public void close() throws IOException {
+			super.close();
 			if (fileBuffer != null) {
 				_File _file;
 				int closed = 0, deleted = 0;
@@ -851,7 +873,6 @@ public class FFmpegProcess extends Observable {
 	private void playMediaReader() throws InterruptedException {
 		setChanged(); notifyObservers(Event.START);
 		MediaReader in_ = null;
-		Thread[] consumerThreads = null;
 		try {
 			String contentType = "application/octet-stream";
 			boolean video = false;
@@ -896,9 +917,9 @@ public class FFmpegProcess extends Observable {
 			demuxVideoStream = null;
 			final boolean processFrameCallbackSet = !strEmpty(processFrameCallback);
 			if (processFrameCallbackSet) {
-				final BlockingQueue<Integer> _notifyQueue = mediaStream.multiBuffer.notifyQueue = new ArrayBlockingQueue<Integer>(5);
+				final BlockingQueue<Integer> _notifyQueue = mediaStream.multiBuffer.notifyQueue = new ArrayBlockingQueue<Integer>(processFrameNumberOfConsumerThreads + 1);
 				final String _contentType = contentType; 
-				consumerThreads = mediaStream.multiBuffer.startConsumerThreads(processFrameNumberOfConsumerThreads, new Runnable() {
+				mediaStream.multiBuffer.startConsumerThreads(processFrameNumberOfConsumerThreads, new Runnable() {
 					@Override
 					public void run() {
 						JSObject jsWindow = JSObject.getWindow(applet);
@@ -938,11 +959,7 @@ public class FFmpegProcess extends Observable {
 		}
 		finally {
 			if (in_ != null) try { in_.close(); } catch (IOException e) { e.printStackTrace(); }
-			if (mediaStream != null) {
-				try { mediaStream.close(); } catch (IOException e) { e.printStackTrace(); }
-				if (consumerThreads != null) for (Thread thread : consumerThreads) thread.join();
-				mediaStream = null;
-			}
+			if (mediaStream != null) { try { mediaStream.close(); } catch (IOException e) { e.printStackTrace(); } mediaStream = null; }
 			setChanged(); notifyObservers(Event.STOP);
 			debug("FFMPEG output thread ended."/*, "FFMPEG process terminated."*/);
 		}
@@ -1060,7 +1077,6 @@ public class FFmpegProcess extends Observable {
 	private void playMediaDemuxer() throws InterruptedException {
 		setChanged(); notifyObservers(Event.START);
 		MediaDemuxer in_ = null;
-		Thread[] consumerThreads = null;
 		boolean hasAudio = !NoAudio(), hasVideo = !NoVideo();
 		try {
 			mediaStream = hasAudio ? new MediaStream("audio/mpeg", dropUnusedFrames ?
@@ -1085,9 +1101,9 @@ public class FFmpegProcess extends Observable {
 					DEBUG);
 			final boolean processFrameCallbackSet = !strEmpty(processFrameCallback);
 			if (demuxVideoStream != null && processFrameCallbackSet) {
-				final BlockingQueue<Integer> _notifyQueue = demuxVideoStream.multiBuffer.notifyQueue = new ArrayBlockingQueue<Integer>(5);
+				final BlockingQueue<Integer> _notifyQueue = demuxVideoStream.multiBuffer.notifyQueue = new ArrayBlockingQueue<Integer>(processFrameNumberOfConsumerThreads + 1);
 				final String _contentType = "image/jpeg"; 
-				consumerThreads = demuxVideoStream.multiBuffer.startConsumerThreads(processFrameNumberOfConsumerThreads, new Runnable() {
+				demuxVideoStream.multiBuffer.startConsumerThreads(processFrameNumberOfConsumerThreads, new Runnable() {
 					@Override
 					public void run() {
 						JSObject jsWindow = JSObject.getWindow(applet);
@@ -1124,11 +1140,7 @@ public class FFmpegProcess extends Observable {
 		finally {
 			if (in_ != null) try { in_.close(); } catch (IOException e) { e.printStackTrace(); }
 			if (mediaStream != null) { try { mediaStream.close(); } catch (IOException e) { e.printStackTrace(); } mediaStream = null; }
-			if (demuxVideoStream != null) {
-				try { demuxVideoStream.close(); } catch (IOException e) { e.printStackTrace(); }
-				if (consumerThreads != null) for (Thread thread : consumerThreads) thread.join();
-				demuxVideoStream = null;
-			} 
+			if (demuxVideoStream != null) { try { demuxVideoStream.close(); } catch (IOException e) { e.printStackTrace(); } demuxVideoStream = null; } 
 			setChanged(); notifyObservers(Event.STOP);
 			debug("FFMPEG output thread ended.", "FFMPEG process terminated.");
 		}

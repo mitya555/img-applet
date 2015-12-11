@@ -42,6 +42,8 @@ var defaults = {
 	"ffmpeg-movflags": "frag_keyframe+empty_moov",
 	"ffmpeg-f:o": "mp4",
 	"demux-fMP4": "yes",
+	"process-frame-callback": "showVideoFrame",
+	"process-frame-number-of-consumer-threads": "4",
 /*	"ffmpeg-muxpreload": "10",
 	"ffmpeg-muxdelay": "10",
 	"ffmpeg-loglevel": "warning",*/
@@ -198,7 +200,22 @@ $.fn.fmp4player = function (options) {
 		perf_prev = perf_now;
 	}
 
-	// start the loop				
+	var videoConsumerThreadsInJava = !!opts.appletParams["process-frame-callback"];
+	if (videoConsumerThreadsInJava) {
+		// frame consumer threads in Java with the callback function below.
+		// has to be configured in the applet parameters
+		var init = true;
+		window[opts.appletParams["process-frame-callback"]] = function(ffmpeg_id, frame_sn, dataUri) {
+			image[last_img = (last_img + 1) % 2].src = dataUri;
+			if (init && checkApplet()) {
+				init = false;
+				getVideoTrackInfo();
+			}
+		};
+	}
+
+	// frame consumer in javascript:
+	// start the loop
 	animate();
 
 	function animate() {
@@ -234,7 +251,7 @@ $.fn.fmp4player = function (options) {
 	function render() {
 		cnt++;
 		//check_performance();
-		if (checkApplet()) {
+		if (!videoConsumerThreadsInJava && checkApplet()) {
 			try {
 				var sn_ = applet_.getVideoSN();
 				if (/*sn_ != prev_sn &&*/ sn_ > 0) {
