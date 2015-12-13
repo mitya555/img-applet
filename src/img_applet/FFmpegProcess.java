@@ -1,7 +1,6 @@
 package img_applet;
 
 import ffmpeg.FFmpeg;
-import img_applet.FFmpegProcess.FrameData;
 import img_applet.FFmpegProcess.MediaDemuxer.Gettable;
 
 import java.applet.Applet;
