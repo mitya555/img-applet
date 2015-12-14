@@ -332,11 +332,38 @@ public class fMP4DemuxerInputStream extends MediaDemuxer {
 				trak.type = check4_(0, 'v', 'i', 'd', 'e') ? TrakType.video : check4_(0, 's', 'o', 'u', 'n') ? TrakType.audio : TrakType.other;
 				if (trak.done()) { if (trak.finish(moov) == -1) return -1; }
 				else if (hdlr.skip() == -1) return -1;
+			} else if (check4box_('m', 'i', 'n', 'f')) { // minf
+				if (read_minf(moov, trak, new Box()) == -1) return -1;
 			} else { // skip all other boxes
 				if (new Box().skip() == -1) return -1;
 			}
 			if (pos >= mdia.nextBoxStart())
 				return (int) (pos - mdia.nextBoxStart());
+		}
+	}
+
+	public int read_minf(Box moov, Trak trak, Box minf) throws IOException {
+		while (true) {
+			if (readNext() == -1) return -1;
+//			if (check4box_('m', 'd', 'h', 'd')) { // mdhd
+//				Box mdhd = new Box();
+//				if (read_(12, 4) == -1) return -1;
+//				trak.timeScale = int_(0);
+//				if (trak.done()) { if (trak.finish(moov) == -1) return -1; }
+//				else if (mdhd.skip() == -1) return -1;
+//			} else if (check4box_('h', 'd', 'l', 'r')) { // hdlr
+//				Box hdlr = new Box();
+//				if (read_(8, 4) == -1) return -1;
+//				trak.type = check4_(0, 'v', 'i', 'd', 'e') ? TrakType.video : check4_(0, 's', 'o', 'u', 'n') ? TrakType.audio : TrakType.other;
+//				if (trak.done()) { if (trak.finish(moov) == -1) return -1; }
+//				else if (hdlr.skip() == -1) return -1;
+//			} else if (check4box_('m', 'i', 'n', 'f')) { // minf
+//				if (read_mdia(moov, trak, new Box()) == -1) return -1;
+//			} else { // skip all other boxes
+				if (new Box().skip() == -1) return -1;
+//			}
+			if (pos >= minf.nextBoxStart())
+				return (int) (pos - minf.nextBoxStart());
 		}
 	}
 	

@@ -20,10 +20,10 @@ $('#player').fmp4player({
 		debug: debug_java,
 		'debug-ffmpeg': debug_ffmpeg,
 		'debug-bufferlist': debug_bufferlist,
-		'ffmpeg-re': 'yes',
+		//'ffmpeg-re': 'yes',
 		'ffmpeg-i': 'http://tv.life.ru/lifetv/720p/index.m3u8', // 'rtmp://tv-mix.ru/live/Stream1', // 'rtmp://rtmp.one.by/HD/1muz', // 'rtmp://yellow.ether.tv/live/tomsk/broadcast4', // 'http://85.238.112.10:8810/hls_sec/239.33.15.14-.m3u8',
-		"max-video-buffer-count": '0',
-		//"process-frame-callback": "", // uncomment to switch to javascript frames processing/synchronization (requestAnimationFrame() function)
+		"process-frame-callback": "", // uncomment to switch to javascript frames processing/synchronization (requestAnimationFrame() function)
+		//"ffmpeg-c:a": "pcm_s16le",
 	},
 	debug: debug_js,
 	audioControls: 'yes',

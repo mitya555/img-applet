@@ -40,10 +40,11 @@ var defaults = {
 */
 	"ffmpeg-vsync": "0",
 	"ffmpeg-movflags": "frag_keyframe+empty_moov",
-	"ffmpeg-f:o": "mp4",
+	"ffmpeg-f:o": "mov", // "mp4", // .MOV can contain PCM audio (unlike .MP4) and plays better as well :)
 	"demux-fMP4": "yes",
 	"process-frame-callback": "showVideoFrame",
 	"process-frame-number-of-consumer-threads": "4",
+	"max-video-buffer-count": "0", // no limit on filesystem buffering
 /*	"ffmpeg-muxpreload": "10",
 	"ffmpeg-muxdelay": "10",
 	"ffmpeg-loglevel": "warning",*/

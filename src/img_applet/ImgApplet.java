@@ -159,8 +159,12 @@ public class ImgApplet extends JApplet {
 
 		// Remove as many temp files as possible
 		try {
-			for (File temp : JarLib.tmpdir.listFiles(new FilenameFilter() { @Override public boolean accept(File dir, String name) { return Pattern.matches("img_applet_\\d+\\.tmp", name); } }))
-				temp.delete();
+			int _fnd = 0, _del = 0;
+			for (File temp : JarLib.tmpdir.listFiles(new FilenameFilter() { @Override public boolean accept(File dir, String name) { return Pattern.matches("img_applet_\\d+\\.tmp", name); } })) {
+				_fnd++;
+				if (temp.delete()) _del++;;
+			}
+			debug("Temp files: found " + _fnd + "; deleted " + _del + " files");
 		} catch (Throwable e) {
 			e.printStackTrace();
 		}
