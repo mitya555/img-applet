@@ -50,7 +50,7 @@ public class fMP4DemuxerInputStream extends MediaDemuxer {
 		if (res != -1) { pos++; buf.put(res); }
 		return res;
 	}
-//	private byte byte_(int i) { return buf.get(i); }
+	private int short_(int i) { return buf.getShort(i); }
 	private int int_(int i) { return buf.getInt(i); }
 	private long long_() { return buf.getLong(0); }
 //	private boolean check_(int i, char ... cs) { return buf.check(i, cs); }
@@ -90,30 +90,51 @@ public class fMP4DemuxerInputStream extends MediaDemuxer {
 	private class Box {
 		long boxStart;
 		int boxSize;
-//		char[] boxName;
 		public Box() {
 			boxStart = pos - 8;
 			boxSize = int_(0);
-//			if (DEBUG) {
-//				System.out.print("Begin ");
-//				System.out.println(boxName = new char[] { (char)buf.get(4), (char)buf.get(5), (char)buf.get(6), (char)buf.get(7) });
-//			}
 		}
 		public long skip() throws IOException {
-//			if (DEBUG) {
-//				System.out.print("End ");
-//				System.out.println(boxName);
-//			}
 			return skip_(boxStart + boxSize - pos);
 		}
 		public long nextBoxStart() { return boxStart + boxSize; }
+	}
+	static int getInt(byte[] b, int off) {
+		return	((b[off + 3] & 0xFF)      ) +
+				((b[off + 2] & 0xFF) <<  8) +
+				((b[off + 1] & 0xFF) << 16) +
+				((b[off    ]       ) << 24);
+	}
+	private class NamedBox extends Box {
+		byte[] boxName;
+		public NamedBox() {
+			boxName = new byte[] { buf.get(4), buf.get(5), buf.get(6), buf.get(7) };
+			if (DEBUG) { System.out.println("Begin " + this); }
+		}
+		@Override
+		public long skip() throws IOException {
+			if (DEBUG) { System.out.println("End " + this); }
+			return super.skip();
+		}
+		@Override
+		public String toString() {
+			return "Atom '" + new String(boxName) + "' (" + String.format("0x%8s", Integer.toHexString(getInt(boxName, 0))).replace(' ', '0') + ")";
+		}
 	}
 	private enum TrakType { unknown, video, audio, other }
 	class Trak extends Box {
 		TrakType type = TrakType.unknown;
 		int id, width, height, timeScale;
-		long duration = 0L; // in 1.0/timeScale sec. 
-		boolean done() { return type == TrakType.other || ((type == TrakType.video || type == TrakType.audio) && (traksByType.containsKey(type) || (id > 0 && timeScale > 0))); }
+		long duration = 0L; // in 1.0/timeScale sec.
+		byte[] format;
+		int sampleSizeInBits, channels;	// audio
+		boolean signed, bigEndian;		// parameters
+		boolean done() {
+			return type == TrakType.other ||
+					((type == TrakType.video || type == TrakType.audio) && // the only trak types we care about
+					(traksByType.containsKey(type) || // there was a trak of this type prior to this one
+					(id > 0 && timeScale > 0 && (type != TrakType.audio || format != null))));
+		}
 		long finish(Box moov) throws IOException {
 			if ((type == TrakType.video || type == TrakType.audio) && !traksByType.containsKey(type)) {
 				traksById.put(id, this);
@@ -132,7 +153,7 @@ public class fMP4DemuxerInputStream extends MediaDemuxer {
 	private Map<Integer,Trak> traksById = new HashMap<Integer,Trak>();
 	private Map<TrakType,Trak> traksByType = new HashMap<TrakType,Trak>();
 	private class Traf extends Box implements ReaderToBuffer {
-		int trakId, dfltSampleDuration, dfltSampleSize, dataOffset, duration, size;
+		int dfltSampleDuration, dfltSampleSize, dataOffset, duration, size;
 		long baseDataOffset;
 		Trak trak;
 		@Override
@@ -218,7 +239,7 @@ public class fMP4DemuxerInputStream extends MediaDemuxer {
 				Box tfhd = new Box();
 				if (read_(0, 8) == -1) return -1;
 				int flags = int_(0), trakId = int_(4);
-				if (traksById.containsKey(traf.trakId = trakId)) {
+				if (traksById.containsKey(trakId)) {
 					traf.trak = traksById.get(trakId);
 					moof.trafs[moof.trafs[0] == null ? 0 : 1] = traf;
 				} else {
@@ -345,25 +366,49 @@ public class fMP4DemuxerInputStream extends MediaDemuxer {
 	public int read_minf(Box moov, Trak trak, Box minf) throws IOException {
 		while (true) {
 			if (readNext() == -1) return -1;
-//			if (check4box_('m', 'd', 'h', 'd')) { // mdhd
-//				Box mdhd = new Box();
-//				if (read_(12, 4) == -1) return -1;
-//				trak.timeScale = int_(0);
-//				if (trak.done()) { if (trak.finish(moov) == -1) return -1; }
-//				else if (mdhd.skip() == -1) return -1;
-//			} else if (check4box_('h', 'd', 'l', 'r')) { // hdlr
-//				Box hdlr = new Box();
-//				if (read_(8, 4) == -1) return -1;
-//				trak.type = check4_(0, 'v', 'i', 'd', 'e') ? TrakType.video : check4_(0, 's', 'o', 'u', 'n') ? TrakType.audio : TrakType.other;
-//				if (trak.done()) { if (trak.finish(moov) == -1) return -1; }
-//				else if (hdlr.skip() == -1) return -1;
-//			} else if (check4box_('m', 'i', 'n', 'f')) { // minf
-//				if (read_mdia(moov, trak, new Box()) == -1) return -1;
-//			} else { // skip all other boxes
+			if (check4box_('s', 't', 'b', 'l')) { // stbl
+				if (read_stbl(moov, trak, new Box()) == -1) return -1;
+			} else { // skip all other boxes
 				if (new Box().skip() == -1) return -1;
-//			}
+			}
 			if (pos >= minf.nextBoxStart())
 				return (int) (pos - minf.nextBoxStart());
+		}
+	}
+
+	public int read_stbl(Box moov, Trak trak, Box stbl) throws IOException {
+		while (true) {
+			if (readNext() == -1) return -1;
+			if (check4box_('s', 't', 's', 'd')) { // stsd
+				if (read_stsd(moov, trak, new Box()) == -1) return -1;
+			} else { // skip all other boxes
+				if (new Box().skip() == -1) return -1;
+			}
+			if (pos >= stbl.nextBoxStart())
+				return (int) (pos - stbl.nextBoxStart());
+		}
+	}
+
+	public int read_stsd(Box moov, Trak trak, Box stsd) throws IOException {
+		if (skip_(8) == -1) return -1;
+		while (true) {
+			if (readNext() == -1) return -1;
+			NamedBox fmt = new NamedBox();
+			trak.format = fmt.boxName;
+			if (check4box_('r', 'a', 'w', ' ')) {
+				if (read_(16, 8) == -1) return -1;
+				trak.channels = short_(0); trak.sampleSizeInBits = 8; trak.signed = false; 
+			} else if (check4box_('t', 'w', 'o', 's')) {
+				if (read_(16, 8) == -1) return -1;
+				trak.channels = short_(0); trak.sampleSizeInBits = short_(2); trak.signed = true; trak.bigEndian = true;
+			} else if (check4box_('s', 'o', 'w', 't')) {
+				if (read_(16, 8) == -1) return -1;
+				trak.channels = short_(0); trak.sampleSizeInBits = short_(2); trak.signed = true; trak.bigEndian = false;
+			}
+			if (trak.done()) { if (trak.finish(moov) == -1) return -1; }
+			else if (fmt.skip() == -1) return -1;
+			if (pos >= stsd.nextBoxStart())
+				return (int) (pos - stsd.nextBoxStart());
 		}
 	}
 	

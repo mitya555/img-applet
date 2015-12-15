@@ -15,7 +15,7 @@ if ( !window.requestAnimationFrame ) {
 }
 
 /**
- * fmp4polayer jQuery plug-in.
+ * fmp4player jQuery plug-in.
  */
 (function ($) {
 

@@ -8,6 +8,9 @@ public class CircularBuffer {
 	public CircularBuffer(int len) { this.len = len; buf = new byte[len]; }
 	public void put(int b) { buf[ptr++] = (byte)b; if (ptr == len) ptr = 0; }
 	public byte get(int i) { return buf[(ptr + i) % len]; }
+	public int getShort(int i) { return ptr > 0 ?
+			get(i) << 8 | get(i + 1) << 8 >>> 8 :
+			buf[i] << 8 | buf[i + 1] << 8 >>> 8; }
 	public int getInt(int i) { return ptr > 0 ?
 			get(i) << 24 | get(i + 1) << 24 >>> 8 | get(i + 2) << 24 >>> 16 | get(i + 3) << 24 >>> 24 :
 			buf[i] << 24 | buf[i + 1] << 24 >>> 8 | buf[i + 2] << 24 >>> 16 | buf[i + 3] << 24 >>> 24; }
