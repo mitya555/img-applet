@@ -1,6 +1,7 @@
 package img_applet;
 
 import img_applet.FFmpegProcess.Buffer;
+import img_applet.FFmpegProcess.ReaderFromReaderToBuffer;
 import img_applet.FFmpegProcess.VideoBuffer;
 import img_applet.FFmpegProcess.MultiBuffer;
 import img_applet.FFmpegProcess.BufferList;
@@ -21,7 +22,7 @@ public class fMP4DemuxerInputStream extends MediaDemuxer {
 
 	public fMP4DemuxerInputStream(InputStream in,
 			double growFactor, double shrinkThresholdFactor,
-			MultiBuffer video, MultiBuffer audio,
+			ReaderFromReaderToBuffer video, ReaderFromReaderToBuffer audio,
 			Gettable videoInfoCreatedCallback, Gettable audioInfoCreatedCallback,
 			boolean debug) {
 		super(in, video, audio,
@@ -185,12 +186,10 @@ public class fMP4DemuxerInputStream extends MediaDemuxer {
 				if (moof.trafs[0].trak.type == TrakType.video) {
 					if (video.readToBuffer(moof.trafs[0]) == -1) return -1;
 					if (moof.trafs[1] != null) {
-						if (audioLine != null) { if (readToBuffer(moof.trafs[1]) == -1) return -1; }
-						else if (audio != null) { if (audio.readToBuffer(moof.trafs[1]) == -1) return -1; }
+						if (audio != null) { if (audio.readToBuffer(moof.trafs[1]) == -1) return -1; }
 					}
 				} else {
-					if (audioLine != null) { if (readToBuffer(moof.trafs[0]) == -1) return -1; }
-					else if (audio != null) { if (audio.readToBuffer(moof.trafs[0]) == -1) return -1; }
+					if (audio != null) { if (audio.readToBuffer(moof.trafs[0]) == -1) return -1; }
 					if (moof.trafs[1] != null) {
 						if (video.readToBuffer(moof.trafs[1]) == -1) return -1;
 					}
