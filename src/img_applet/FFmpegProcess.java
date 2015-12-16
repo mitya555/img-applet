@@ -2,6 +2,7 @@ package img_applet;
 
 import ffmpeg.FFmpeg;
 import img_applet.FFmpegProcess.MediaDemuxer.Gettable;
+import img_applet.FFmpegProcess.ReaderToBuffer;
 
 import java.applet.Applet;
 import java.io.BufferedOutputStream;
@@ -79,7 +80,9 @@ public class FFmpegProcess extends Observable {
 	static interface BufferFactory { Buffer newBuffer(); }
 	
 	static interface ReaderToBuffer { int read(Buffer b) throws IOException; }
-	
+
+	static interface ReaderFromReaderToBuffer { int readToBuffer(ReaderToBuffer in) throws IOException, InterruptedException; }
+
 	static class FrameData
 	{
 		public byte[] bytes;
@@ -92,7 +95,7 @@ public class FFmpegProcess extends Observable {
 		public VideoFrameData(int sn, byte[] bytes, long timestamp) { super(sn, bytes); this.timestamp = timestamp; }
 	}
 
-	static abstract class MultiBuffer implements Closeable
+	static abstract class MultiBuffer implements ReaderFromReaderToBuffer, Closeable
 	{
 		protected volatile int sn;
 		int getSN() { return sn; }
@@ -102,7 +105,6 @@ public class FFmpegProcess extends Observable {
 	    protected String name;
 		protected MultiBuffer(BufferFactory bufferFactory, boolean debug, String name) { this.bufferFactory = bufferFactory; DEBUG = debug; this.name = name; }
 		protected MultiBuffer(boolean debug, String name) { this(new BufferFactory() { @Override public Buffer newBuffer() { return new Buffer(); } }, debug, name); }
-		abstract int readToBuffer(ReaderToBuffer in) throws IOException, InterruptedException;
 		abstract byte[] getBytes(Buffer b) throws IOException;
 		abstract byte[] getCurrentBytes() throws IOException;
 		abstract FrameData getCurrentFrameData() throws IOException;
@@ -145,20 +147,34 @@ public class FFmpegProcess extends Observable {
 		int readFragment() throws IOException, InterruptedException;
 	}
 	
-	static abstract class MediaDemuxer extends FilterInputStream implements Demuxer {
+	static abstract class MediaDemuxer extends FilterInputStream implements Demuxer, ReaderFromReaderToBuffer {
 		protected MultiBuffer video, audio;
-		protected Runnable videoReadCallback, audioReadCallback;
-		static interface Gettable { void get(Object info); }
+		protected SourceDataLine audioLine;
+		protected Buffer audioLineBuffer;
+		@Override
+		public int readToBuffer(ReaderToBuffer in) throws IOException, InterruptedException {
+			int bytesRead = in.read(audioLineBuffer);
+			if (bytesRead == -1) return -1;
+			return audioLine.write(audioLineBuffer.b, 0, bytesRead);
+		}
+		@Override
+		public void close() throws IOException {
+			super.close();
+			if (audioLine != null) {
+				audioLineBuffer = null;
+				audioLine.drain();
+				debug("Playback ended.");
+			}
+		}
+		static interface Gettable { void get(Object info, MediaDemuxer self); }
 		protected Gettable videoInfoCreatedCallback, audioInfoCreatedCallback;
 		protected boolean DEBUG;
 	    protected void debug(String dbg) { if (DEBUG) System.out.println(dbg); }
 		protected MediaDemuxer(InputStream in, MultiBuffer video, MultiBuffer audio,
 				Gettable videoInfoCreatedCallback, Gettable audioInfoCreatedCallback,
-				Runnable videoReadCallback, Runnable audioReadCallback,
 				boolean debug) {
 			super(in); this.video = video; this.audio = audio;
 			this.videoInfoCreatedCallback = videoInfoCreatedCallback; this.audioInfoCreatedCallback = audioInfoCreatedCallback;
-			this.videoReadCallback = videoReadCallback; this.audioReadCallback = audioReadCallback;
 			DEBUG = debug;
 		}
 	}
@@ -357,7 +373,7 @@ public class FFmpegProcess extends Observable {
 			this.maxBufferCount = maxBufferCount;
 		}
 		@Override
-		int readToBuffer(ReaderToBuffer in) throws IOException, InterruptedException {
+		public int readToBuffer(ReaderToBuffer in) throws IOException, InterruptedException {
 
 			while (maxBufferCount > 0 && filledBufferList.count >= maxBufferCount) {
 				Buffer buf_ = filledBufferList.remove();
@@ -1088,15 +1104,34 @@ public class FFmpegProcess extends Observable {
 			in_ = new fMP4DemuxerInputStream(/*new FileBackedAutoReadingInputStream(*/ffmp.getInputStream()/*)*/,
 					bufferGrowFactor, bufferShrinkThresholdFactor,
 					hasVideo ? demuxVideoStream.multiBuffer : null, hasAudio ? mediaStream.multiBuffer : null,
-					hasVideo ? new Gettable() { @Override public void get(final Object info) {
+					hasVideo ? new Gettable() { @Override public void get(Object info, MediaDemuxer self) {
 						demuxVideoStream.trackInfo.timeScale = ((fMP4DemuxerInputStream.Trak)info).timeScale;
 						demuxVideoStream.trackInfo.width = ((fMP4DemuxerInputStream.Trak)info).width;
 						demuxVideoStream.trackInfo.height = ((fMP4DemuxerInputStream.Trak)info).height;
 					} } : null,
-					hasAudio ? new Gettable() { @Override public void get(final Object info) {
+					hasAudio ? new Gettable() { @Override public void get(Object info, MediaDemuxer self) {
 						demuxVideoStream.trackInfo.hasAudio = true;
+						fMP4DemuxerInputStream.Trak trak = (fMP4DemuxerInputStream.Trak)info;
+						if (trak.sampleSizeInBits > 0 && trak.channels > 0)
+							try {
+								self.audio = null; // play AudioLine instead of MultiBuffer
+								AudioFormat audioFormat = new AudioFormat(trak.timeScale, trak.sampleSizeInBits, trak.channels, trak.signed, trak.bigEndian);
+								debug("audioFormat = " + audioFormat);
+								self.audioLine = (SourceDataLine)AudioSystem.getLine(new DataLine.Info(SourceDataLine.class, audioFormat));
+								self.audioLineBuffer = new Buffer();
+								debug("applet parameter wav-audio-line-buffer-size = " + wavAudioLineBufferSize);
+								if (wavAudioLineBufferSize > 0)
+									self.audioLine.open(audioFormat, wavAudioLineBufferSize);
+								else
+									self.audioLine.open(audioFormat);
+								int audioLineBufferSize = self.audioLine.getBufferSize();
+								debug("audioLine.getBufferSize() = " + audioLineBufferSize);
+								self.audioLine.start();
+								debug("Playback started.");
+							} catch (LineUnavailableException e) {
+								e.printStackTrace();
+							}
 					} } : null,
-					null, null,
 					DEBUG);
 			final boolean processFrameCallbackSet = !strEmpty(processFrameCallback);
 			if (demuxVideoStream != null && processFrameCallbackSet) {

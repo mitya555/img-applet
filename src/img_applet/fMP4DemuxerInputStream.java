@@ -23,11 +23,9 @@ public class fMP4DemuxerInputStream extends MediaDemuxer {
 			double growFactor, double shrinkThresholdFactor,
 			MultiBuffer video, MultiBuffer audio,
 			Gettable videoInfoCreatedCallback, Gettable audioInfoCreatedCallback,
-			Runnable videoReadCallback, Runnable audioReadCallback,
 			boolean debug) {
 		super(in, video, audio,
 				videoInfoCreatedCallback, audioInfoCreatedCallback,
-				videoReadCallback, audioReadCallback,
 				debug);
 		this.growFactor = growFactor < 1.0 ? 1.0 : growFactor;
 		this.shrinkThresholdFactor = shrinkThresholdFactor < 1.0 ? 1.5 : shrinkThresholdFactor;
@@ -127,7 +125,7 @@ public class fMP4DemuxerInputStream extends MediaDemuxer {
 		int id, width, height, timeScale;
 		long duration = 0L; // in 1.0/timeScale sec.
 		byte[] format;
-		int sampleSizeInBits, channels;	// audio
+		int sampleSizeInBits, channels;	// audio format
 		boolean signed, bigEndian;		// parameters
 		boolean done() {
 			return type == TrakType.other ||
@@ -140,8 +138,8 @@ public class fMP4DemuxerInputStream extends MediaDemuxer {
 				traksById.put(id, this);
 				traksByType.put(type, this);
 				switch (type) {
-				case video: if (videoInfoCreatedCallback != null) videoInfoCreatedCallback.get(this); break;
-				case audio: if (audioInfoCreatedCallback != null) audioInfoCreatedCallback.get(this); break;
+				case video: if (videoInfoCreatedCallback != null) videoInfoCreatedCallback.get(this, fMP4DemuxerInputStream.this); break;
+				case audio: if (audioInfoCreatedCallback != null) audioInfoCreatedCallback.get(this, fMP4DemuxerInputStream.this); break;
 				default: break;
 				}
 				if (traksByType.size() == 2)
@@ -186,17 +184,15 @@ public class fMP4DemuxerInputStream extends MediaDemuxer {
 //				}
 				if (moof.trafs[0].trak.type == TrakType.video) {
 					if (video.readToBuffer(moof.trafs[0]) == -1) return -1;
-					if (videoReadCallback != null) videoReadCallback.run();
 					if (moof.trafs[1] != null) {
-						if (audio.readToBuffer(moof.trafs[1]) == -1) return -1;
-						if (audioReadCallback != null) audioReadCallback.run();
+						if (audioLine != null) { if (readToBuffer(moof.trafs[1]) == -1) return -1; }
+						else if (audio != null) { if (audio.readToBuffer(moof.trafs[1]) == -1) return -1; }
 					}
 				} else {
-					if (audio.readToBuffer(moof.trafs[0]) == -1) return -1;
-					if (audioReadCallback != null) audioReadCallback.run();
+					if (audioLine != null) { if (readToBuffer(moof.trafs[0]) == -1) return -1; }
+					else if (audio != null) { if (audio.readToBuffer(moof.trafs[0]) == -1) return -1; }
 					if (moof.trafs[1] != null) {
 						if (video.readToBuffer(moof.trafs[1]) == -1) return -1;
-						if (videoReadCallback != null) videoReadCallback.run();
 					}
 				}
 				if (mdat.skip() == -1) return -1;
@@ -418,7 +414,7 @@ public class fMP4DemuxerInputStream extends MediaDemuxer {
 		MultiBuffer videoMultiBuffer = 
 				new BufferList(new BufferFactory() { @Override public Buffer newBuffer() { return new FFmpegProcess.VideoBuffer(); } }, 20, 200, true, "Video"),
 				audioMultiBuffer = new BufferList(20, 0, true, "Audio");
-		fMP4DemuxerInputStream mp4reader = new fMP4DemuxerInputStream(reader, 1.0, 1.5, videoMultiBuffer, audioMultiBuffer, null, null, null, null, true);
+		fMP4DemuxerInputStream mp4reader = new fMP4DemuxerInputStream(reader, 1.0, 1.5, videoMultiBuffer, audioMultiBuffer, null, null, true);
 		int res;
 		while ((res = mp4reader.readFragment()) != -1)
 			System.out.println("Fragment result: " + res);

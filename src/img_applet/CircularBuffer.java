@@ -14,7 +14,7 @@ public class CircularBuffer {
 	public int getInt(int i) { return ptr > 0 ?
 			get(i) << 24 | get(i + 1) << 24 >>> 8 | get(i + 2) << 24 >>> 16 | get(i + 3) << 24 >>> 24 :
 			buf[i] << 24 | buf[i + 1] << 24 >>> 8 | buf[i + 2] << 24 >>> 16 | buf[i + 3] << 24 >>> 24; }
-	public int getLong(int i) { return ptr > 0 ?
+	public long getLong(int i) { return ptr > 0 ?
 			get(i) << 56 | get(i + 1) << 56 >>> 8 | get(i + 2) << 56 >>> 16 | get(i + 3) << 56 >>> 24 | get(i + 4) << 56 >>> 32 | get(i + 5) << 56 >>> 40 | get(i + 6) << 56 >>> 48 | get(i + 7) << 56 >>> 56 :
 			buf[i] << 56 | buf[i + 1] << 56 >>> 8 | buf[i + 2] << 56 >>> 16 | buf[i + 3] << 56 >>> 24 | buf[i + 4] << 56 >>> 32 | buf[i + 5] << 56 >>> 40 | buf[i + 6] << 56 >>> 48 | buf[i + 7] << 56 >>> 56; }
 	public boolean check(int i, char ... cs) {
