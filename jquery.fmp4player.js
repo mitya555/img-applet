@@ -26,7 +26,7 @@ var defaults = {
 	//"ffmpeg-i": "rtmp://85.132.78.6:1935/live/muztv.stream",
 	//"ffmpeg-i": "http://83.139.104.101/Content/HLS/Live/Channel(Sk_1)/index.m3u8",
 	//"ffmpeg-map": "0:6",
-	"ffmpeg-c:a": "libmp3lame",
+	"ffmpeg-c:a": "pcm_s16le",
 	"ffmpeg-c:v": "mjpeg",
 	"ffmpeg-q:v": "0.0",
 /* ‘-vsync parameter’
@@ -61,6 +61,7 @@ var defaults = {
 	"ffmpeg-f:o": "mp4",
 	"ffmpeg-y": "",
 	"ffmpeg-o": "output.mp4",
+	"ffmpeg-o": "output_pcm_s16le.mp4",
 	"buffer-grow-factor": "1.0",
 	"max-memory-buffer-count": "30",
 	"max-video-buffer-count": "300",

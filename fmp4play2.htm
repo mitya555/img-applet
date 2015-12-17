@@ -13,22 +13,29 @@
 var debug_ffmpeg = window.location.search && window.location.search.indexOf('debug-ffmpeg') != -1 ? 'yes' : 'no',
 	debug_bufferlist = window.location.search && window.location.search.indexOf('debug-bufferlist') != -1 ? 'yes' : 'no',
 	debug_java = window.location.search && window.location.search.indexOf('debug-java') != -1 ? 'yes' : 'no',
-	debug_js = window.location.search && window.location.search.indexOf('debug-js') != -1 ? 'yes' : 'no';
-
-$('#player').fmp4player({
+	debug_js = window.location.search && window.location.search.indexOf('debug-js') != -1 ? 'yes' : 'no',
+	play_js = window.location.search && window.location.search.indexOf('play-js') != -1,
+	ffmpeg_re = window.location.search && window.location.search.indexOf('ffmpeg-re') != -1;
+var opts = {
 	appletParams: {
 		debug: debug_java,
 		'debug-ffmpeg': debug_ffmpeg,
 		'debug-bufferlist': debug_bufferlist,
 		//'ffmpeg-re': 'yes',
 		'ffmpeg-i': 'http://tv.life.ru/lifetv/720p/index.m3u8', // 'rtmp://tv-mix.ru/live/Stream1', // 'rtmp://rtmp.one.by/HD/1muz', // 'rtmp://yellow.ether.tv/live/tomsk/broadcast4', // 'http://85.238.112.10:8810/hls_sec/239.33.15.14-.m3u8',
-		"process-frame-callback": "", // uncomment to switch to javascript frames processing/synchronization (requestAnimationFrame() function)
-		//"ffmpeg-c:a": "pcm_s16le",
-		//"ffmpeg-o": "output_pcm_s16le.mp4",
+		//"process-frame-callback": "", // uncomment to switch to javascript frames processing/synchronization (requestAnimationFrame() function)
+		//"ffmpeg-c:a": "libmp3lame", // uncomment to switch to javascript frames processing/synchronization (play audio in <audio> tag)
 	},
 	debug: debug_js,
 	audioControls: 'yes',
-});
+};
+if (play_js) {
+	opts.appletParams["process-frame-callback"] = ""; // uncomment to switch to javascript frames processing/synchronization (requestAnimationFrame() function)
+	opts.appletParams["ffmpeg-c:a"] = "libmp3lame"; // uncomment to switch to javascript frames processing/synchronization (requestAnimationFrame() function)
+}
+if (ffmpeg_re)
+	opts.appletParams["ffmpeg-re"] = "yes";
+$('#player').fmp4player(opts);
 </script>
 
 </body>

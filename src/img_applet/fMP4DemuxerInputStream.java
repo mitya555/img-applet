@@ -186,10 +186,10 @@ public class fMP4DemuxerInputStream extends MediaDemuxer {
 				if (moof.trafs[0].trak.type == TrakType.video) {
 					if (video.readToBuffer(moof.trafs[0]) == -1) return -1;
 					if (moof.trafs[1] != null) {
-						if (audio != null) { if (audio.readToBuffer(moof.trafs[1]) == -1) return -1; }
+						if (audio.readToBuffer(moof.trafs[1]) == -1) return -1;
 					}
 				} else {
-					if (audio != null) { if (audio.readToBuffer(moof.trafs[0]) == -1) return -1; }
+					if (audio.readToBuffer(moof.trafs[0]) == -1) return -1;
 					if (moof.trafs[1] != null) {
 						if (video.readToBuffer(moof.trafs[1]) == -1) return -1;
 					}

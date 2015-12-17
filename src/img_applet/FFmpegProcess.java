@@ -80,7 +80,7 @@ public class FFmpegProcess extends Observable {
 	
 	static interface ReaderToBuffer { int read(Buffer b) throws IOException; }
 
-	static interface ReaderFromReaderToBuffer extends Closeable { int readToBuffer(ReaderToBuffer in) throws IOException, InterruptedException; }
+	static interface ReaderFromReaderToBuffer { int readToBuffer(ReaderToBuffer in) throws IOException, InterruptedException; }
 
 	static class FrameData
 	{
@@ -94,7 +94,7 @@ public class FFmpegProcess extends Observable {
 		public VideoFrameData(int sn, byte[] bytes, long timestamp) { super(sn, bytes); this.timestamp = timestamp; }
 	}
 
-	static abstract class MultiBuffer implements ReaderFromReaderToBuffer
+	static abstract class MultiBuffer implements ReaderFromReaderToBuffer, Closeable
 	{
 		protected volatile int sn;
 		int getSN() { return sn; }
@@ -147,43 +147,28 @@ public class FFmpegProcess extends Observable {
 		int readFragment() throws IOException, InterruptedException;
 	}
 	
-	class AudioLinePlayer implements ReaderFromReaderToBuffer {
+	class AudioLinePlayer implements Closeable {
 		protected SourceDataLine audioLine;
-		protected Buffer audioLineBuffer;
-		@Override
-		public int readToBuffer(ReaderToBuffer in) throws IOException, InterruptedException {
-			int bytesRead = in.read(audioLineBuffer);
-			if (bytesRead == -1) return -1;
-			return audioLine.write(audioLineBuffer.b, 0, bytesRead);
-		}
 		@Override
 		public void close() throws IOException {
 			if (audioLine != null) {
-				audioLineBuffer = null;
 				audioLine.drain();
 				debug("Playback ended.");
 				audioLine = null;
 			}
 		}
-		AudioLinePlayer create(AudioFormat audioFormat) {
-			try {
-				debug("audioFormat = " + audioFormat);
-				audioLine = (SourceDataLine)AudioSystem.getLine(new DataLine.Info(SourceDataLine.class, audioFormat));
-				audioLineBuffer = new Buffer();
-				debug("applet parameter wav-audio-line-buffer-size = " + wavAudioLineBufferSize);
-				if (wavAudioLineBufferSize > 0)
-					audioLine.open(audioFormat, wavAudioLineBufferSize);
-				else
-					audioLine.open(audioFormat);
-				int audioLineBufferSize = audioLine.getBufferSize();
-				debug("audioLine.getBufferSize() = " + audioLineBufferSize);
-				audioLine.start();
-				debug("Playback started.");
-				return this;
-			} catch (LineUnavailableException e) {
-				e.printStackTrace();
-			}
-			return null;
+		void open(AudioFormat audioFormat) throws LineUnavailableException {
+			debug("audioFormat = " + audioFormat);
+			audioLine = (SourceDataLine)AudioSystem.getLine(new DataLine.Info(SourceDataLine.class, audioFormat));
+			debug("applet parameter wav-audio-line-buffer-size = " + wavAudioLineBufferSize);
+			if (wavAudioLineBufferSize > 0)
+				audioLine.open(audioFormat, wavAudioLineBufferSize);
+			else
+				audioLine.open(audioFormat);
+			int audioLineBufferSize = audioLine.getBufferSize();
+			debug("audioLine.getBufferSize() = " + audioLineBufferSize);
+			audioLine.start();
+			debug("Playback started.");
 		}
 	}
 	
@@ -686,6 +671,7 @@ public class FFmpegProcess extends Observable {
 	private String wavLevelChangeCallback, processFrameCallback;
 	private double bufferGrowFactor, bufferShrinkThresholdFactor;
 	private MediaStream mediaStream, demuxVideoStream;
+	private AudioLinePlayer audioLinePlayer = new AudioLinePlayer();
 	
 	private boolean useStderr;
 	private ByteArrayOutputStream stderrOut;
@@ -1135,26 +1121,60 @@ public class FFmpegProcess extends Observable {
 					hasAudio ? new Gettable() { @Override public void get(Object info, MediaDemuxer self) {
 						demuxVideoStream.trackInfo.hasAudio = true;
 						fMP4DemuxerInputStream.Trak trak = (fMP4DemuxerInputStream.Trak)info;
-						if (trak.sampleSizeInBits > 0 && trak.channels > 0) {
-							AudioFormat audioFormat = new AudioFormat(trak.timeScale, trak.sampleSizeInBits, trak.channels, trak.signed, trak.bigEndian);
-							self.audio = new AudioLinePlayer().create(audioFormat); // play AudioLine instead of MultiBuffer
-						}
+						if (trak.sampleSizeInBits > 0 && trak.channels > 0 && mediaStream != null)
+							// play AudioLine
+							try {
+								audioLinePlayer.open(new AudioFormat(trak.timeScale, trak.sampleSizeInBits, trak.channels, trak.signed, trak.bigEndian));
+								final BlockingQueue<Integer> _notifyQueue = mediaStream.multiBuffer.notifyQueue = new ArrayBlockingQueue<Integer>(2);
+								mediaStream.multiBuffer.startConsumerThreads(1, new Runnable() {
+									@Override
+									public void run() {
+										byte[] bytes;
+										try {
+											while ((bytes = mediaStream.multiBuffer.getCurrentBytes()) != null || _notifyQueue.take() != -200) {
+												if (bytes == null)
+													bytes = mediaStream.multiBuffer.getCurrentBytes();
+												audioLinePlayer.audioLine.write(bytes, 0, bytes.length);
+											}
+										} catch (IOException | InterruptedException e) {
+											e.printStackTrace();
+										}
+									}
+								});
+							} catch (LineUnavailableException e) {
+								e.printStackTrace();
+							} 
 					} } : null,
 					DEBUG);
 			final boolean processFrameCallbackSet = !strEmpty(processFrameCallback);
 			if (demuxVideoStream != null && processFrameCallbackSet) {
 				final BlockingQueue<Integer> _notifyQueue = demuxVideoStream.multiBuffer.notifyQueue = new ArrayBlockingQueue<Integer>(processFrameNumberOfConsumerThreads + 1);
-				final String _contentType = "image/jpeg"; 
 				demuxVideoStream.multiBuffer.startConsumerThreads(processFrameNumberOfConsumerThreads, new Runnable() {
 					@Override
 					public void run() {
 						JSObject jsWindow = JSObject.getWindow(applet);
-						DataOut dataOut = new DataOut(_contentType);
+						DataOut dataOut = new DataOut("image/jpeg");
 						int attempts = 0; 
+						double timeQuantum = 0D; // time quantum for video in milliseconds
 						try {
 							while (_notifyQueue.take() != -200)
 								try {
 									FrameData fd = demuxVideoStream.multiBuffer.getCurrentFrameData();
+									if (audioLinePlayer.audioLine != null) {
+										if (timeQuantum == 0D) {
+											timeQuantum = 1000D / demuxVideoStream.trackInfo.timeScale; // time quantum for video in milliseconds
+											debug("demuxVideoStream.trackInfo.timeScale = " + demuxVideoStream.trackInfo.timeScale + "; \t time quantum for video in milliseconds: " + timeQuantum);
+										}
+										double vts = ((VideoFrameData)fd).timestamp * timeQuantum, // video timestamp in milliseconds
+												ats = audioLinePlayer.audioLine.getMicrosecondPosition() / 1000D,
+												dts = vts - ats;
+										if (dts > 0) {
+											long millis = (long)dts;
+											int nanos = (int) ((dts - millis) * 1000000D);
+											//debug("dts = " + dts + "; \t millis = " + millis + "; \t nanos = " + nanos);
+											Thread.sleep(millis, nanos);
+										}
+									}
 									jsWindow.call(processFrameCallback, new Object[] { id, fd.sn, dataOut.toDataUri(fd.bytes) });
 									if (attempts > 0)
 										attempts = 0; // counts consecutive failures; reset for success
@@ -1182,7 +1202,8 @@ public class FFmpegProcess extends Observable {
 		finally {
 			if (in_ != null) try { in_.close(); } catch (IOException e) { e.printStackTrace(); }
 			if (mediaStream != null) { try { mediaStream.close(); } catch (IOException e) { e.printStackTrace(); } mediaStream = null; }
-			if (demuxVideoStream != null) { try { demuxVideoStream.close(); } catch (IOException e) { e.printStackTrace(); } demuxVideoStream = null; } 
+			if (demuxVideoStream != null) { try { demuxVideoStream.close(); } catch (IOException e) { e.printStackTrace(); } demuxVideoStream = null; }
+			try { audioLinePlayer.close(); } catch (IOException e) { e.printStackTrace(); }
 			setChanged(); notifyObservers(Event.STOP);
 			debug("FFMPEG output thread ended.", "FFMPEG process terminated.");
 		}
