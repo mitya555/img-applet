@@ -214,11 +214,11 @@ $.fn.fmp4player = function (options) {
 				getVideoTrackInfo();
 			}
 		};
+	} else {
+		// frame consumer in javascript:
+		// start the loop
+		animate();
 	}
-
-	// frame consumer in javascript:
-	// start the loop
-	animate();
 
 	function animate() {
 		requestAnimationFrame( animate );
@@ -253,7 +253,7 @@ $.fn.fmp4player = function (options) {
 	function render() {
 		cnt++;
 		//check_performance();
-		if (!videoConsumerThreadsInJava && checkApplet()) {
+		if (checkApplet()) {
 			try {
 				var sn_ = applet_.getVideoSN();
 				if (/*sn_ != prev_sn &&*/ sn_ > 0) {

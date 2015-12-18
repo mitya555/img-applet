@@ -69,9 +69,9 @@ public class FFmpegProcess extends Observable {
 	}
 
 	static class VideoBuffer extends Buffer {
-		public volatile long timestamp;
+		public volatile long timestamp, nextTimestamp;
 		@Override
-		public FrameData getFrameData(byte[] bytes) throws IOException { return new VideoFrameData(sn, bytes, timestamp); }
+		public FrameData getFrameData(byte[] bytes) throws IOException { return new VideoFrameData(sn, bytes, timestamp, nextTimestamp); }
 		@Override
 		public String toString() { return super.toString() + " \t ts: " + timestamp; }
 	}
@@ -90,8 +90,8 @@ public class FFmpegProcess extends Observable {
 	}
 
 	static class VideoFrameData extends FrameData {
-		public long timestamp;
-		public VideoFrameData(int sn, byte[] bytes, long timestamp) { super(sn, bytes); this.timestamp = timestamp; }
+		public long timestamp, nextTimestamp;
+		public VideoFrameData(int sn, byte[] bytes, long timestamp, long nextTimestamp) { super(sn, bytes); this.timestamp = timestamp; this.nextTimestamp = nextTimestamp; }
 	}
 
 	static abstract class MultiBuffer implements ReaderFromReaderToBuffer, Closeable
@@ -342,8 +342,9 @@ public class FFmpegProcess extends Observable {
 			protected void finalize() throws Throwable { file.delete(); super.finalize(); }
 		}
 		static private class _FileBuffer extends _List<_File> {
-			_FileBuffer() throws IOException { super(); add(new _File()); write = head; }
+			_FileBuffer() throws IOException { super(); add(new _File()); write = head; used = 1; }
 			volatile _Item<_File> write;
+			volatile int used;
 			void write(byte[] b, int off, int len) throws IOException {
 				int res = 0;
 				while ((res += write.obj.write(b, off + res, len - res)) < len)
@@ -351,6 +352,7 @@ public class FFmpegProcess extends Observable {
 						if (write.next == null)
 							add(new _File());
 						write = write.next;
+						used++;
 					}
 			}
 			int read(byte[] b, int off, int len) throws IOException {
@@ -360,6 +362,7 @@ public class FFmpegProcess extends Observable {
 						if (head == write)
 							throw new IOException("Insufficient size");
 						add(remove());
+						used--;
 					}
 				return res;
 			}
@@ -503,6 +506,7 @@ public class FFmpegProcess extends Observable {
 				fileBuffer = null;
 			}
 		}
+		public int filesUsed() { return fileBuffer != null ? fileBuffer.used : 0; }
 	}
 
 	static private class DataOut {
@@ -1131,11 +1135,9 @@ public class FFmpegProcess extends Observable {
 									public void run() {
 										byte[] bytes;
 										try {
-											while ((bytes = mediaStream.multiBuffer.getCurrentBytes()) != null || _notifyQueue.take() != -200) {
-												if (bytes == null)
-													bytes = mediaStream.multiBuffer.getCurrentBytes();
-												audioLinePlayer.audioLine.write(bytes, 0, bytes.length);
-											}
+											while (_notifyQueue.take() != -200)
+												while ((bytes = mediaStream.multiBuffer.getCurrentBytes()) != null)
+													audioLinePlayer.audioLine.write(bytes, 0, bytes.length);
 										} catch (IOException | InterruptedException e) {
 											e.printStackTrace();
 										}
@@ -1156,26 +1158,31 @@ public class FFmpegProcess extends Observable {
 						DataOut dataOut = new DataOut("image/jpeg");
 						int attempts = 0; 
 						double timeQuantum = 0D; // time quantum for video in milliseconds
+						FrameData fd;
 						try {
 							while (_notifyQueue.take() != -200)
 								try {
-									FrameData fd = demuxVideoStream.multiBuffer.getCurrentFrameData();
-									if (audioLinePlayer.audioLine != null) {
-										if (timeQuantum == 0D) {
-											timeQuantum = 1000D / demuxVideoStream.trackInfo.timeScale; // time quantum for video in milliseconds
-											debug("demuxVideoStream.trackInfo.timeScale = " + demuxVideoStream.trackInfo.timeScale + "; \t time quantum for video in milliseconds: " + timeQuantum);
+									while ((fd = demuxVideoStream.multiBuffer.getCurrentFrameData()) != null) {
+										if (audioLinePlayer.audioLine != null) {
+											if (timeQuantum == 0D) {
+												timeQuantum = 1000D / demuxVideoStream.trackInfo.timeScale; // time quantum for video in milliseconds
+												debug("demuxVideoStream.trackInfo.timeScale = " + demuxVideoStream.trackInfo.timeScale + "; \t time quantum for video in milliseconds: " + timeQuantum);
+											}
+											double vts = ((VideoFrameData)fd).timestamp * timeQuantum, // video timestamp in milliseconds
+													ats = audioLinePlayer.audioLine.getMicrosecondPosition() / 1000D,
+													td = vts - ats;
+											if (td > 0) {
+												long millis = (long)td;
+												int nanos = (int) ((td - millis) * 1000000D);
+												//debug("td = " + td + "; \t millis = " + millis + "; \t nanos = " + nanos);
+												Thread.sleep(millis, nanos);
+											} else if (((VideoFrameData)fd).nextTimestamp * timeQuantum <= ats) {
+												debug("Dropped frame # " + fd.sn);
+												continue;
+											}
 										}
-										double vts = ((VideoFrameData)fd).timestamp * timeQuantum, // video timestamp in milliseconds
-												ats = audioLinePlayer.audioLine.getMicrosecondPosition() / 1000D,
-												dts = vts - ats;
-										if (dts > 0) {
-											long millis = (long)dts;
-											int nanos = (int) ((dts - millis) * 1000000D);
-											//debug("dts = " + dts + "; \t millis = " + millis + "; \t nanos = " + nanos);
-											Thread.sleep(millis, nanos);
-										}
+										jsWindow.call(processFrameCallback, new Object[] { id, fd.sn, dataOut.toDataUri(fd.bytes) });
 									}
-									jsWindow.call(processFrameCallback, new Object[] { id, fd.sn, dataOut.toDataUri(fd.bytes) });
 									if (attempts > 0)
 										attempts = 0; // counts consecutive failures; reset for success
 								} catch (JSException | IOException e) {
@@ -1192,6 +1199,11 @@ public class FFmpegProcess extends Observable {
 			int res = 0;
 			while (res != -1/* && !ffm_stop*/)
 				try {
+					// slow down reading from the process out pipe to limit number of files created in FileBuffers 
+					while (((BufferList)mediaStream.multiBuffer).filesUsed() > 5 || ((BufferList)demuxVideoStream.multiBuffer).filesUsed() > 5) {
+						//debug("sleep 100 ms");
+						Thread.sleep(100);
+					}
 					res = in_.readFragment();
 //					debug("readFragment() result: " + res);
 				} catch (IOException e) {

@@ -157,9 +157,13 @@ public class fMP4DemuxerInputStream extends MediaDemuxer {
 		Trak trak;
 		@Override
 		public int read(Buffer b) throws IOException {
-			if (trak.type == TrakType.video)
+			if (trak.type == TrakType.video) {
 				((VideoBuffer)b).timestamp = trak.duration;
-			trak.duration += duration;
+				trak.duration += duration;
+				((VideoBuffer)b).nextTimestamp = trak.duration;
+			} else {
+				trak.duration += duration;
+			}
 			if (skip_(baseDataOffset + dataOffset - pos) == -1) return -1;
 			if (b.size < size || b.size > size * shrinkThresholdFactor) b.grow(size, growFactor);
 			return read_(b.b, size);
