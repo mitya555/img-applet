@@ -447,8 +447,14 @@ public class FFmpegProcess extends Observable {
 		}
 		@Override
 		byte[] getCurrentBytes() throws IOException {
-			getCurrentBuffer_();
-			if (currentBuffer != null) {
+			if (currentBuffer == null) {
+				Buffer buffer = filledBufferList.remove();
+				if (buffer != null) {
+					byte[] ret = getBytes(buffer);
+					releaseBuffer_(buffer);
+					return ret;
+				}
+			} else {
 				byte[] ret = getBytes(currentBuffer);
 				releaseCurrentBuffer_();
 				return ret;
@@ -457,8 +463,14 @@ public class FFmpegProcess extends Observable {
 		}
 		@Override
 		FrameData getCurrentFrameData() throws IOException {
-			getCurrentBuffer_();
-			if (currentBuffer != null) {
+			if (currentBuffer == null) {
+				Buffer buffer = filledBufferList.remove();
+				if (buffer != null) {
+					FrameData ret = buffer.getFrameData(getBytes(buffer));
+					releaseBuffer_(buffer);
+					return ret;
+				}
+			} else {
 				FrameData ret = currentBuffer.getFrameData(getBytes(currentBuffer));
 				releaseCurrentBuffer_();
 				return ret;
@@ -502,7 +514,7 @@ public class FFmpegProcess extends Observable {
 					closed++;
 					try { if (_file.tryDelete()) deleted++; } catch (Throwable e) { e.printStackTrace(); }
 				}
-				errOut.println("FileBuffer: closed " + closed + "; deleted " + deleted + " files");
+				errOut.println(name + " FileBuffer: closed " + closed + "; deleted " + deleted + " files");
 				fileBuffer = null;
 			}
 		}
@@ -671,7 +683,8 @@ public class FFmpegProcess extends Observable {
 
 	private boolean demux_fMP4, dropUnusedFrames;
 	private int bufferSize, vBufferSize, aBufferSize, maxMemoryBufferCount, maxVideoBufferCount, mp3FramesPerChunk,
-		wavAudioLineBufferSize, wavIntermediateBufferSize, processFrameNumberOfConsumerThreads;
+		wavAudioLineBufferSize, wavIntermediateBufferSize, processFrameNumberOfConsumerThreads,
+		maxTempFileCount;
 	private String wavLevelChangeCallback, processFrameCallback;
 	private double bufferGrowFactor, bufferShrinkThresholdFactor;
 	private MediaStream mediaStream, demuxVideoStream;
@@ -725,7 +738,10 @@ public class FFmpegProcess extends Observable {
 		processFrameCallback = getParameter("process-frame-callback");
 		processFrameNumberOfConsumerThreads = parseInt(getParameter("process-frame-number-of-consumer-threads"));
 		if (processFrameNumberOfConsumerThreads <= 0) processFrameNumberOfConsumerThreads = 1; 
-		
+
+		maxTempFileCount = parseInt(getParameter("max-temp-file-count"));
+		if (maxTempFileCount < 0) maxTempFileCount = 1000; // 1000 MB worth of data per stream
+
 		return this;
 	}
 
@@ -1135,9 +1151,12 @@ public class FFmpegProcess extends Observable {
 									public void run() {
 										byte[] bytes;
 										try {
-											while (_notifyQueue.take() != -200)
+											while (_notifyQueue.take() != -200) {
 												while ((bytes = mediaStream.multiBuffer.getCurrentBytes()) != null)
 													audioLinePlayer.audioLine.write(bytes, 0, bytes.length);
+												debug("Audio Buffer empty");
+												//Thread.sleep(50);
+											}
 										} catch (IOException | InterruptedException e) {
 											e.printStackTrace();
 										}
@@ -1160,7 +1179,7 @@ public class FFmpegProcess extends Observable {
 						double timeQuantum = 0D; // time quantum for video in milliseconds
 						FrameData fd;
 						try {
-							while (_notifyQueue.take() != -200)
+							while (_notifyQueue.take() != -200) {
 								try {
 									while ((fd = demuxVideoStream.multiBuffer.getCurrentFrameData()) != null) {
 										if (audioLinePlayer.audioLine != null) {
@@ -1190,6 +1209,9 @@ public class FFmpegProcess extends Observable {
 									if (++attempts >= 10)
 										break;
 								}
+								debug("Video Buffer empty");
+								//Thread.sleep(50);
+							}
 						} catch (InterruptedException e) {
 							e.printStackTrace();
 						}
@@ -1200,7 +1222,8 @@ public class FFmpegProcess extends Observable {
 			while (res != -1/* && !ffm_stop*/)
 				try {
 					// slow down reading from the process out pipe to limit number of files created in FileBuffers 
-					while (((BufferList)mediaStream.multiBuffer).filesUsed() > 5 || ((BufferList)demuxVideoStream.multiBuffer).filesUsed() > 5) {
+					while (((BufferList)mediaStream.multiBuffer).filesUsed() > maxTempFileCount ||
+							((BufferList)demuxVideoStream.multiBuffer).filesUsed() > maxTempFileCount) {
 						//debug("sleep 100 ms");
 						Thread.sleep(100);
 					}
