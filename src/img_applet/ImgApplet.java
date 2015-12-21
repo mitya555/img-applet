@@ -214,6 +214,8 @@ public class ImgApplet extends JApplet {
 	public int getVideoQueueLength(int id) { return ffmpegs.get(id).getVideoQueueLength(); }
 
 	public long getVideoTimestamp(int id) { return ffmpegs.get(id).getVideoTimestamp(); }
+	public long getVideoNextTimestamp(int id) { return ffmpegs.get(id).getVideoNextTimestamp(); }
+	public void releaseCurrentBuffer(int id) { ffmpegs.get(id).releaseCurrentBuffer(); }
 	
 	public TrackInfo getVideoTrackInfo(int id) { return ffmpegs.get(id).getVideoTrackInfo(); }
 
@@ -241,6 +243,8 @@ public class ImgApplet extends JApplet {
 	public int getVideoQueueLength() { return ffmpeg0.getVideoQueueLength(); }
 
 	public long getVideoTimestamp() { return ffmpeg0.getVideoTimestamp(); }
+	public long getVideoNextTimestamp() { return ffmpeg0.getVideoNextTimestamp(); }
+	public void releaseCurrentBuffer() { ffmpeg0.releaseCurrentBuffer(); }
 	
 	public TrackInfo getVideoTrackInfo() { return ffmpeg0.getVideoTrackInfo(); }
 

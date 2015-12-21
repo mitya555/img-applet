@@ -250,42 +250,54 @@ $.fn.fmp4player = function (options) {
 		hasAudio = videoInfo.hasAudio;
 	}
 
+	function renderVideo() {
+		function renderFrame() {
+			prev_sn = sn_;
+			image[last_img = (last_img + 1) % 2].src = applet_.getVideoDataURI();
+		}
+		try {
+			var sn_ = applet_.getVideoSN();
+			if (/*sn_ != prev_sn &&*/ sn_ > 0) {
+				if (!videoInfo)
+					getVideoTrackInfo();
+				if (hasAudio && timeScale > 0) {
+					var ts_ = applet_.getVideoTimestamp(),
+						tl_ = performance.now();
+					//if (prev_ts > 0 && (ts_ - prev_ts) * 1000 / timeScale > 100)
+					//	add_perf_msg("sn = " + sn_ + "; ts = " + (ts_ - prev_ts));
+					if (ts_ == 0 || timeLine == 0) {
+						timeLine = tl_;
+						prev_ts = initial_ts = ts_;
+						//add_perf_msg("sn = " + sn_ + "; ts = " + ts_);
+						renderFrame();
+					} else if ((ts_ - initial_ts) * 1000 / timeScale <= tl_ - timeLine) {
+						//if ((applet_.getVideoNextTimestamp() - initial_ts) * 1000 / timeScale <= tl_ - timeLine) {
+						//	applet_.releaseCurrentBuffer();
+						//	console.log("Dropped frame # " + sn_);
+						//	renderVideo();
+						//} else {
+							prev_ts = ts_;
+							//add_perf_msg("sn = " + sn_ + "; ts = " + ts_);
+							renderFrame();
+						//}
+					}
+				} else if (sn_ > prev_sn) {
+					renderFrame();
+				}
+			} else if (videoInfo) {
+				timeScale = timeLine = initial_ts = prev_ts = 0;
+				videoInfo = null;
+			}
+		} catch (ex) {
+			console.error("render video", ex.message);
+		}
+	}
+
 	function render() {
 		cnt++;
 		//check_performance();
 		if (checkApplet()) {
-			try {
-				var sn_ = applet_.getVideoSN();
-				if (/*sn_ != prev_sn &&*/ sn_ > 0) {
-					if (!videoInfo)
-						getVideoTrackInfo();
-					if (hasAudio) {
-						var ts_ = applet_.getVideoTimestamp(),
-							tl_ = performance.now(),
-							dt_ = (ts_ - initial_ts) * 1000 / timeScale;
-						//if (prev_ts > 0 && (ts_ - prev_ts) * 1000 / timeScale > 100)
-						//	add_perf_msg("sn = " + sn_ + "; ts = " + (ts_ - prev_ts));
-						if (timeScale > 0 && (ts_ == 0 || timeLine == 0 || dt_ <= tl_ - timeLine)) {
-							if (ts_ == 0 || timeLine == 0) {
-								timeLine = tl_;
-								initial_ts = ts_;
-							}
-							prev_ts = ts_;
-							prev_sn = sn_;
-							//add_perf_msg("sn = " + sn_ + "; ts = " + ts_);
-							image[last_img = (last_img + 1) % 2].src = applet_.getVideoDataURI();
-						}
-					} else if (sn_ > prev_sn) {
-						prev_sn = sn_;
-						image[last_img = (last_img + 1) % 2].src = applet_.getVideoDataURI();
-					}
-				} else if (videoInfo) {
-					timeScale = timeLine = initial_ts = prev_ts = 0;
-					videoInfo = null;
-				}
-			} catch (ex) {
-				console.error("render video", ex.message);
-			}
+			renderVideo();
 		}
 		if (playing) {
 			try {
