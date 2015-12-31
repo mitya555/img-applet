@@ -111,13 +111,16 @@ $.fn.fmp4player = function (options) {
 '); // <audio id="audio" autoplay="autoplay" crossorigin="anonymous">Your browser does not support the <code>audio</code> element.</audio><!-- controls="controls" -->
 	
 	// global variables
-	var audio, image, videoImage, videoImageContext, applet, applet_ie, applet_, prev_sn = 0, last_img = -1;
+	var audio, image, videoImage, videoImageContext, gl, applet, applet_ie, applet_, prev_sn = 0, last_img = -1;
 
 	// assign variables to HTML elements
 	audio = document.getElementById( idPrefix + 'audio' );
 	image = [ document.getElementById( idPrefix + 'image0' ), document.getElementById( idPrefix + 'image1' ) ];
 	videoImage = document.getElementById( idPrefix + 'videoImage' );
-	videoImageContext = videoImage.getContext( '2d' );
+	if (!isNo(opts['use-webgl']))
+		gl = twgl.getWebGLContext(videoImage);
+	if (!gl)
+		videoImageContext = videoImage.getContext( '2d' );
 	applet = document.getElementById( idPrefix + 'img-applet' );
 	applet_ie = document.getElementById( idPrefix + 'img-applet-ie' );
 
@@ -131,13 +134,92 @@ $.fn.fmp4player = function (options) {
 		return applet_;
 	}
 
-	//background color if no video present
-	videoImageContext.fillStyle = '#005337';
-	videoImageContext.fillRect( 0, 0, videoImage.width, videoImage.height );				
+	if (videoImageContext) {
+		//background color if no video present
+		videoImageContext.fillStyle = '#005337';
+		videoImageContext.fillRect( 0, 0, videoImage.width, videoImage.height );
 
-	image[0].onload = image[1].onload = function() {
-		videoImageContext.drawImage( this, 0, 0, videoImage.width, videoImage.height );
-	};
+		image[0].onload = image[1].onload = function() {
+			videoImageContext.drawImage( this, 0, 0, videoImage.width, videoImage.height );
+		};
+	} else {
+		
+		// setup GLSL program
+		var programInfo = twgl.createProgramInfo(gl, ["2d-vertex-shader", "2d-fragment-shader"]);
+		var program = programInfo.program;
+		gl.useProgram(program);
+
+		// look up where the vertex data needs to go.
+		var positionLocation = gl.getAttribLocation(program, "a_position");
+		var texCoordLocation = gl.getAttribLocation(program, "a_texCoord");
+
+		// provide texture coordinates for the rectangle.
+		var texCoordBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+			0.0,  0.0,
+			1.0,  0.0,
+			0.0,  1.0,
+			0.0,  1.0,
+			1.0,  0.0,
+			1.0,  1.0]), gl.STATIC_DRAW);
+		gl.enableVertexAttribArray(texCoordLocation);
+		gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
+
+		// Create a texture.
+		var texture = gl.createTexture();
+		gl.bindTexture(gl.TEXTURE_2D, texture);
+
+		// Set the parameters so we can render any size image.
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+		// lookup uniforms
+		var resolutionLocation = gl.getUniformLocation(program, "u_resolution");
+
+		// Create a buffer for the position of the rectangle corners.
+		var positionBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+		gl.enableVertexAttribArray(positionLocation);
+		gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+		function setRectangle(gl, x, y, width, height) {
+			var x1 = x, x2 = x + width, y1 = y, y2 = y + height;
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+				x1, y1,
+				x2, y1,
+				x1, y2,
+				x1, y2,
+				x2, y1,
+				x2, y2]), gl.STATIC_DRAW);
+		}
+
+
+		var gl_init = true;
+		image[0].onload = image[1].onload = function() {
+			//videoImageContext.drawImage( this, 0, 0, videoImage.width, videoImage.height );
+
+			// Upload the image into the texture.
+			gl.bindTexture(gl.TEXTURE_2D, texture);
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this);
+
+			if (gl_init) {
+				gl_init = false;
+
+				// set the resolution
+				gl.uniform2f(resolutionLocation, videoImage.width, videoImage.height);
+				
+				// Set a rectangle the same size as the image.
+				gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+				setRectangle(gl, 0, 0, videoImage.width, videoImage.height);
+			}
+
+			// Draw the rectangle.
+			gl.drawArrays(gl.TRIANGLES, 0, 6);
+		};
+	}
 
 	function tns(ns) { switch (ns) { case 0: return "NETWORK_EMPTY"; case 1: return "NETWORK_IDLE"; case 2: return "NETWORK_LOADING"; case 3: return "NETWORK_NO_SOURCE"; default: return "UNKNOWN"; } }
 	function trs(rs) { switch (rs) { case 0: return "HAVE_NOTHING"; case 1: return "HAVE_METADATA"; case 2: return "HAVE_CURRENT_DATA"; case 3: return "HAVE_FUTURE_DATA"; case 4: return "HAVE_ENOUGH_DATA"; default: return "UNKNOWN"; } }
@@ -208,11 +290,11 @@ $.fn.fmp4player = function (options) {
 		// has to be configured in the applet parameters
 		var init = true;
 		window[opts.appletParams["process-frame-callback"]] = function(ffmpeg_id, frame_sn, dataUri) {
-			image[last_img = (last_img + 1) % 2].src = dataUri;
 			if (init && checkApplet()) {
 				init = false;
 				getVideoTrackInfo();
 			}
+			image[last_img = (last_img + 1) % 2].src = dataUri;
 		};
 	} else {
 		// frame consumer in javascript:
