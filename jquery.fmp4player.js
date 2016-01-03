@@ -84,6 +84,64 @@ $.fn.fmp4player = function (options) {
 
   return this.each(function () {
 
+	function initWebGL(canvas) {
+		var gl;
+		try {	// Try to grab the standard context. If it fails, fallback to experimental.
+			gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+		} catch(e) {}
+		// If we don't have a GL context, give up now
+		if (!gl) {
+			//alert("Unable to initialize WebGL. Your browser may not support it.");
+			return null;
+		}
+		return gl;
+	}
+	function getShader(gl, id) {
+		var shaderScript = document.getElementById(id), theSource = "", currentChild, shader;
+		if (!shaderScript)
+			return null;
+		currentChild = shaderScript.firstChild;
+		while(currentChild) {
+			if (currentChild.nodeType == currentChild.TEXT_NODE) {
+				theSource += currentChild.textContent;
+			}
+			currentChild = currentChild.nextSibling;
+		}
+		if (shaderScript.type == "x-shader/x-fragment") {
+			shader = gl.createShader(gl.FRAGMENT_SHADER);
+		} else if (shaderScript.type == "x-shader/x-vertex") {
+			shader = gl.createShader(gl.VERTEX_SHADER);
+		} else {
+			// Unknown shader type
+			return null;
+		}
+		gl.shaderSource(shader, theSource);
+		// Compile the shader program
+		gl.compileShader(shader);  
+		// See if it compiled successfully
+		if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {  
+			alert("An error occurred compiling the shaders: " + gl.getShaderInfoLog(shader));  
+			return null;  
+		}
+		return shader;
+	}
+	function initShaders(gl, vertex_shader_id, fragment_shader_id) {
+		var fragmentShader = getShader(gl, fragment_shader_id);
+		var vertexShader = getShader(gl, vertex_shader_id);
+		// Create the shader program
+		var shaderProgram = gl.createProgram();
+		gl.attachShader(shaderProgram, vertexShader);
+		gl.attachShader(shaderProgram, fragmentShader);
+		gl.linkProgram(shaderProgram);
+		// If creating the shader program failed, alert
+		if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+			alert("Unable to initialize the shader program.");
+			return null;
+		}
+		gl.useProgram(shaderProgram);
+		return shaderProgram;
+	}
+
 	var $cont = $(this), idPrefix = (this.id ? this.id : 'e' + Math.floor(Math.random() * 1000000000000000)) + '-';
 
 	$cont.append('<object id="' + idPrefix + 'img-applet-ie"\
@@ -118,7 +176,7 @@ $.fn.fmp4player = function (options) {
 	image = [ document.getElementById( idPrefix + 'image0' ), document.getElementById( idPrefix + 'image1' ) ];
 	videoImage = document.getElementById( idPrefix + 'videoImage' );
 	if (!isNo(opts['use-webgl']))
-		gl = twgl.getWebGLContext(videoImage);
+		gl = initWebGL(videoImage);
 	if (!gl)
 		videoImageContext = videoImage.getContext( '2d' );
 	applet = document.getElementById( idPrefix + 'img-applet' );
@@ -144,10 +202,17 @@ $.fn.fmp4player = function (options) {
 		};
 	} else {
 		
+		// Set clear color to black, fully opaque
+		gl.clearColor(0.0, 0.325, 0.216, 1.0);
+		// Enable depth testing
+		//gl.enable(gl.DEPTH_TEST);
+		// Near things obscure far things
+		//gl.depthFunc(gl.LEQUAL);
+		// Clear the color as well as the depth buffer.
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
 		// setup GLSL program
-		var programInfo = twgl.createProgramInfo(gl, ["2d-vertex-shader", "2d-fragment-shader"]);
-		var program = programInfo.program;
-		gl.useProgram(program);
+		var program = initShaders(gl, "2d-vertex-shader", "2d-fragment-shader");
 
 		// look up where the vertex data needs to go.
 		var positionLocation = gl.getAttribLocation(program, "a_position");
@@ -157,27 +222,19 @@ $.fn.fmp4player = function (options) {
 		var texCoordBuffer = gl.createBuffer();
 		gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
 		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-			0.0,  0.0,
-			1.0,  0.0,
-			0.0,  1.0,
-			0.0,  1.0,
-			1.0,  0.0,
-			1.0,  1.0]), gl.STATIC_DRAW);
+			0.0,  0.0,	1.0,  0.0,	0.0,  1.0,
+			0.0,  1.0,	1.0,  0.0,	1.0,  1.0]), gl.STATIC_DRAW);
 		gl.enableVertexAttribArray(texCoordLocation);
 		gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
 
 		// Create a texture.
 		var texture = gl.createTexture();
 		gl.bindTexture(gl.TEXTURE_2D, texture);
-
 		// Set the parameters so we can render any size image.
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-
-		// lookup uniforms
-		var resolutionLocation = gl.getUniformLocation(program, "u_resolution");
 
 		// Create a buffer for the position of the rectangle corners.
 		var positionBuffer = gl.createBuffer();
@@ -188,12 +245,8 @@ $.fn.fmp4player = function (options) {
 		function setRectangle(gl, x, y, width, height) {
 			var x1 = x, x2 = x + width, y1 = y, y2 = y + height;
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-				x1, y1,
-				x2, y1,
-				x1, y2,
-				x1, y2,
-				x2, y1,
-				x2, y2]), gl.STATIC_DRAW);
+				x1, y1,	x2, y1,	x1, y2,
+				x1, y2,	x2, y1,	x2, y2]), gl.STATIC_DRAW);
 		}
 
 
@@ -204,18 +257,16 @@ $.fn.fmp4player = function (options) {
 			// Upload the image into the texture.
 			gl.bindTexture(gl.TEXTURE_2D, texture);
 			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this);
-
 			if (gl_init) {
 				gl_init = false;
-
+				// set viewport
+				gl.viewport(0, 0, videoImage.width, videoImage.height);
 				// set the resolution
-				gl.uniform2f(resolutionLocation, videoImage.width, videoImage.height);
-				
+				gl.uniform2f(gl.getUniformLocation(program, "u_resolution"), videoImage.width, videoImage.height);
 				// Set a rectangle the same size as the image.
 				gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 				setRectangle(gl, 0, 0, videoImage.width, videoImage.height);
 			}
-
 			// Draw the rectangle.
 			gl.drawArrays(gl.TRIANGLES, 0, 6);
 		};
@@ -353,15 +404,15 @@ $.fn.fmp4player = function (options) {
 						//add_perf_msg("sn = " + sn_ + "; ts = " + ts_);
 						renderFrame();
 					} else if ((ts_ - initial_ts) * 1000 / timeScale <= tl_ - timeLine) {
-						//if ((applet_.getVideoNextTimestamp() - initial_ts) * 1000 / timeScale <= tl_ - timeLine) {
-						//	applet_.releaseCurrentBuffer();
-						//	console.log("Dropped frame # " + sn_);
-						//	renderVideo();
-						//} else {
+						if ((applet_.getVideoNextTimestamp() - initial_ts) * 1000 / timeScale <= tl_ - timeLine) {
+							applet_.releaseCurrentBuffer();
+							console.log("Dropped frame # " + sn_);
+							renderVideo();
+						} else {
 							prev_ts = ts_;
 							//add_perf_msg("sn = " + sn_ + "; ts = " + ts_);
 							renderFrame();
-						//}
+						}
 					}
 				} else if (sn_ > prev_sn) {
 					renderFrame();
