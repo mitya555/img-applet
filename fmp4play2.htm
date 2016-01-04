@@ -56,6 +56,7 @@ var debug_ffmpeg = window.location.search && window.location.search.indexOf('deb
 	debug_js = window.location.search && window.location.search.indexOf('debug-js') != -1 ? 'yes' : 'no',
 	use_webgl = window.location.search && window.location.search.indexOf('use-webgl') != -1 ? 'yes' : 'no',
 	play_js = window.location.search && window.location.search.indexOf('play-js') != -1,
+	video_java = window.location.search && window.location.search.indexOf('video-java') != -1,
 	ffmpeg_re = window.location.search && window.location.search.indexOf('ffmpeg-re') != -1;
 var opts = {
 	appletParams: {
@@ -76,8 +77,10 @@ var opts = {
 	'use-webgl': use_webgl,
 };
 if (play_js) {
-	opts.appletParams["process-frame-callback"] = ""; // uncomment to switch to javascript frames processing/synchronization (requestAnimationFrame() function)
-	opts.appletParams["ffmpeg-c:a"] = "libmp3lame"; // uncomment to switch to javascript frames processing/synchronization (requestAnimationFrame() function)
+	opts.appletParams["process-frame-callback"] = ""; // javascript frames processing/synchronization (requestAnimationFrame() function)
+	opts.appletParams["ffmpeg-c:a"] = "libmp3lame"; // javascript frames processing/synchronization (requestAnimationFrame() function)
+} else if (video_java) {
+	opts.appletParams["process-frame-callback"] = "-"; // play video in Java
 }
 if (ffmpeg_re)
 	opts.appletParams["ffmpeg-re"] = "yes";

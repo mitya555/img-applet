@@ -4,8 +4,12 @@ import ffmpeg.FFmpeg;
 import img_applet.FFmpegProcess.MediaDemuxer.Gettable;
 
 import java.applet.Applet;
+import java.awt.Graphics;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.File;
@@ -36,6 +40,7 @@ import java.util.Observable;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
+import javax.imageio.ImageIO;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
@@ -43,6 +48,7 @@ import javax.sound.sampled.DataLine;
 import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.SourceDataLine;
 import javax.sound.sampled.UnsupportedAudioFileException;
+import javax.swing.JFrame;
 import javax.xml.bind.DatatypeConverter;
 
 import netscape.javascript.JSException;
@@ -1170,10 +1176,24 @@ public class FFmpegProcess extends Observable {
 			final boolean processFrameCallbackSet = !strEmpty(processFrameCallback);
 			if (demuxVideoStream != null && processFrameCallbackSet) {
 				final BlockingQueue<Integer> _notifyQueue = demuxVideoStream.multiBuffer.notifyQueue = new ArrayBlockingQueue<Integer>(processFrameNumberOfConsumerThreads + 1);
+				final boolean drawImageInJava = "-".equals(processFrameCallback);
 				demuxVideoStream.multiBuffer.startConsumerThreads(processFrameNumberOfConsumerThreads, new Runnable() {
 					@Override
 					public void run() {
-						JSObject jsWindow = JSObject.getWindow(applet);
+						JSObject jsWindow = null;
+						JFrame frm = null;
+						Graphics gr = null;
+						if (drawImageInJava) {
+							frm = new JFrame("ImageDrawing");
+							frm.addWindowListener(new WindowAdapter() {
+								public void windowClosing(WindowEvent e) {
+									//System.exit(0);
+								}
+							});
+							gr = frm.getGraphics();
+						} else {
+							jsWindow = JSObject.getWindow(applet);
+						}
 						DataOut dataOut = new DataOut("image/jpeg");
 						int attempts = 0; 
 						double timeQuantum = 0D; // time quantum for video in milliseconds
@@ -1200,7 +1220,11 @@ public class FFmpegProcess extends Observable {
 												continue;
 											}
 										}
-										jsWindow.call(processFrameCallback, new Object[] { id, fd.sn, dataOut.toDataUri(fd.bytes) });
+										if (drawImageInJava) {
+											gr.drawImage(ImageIO.read(new ByteArrayInputStream(fd.bytes)), 0, 0, null);
+										} else {
+											jsWindow.call(processFrameCallback, new Object[] { id, fd.sn, dataOut.toDataUri(fd.bytes) });
+										}
 									}
 									if (attempts > 0)
 										attempts = 0; // counts consecutive failures; reset for success
