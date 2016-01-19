@@ -81,6 +81,9 @@ if (play_js) {
 	opts.appletParams["ffmpeg-c:a"] = "libmp3lame"; // javascript frames processing/synchronization (requestAnimationFrame() function)
 } else if (video_java) {
 	opts.appletParams["process-frame-callback"] = "-"; // play video in Java
+	opts.appletParams["ffmpeg-pix_fmt"] = "yuv422p"; // play video in Java
+	//opts.appletParams["demux-fMP4-mjpeg2jpeg-bsf"] = "yes"; // play video in Java
+	//opts.appletParams["ffmpeg-o"] = "output_mjpeg_yuvj420p.mp4"; // play video in Java
 }
 if (ffmpeg_re)
 	opts.appletParams["ffmpeg-re"] = "yes";

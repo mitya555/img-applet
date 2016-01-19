@@ -7,12 +7,14 @@ import java.applet.Applet;
 import java.awt.Graphics;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.image.BufferedImage;
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -34,6 +36,7 @@ import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Observable;
@@ -41,6 +44,9 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.metadata.IIOMetadata;
+import javax.imageio.stream.ImageInputStream;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
@@ -613,8 +619,8 @@ public class FFmpegProcess extends Observable {
 					OutputStream out = clientSocket.getOutputStream();
 					PrintWriter charOut = new PrintWriter(out);
 					BufferedOutputStream byteOut = new BufferedOutputStream(out);
-					BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()))
-				) {
+					BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()))	) {
+
 				StringBuilder input = new StringBuilder();
 				String inputLine, crlf = "\r\n", contentRange = "*/*";
 				while ((inputLine = in.readLine()) != null) {
@@ -1124,6 +1130,9 @@ public class FFmpegProcess extends Observable {
 		}
 	}
 
+	private JFrame jframe = null;
+	private Graphics graphics = null;
+	
 	private void playMediaDemuxer() throws InterruptedException {
 		setChanged(); notifyObservers(Event.START);
 		MediaDemuxer in_ = null;
@@ -1177,27 +1186,34 @@ public class FFmpegProcess extends Observable {
 			if (demuxVideoStream != null && processFrameCallbackSet) {
 				final BlockingQueue<Integer> _notifyQueue = demuxVideoStream.multiBuffer.notifyQueue = new ArrayBlockingQueue<Integer>(processFrameNumberOfConsumerThreads + 1);
 				final boolean drawImageInJava = "-".equals(processFrameCallback);
+				JSObject jsw = null;
+				if (drawImageInJava) {
+					jframe = new JFrame("ImageDrawing");
+					jframe.addWindowListener(new WindowAdapter() {
+						public void windowClosing(WindowEvent e) {
+							//System.exit(0);
+						}
+					});
+//					graphics = jframe.getGraphics();
+//					jframe.setSize(1280, 720);
+//					jframe.setVisible(true);
+//					if (DEBUG) {
+//						System.out.println("ImageIO.getReaderFileSuffixes(): " + Arrays.toString(ImageIO.getReaderFileSuffixes()));
+//						System.out.println("ImageIO.getReaderFormatNames(): " + Arrays.toString(ImageIO.getReaderFormatNames()));
+//						System.out.println("ImageIO.getReaderMIMETypes(): " + Arrays.toString(ImageIO.getReaderMIMETypes()));
+//					}
+				} else {
+					jsw = JSObject.getWindow(applet);
+				}
+				final JSObject jsWindow = jsw;
 				demuxVideoStream.multiBuffer.startConsumerThreads(processFrameNumberOfConsumerThreads, new Runnable() {
 					@Override
 					public void run() {
-						JSObject jsWindow = null;
-						JFrame frm = null;
-						Graphics gr = null;
-						if (drawImageInJava) {
-							frm = new JFrame("ImageDrawing");
-							frm.addWindowListener(new WindowAdapter() {
-								public void windowClosing(WindowEvent e) {
-									//System.exit(0);
-								}
-							});
-							gr = frm.getGraphics();
-						} else {
-							jsWindow = JSObject.getWindow(applet);
-						}
 						DataOut dataOut = new DataOut("image/jpeg");
 						int attempts = 0; 
 						double timeQuantum = 0D; // time quantum for video in milliseconds
 						FrameData fd;
+						ImageReader imageReader = null;
 						try {
 							while (_notifyQueue.take() != -200) {
 								try {
@@ -1221,14 +1237,51 @@ public class FFmpegProcess extends Observable {
 											}
 										}
 										if (drawImageInJava) {
-											gr.drawImage(ImageIO.read(new ByteArrayInputStream(fd.bytes)), 0, 0, null);
+//											byte[] bytes = Mjpeg2jpeg_bsf.prependJpegHeader(fd.bytes, fd.bytes.length);
+//											if (DEBUG && imageReader == null) {
+//												File file = new File("C:\\Users\\dmitriy.mukhin\\AppData\\Local\\Temp\\img_applet\\output.jpeg");
+//												try (OutputStream fout = new FileOutputStream(file, false)) {
+//													fout.write(bytes);
+//												}
+//											}
+											try (	InputStream inputStream = new ByteArrayInputStream(fd.bytes);
+													ImageInputStream imageInputStream = ImageIO.createImageInputStream(inputStream)	) {
+
+												BufferedImage image = null;
+												if (imageReader == null) {
+													Iterator<ImageReader> iter = ImageIO.getImageReaders(imageInputStream);
+											        while (iter.hasNext()) {
+											            imageReader = iter.next();
+														break;
+													}
+													imageReader.setInput(imageInputStream);
+//													if (DEBUG) {
+//														//System.out.println("ImageReader.getStreamMetadata(): " + imageReader.getStreamMetadata());
+//														//System.out.println("ImageReader.getNumImages(true): " + imageReader.getNumImages(true));
+//														IIOMetadata metadata = imageReader.getImageMetadata(0);
+//														System.out.println("ImageReader.getImageMetadata(0): " + Arrays.toString(metadata.getMetadataFormatNames()));
+//													}
+													image = imageReader.read(0);
+													imageReader.setInput(null);
+
+													jframe.setVisible(true);
+													jframe.setSize(image.getWidth(), image.getHeight());
+													graphics = jframe.getGraphics();
+													
+												} else {
+													imageReader.setInput(imageInputStream, true, true);
+													image = imageReader.read(0);
+													imageReader.setInput(null, true, true);
+												}
+												graphics.drawImage(image, 0, 0, null);
+											}
 										} else {
 											jsWindow.call(processFrameCallback, new Object[] { id, fd.sn, dataOut.toDataUri(fd.bytes) });
 										}
 									}
 									if (attempts > 0)
 										attempts = 0; // counts consecutive failures; reset for success
-								} catch (JSException | IOException e) {
+								} catch (JSException | IOException | NullPointerException e) {
 									e.printStackTrace();
 									if (++attempts >= 10)
 										break;
@@ -1353,8 +1406,21 @@ public class FFmpegProcess extends Observable {
 			mediaStream.multiBufferNotify();
 	}
 
-//	public static void main(String[] args) {
-//
+//	public static void main(String[] args) throws IOException {
+//		JFrame frm = null;
+//		Graphics gr = null;
+//		frm = new JFrame("ImageDrawing");
+//		frm.addWindowListener(new WindowAdapter() {
+//			public void windowClosing(WindowEvent e) {
+//				//System.exit(0);
+//			}
+//		});
+//		frm.setSize(1280, 720);
+//		frm.setVisible(true);
+//		gr = frm.getGraphics();
+//		File file = new File("C:\\Users\\dmitriy.mukhin\\AppData\\Local\\Temp\\img_applet\\output.jpeg");
+//		BufferedImage image = ImageIO.read(file);
+//		gr.drawImage(image, 0, 0, null);
 //	}
 
 }
