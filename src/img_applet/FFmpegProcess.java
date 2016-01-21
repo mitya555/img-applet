@@ -14,7 +14,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.File;
-import java.io.FileOutputStream;
+//import java.io.FileOutputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -45,7 +45,7 @@ import java.util.concurrent.BlockingQueue;
 
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
-import javax.imageio.metadata.IIOMetadata;
+//import javax.imageio.metadata.IIOMetadata;
 import javax.imageio.stream.ImageInputStream;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
@@ -1132,6 +1132,7 @@ public class FFmpegProcess extends Observable {
 
 	private JFrame jframe = null;
 	private Graphics graphics = null;
+	private double timeQuantum = 0D; // time quantum for video in milliseconds
 	
 	private void playMediaDemuxer() throws InterruptedException {
 		setChanged(); notifyObservers(Event.START);
@@ -1169,7 +1170,7 @@ public class FFmpegProcess extends Observable {
 											while (_notifyQueue.take() != -200) {
 												while ((bytes = mediaStream.multiBuffer.getCurrentBytes()) != null)
 													audioLinePlayer.audioLine.write(bytes, 0, bytes.length);
-												debug("Audio Buffer empty");
+//												debug("Audio Buffer empty");
 												//Thread.sleep(50);
 											}
 										} catch (IOException | InterruptedException e) {
@@ -1192,6 +1193,7 @@ public class FFmpegProcess extends Observable {
 					jframe.addWindowListener(new WindowAdapter() {
 						public void windowClosing(WindowEvent e) {
 							//System.exit(0);
+							stopPlayback();
 						}
 					});
 //					graphics = jframe.getGraphics();
@@ -1211,7 +1213,6 @@ public class FFmpegProcess extends Observable {
 					public void run() {
 						DataOut dataOut = new DataOut("image/jpeg");
 						int attempts = 0; 
-						double timeQuantum = 0D; // time quantum for video in milliseconds
 						FrameData fd;
 						ImageReader imageReader = null;
 						try {
@@ -1227,10 +1228,9 @@ public class FFmpegProcess extends Observable {
 													ats = audioLinePlayer.audioLine.getMicrosecondPosition() / 1000D,
 													td = vts - ats;
 											if (td > 0) {
-												long millis = (long)td;
-												int nanos = (int) ((td - millis) * 1000000D);
-												//debug("td = " + td + "; \t millis = " + millis + "; \t nanos = " + nanos);
-												Thread.sleep(millis, nanos);
+												if (!drawImageInJava) {
+													sleep(td);
+												}
 											} else if (((VideoFrameData)fd).nextTimestamp * timeQuantum <= ats) {
 												debug("Dropped frame # " + fd.sn);
 												continue;
@@ -1273,7 +1273,20 @@ public class FFmpegProcess extends Observable {
 													image = imageReader.read(0);
 													imageReader.setInput(null, true, true);
 												}
+												if (audioLinePlayer.audioLine != null) {
+													double vts = ((VideoFrameData)fd).timestamp * timeQuantum, // video timestamp in milliseconds
+															ats = audioLinePlayer.audioLine.getMicrosecondPosition() / 1000D,
+															td = vts - ats;
+													if (td > 0) {
+//														if (DEBUG)
+//															System.out.printf("td = %.2f ms\r\n", td);
+														sleep(td);
+													}
+												}
+//												long startDrawing = System.nanoTime();
 												graphics.drawImage(image, 0, 0, null);
+//												if (DEBUG && fd.sn % 10 == 0)
+//													System.out.printf("%.2f ms\r\n", (System.nanoTime() - startDrawing) / 1000000D);
 											}
 										} else {
 											jsWindow.call(processFrameCallback, new Object[] { id, fd.sn, dataOut.toDataUri(fd.bytes) });
@@ -1286,12 +1299,19 @@ public class FFmpegProcess extends Observable {
 									if (++attempts >= 10)
 										break;
 								}
-								debug("Video Buffer empty");
+//								debug("Video Buffer empty");
 								//Thread.sleep(50);
 							}
 						} catch (InterruptedException e) {
 							e.printStackTrace();
 						}
+					}
+
+					private void sleep(double td/* in milliseconds */) throws InterruptedException {
+						long millis = (long)td;
+						int nanos = (int) ((td - millis) * 1000000D);
+						//debug("td = " + td + "; \t millis = " + millis + "; \t nanos = " + nanos);
+						Thread.sleep(millis, nanos);
 					}
 				});
 			}
@@ -1316,6 +1336,8 @@ public class FFmpegProcess extends Observable {
 			if (mediaStream != null) { try { mediaStream.close(); } catch (IOException e) { e.printStackTrace(); } mediaStream = null; }
 			if (demuxVideoStream != null) { try { demuxVideoStream.close(); } catch (IOException e) { e.printStackTrace(); } demuxVideoStream = null; }
 			try { audioLinePlayer.close(); } catch (IOException e) { e.printStackTrace(); }
+			timeQuantum = 0D;
+			if (jframe != null) { jframe.setVisible(false); jframe.dispose(); jframe = null; graphics = null; }
 			setChanged(); notifyObservers(Event.STOP);
 			debug("FFMPEG output thread ended.", "FFMPEG process terminated.");
 		}
