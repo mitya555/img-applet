@@ -1133,6 +1133,7 @@ public class FFmpegProcess extends Observable {
 	private JFrame jframe = null;
 	private Graphics graphics = null;
 	private double timeQuantum = 0D; // time quantum for video in milliseconds
+	private int lastSn;
 	
 	private void playMediaDemuxer() throws InterruptedException {
 		setChanged(); notifyObservers(Event.START);
@@ -1283,10 +1284,14 @@ public class FFmpegProcess extends Observable {
 														sleep(td);
 													}
 												}
-//												long startDrawing = System.nanoTime();
-												graphics.drawImage(image, 0, 0, null);
-//												if (DEBUG && fd.sn % 10 == 0)
-//													System.out.printf("%.2f ms\r\n", (System.nanoTime() - startDrawing) / 1000000D);
+												if (fd.sn >= lastSn) {
+//													long startDrawing = System.nanoTime();
+													graphics.drawImage(image, 0, 0, null);
+//													if (DEBUG && fd.sn % 10 == 0)
+//														System.out.printf("%.2f ms\r\n", (System.nanoTime() - startDrawing) / 1000000D);
+												} else {
+													debug("Skipped frame # " + fd.sn);
+												}
 											}
 										} else {
 											jsWindow.call(processFrameCallback, new Object[] { id, fd.sn, dataOut.toDataUri(fd.bytes) });
