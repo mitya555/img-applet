@@ -96,8 +96,20 @@ $.fn.fmp4player = function (options) {
 		}
 		return gl;
 	}
-	function getShader(gl, id) {
-		var shaderScript = document.getElementById(id), theSource = "", currentChild, shader;
+	function getShader(gl, shaderType, sourceCode) {
+		var shader = gl.createShader(shaderType);
+		gl.shaderSource(shader, sourceCode);
+		// Compile the shader program
+		gl.compileShader(shader);  
+		// See if it compiled successfully
+		if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {  
+			alert("An error occurred compiling the shaders: " + gl.getShaderInfoLog(shader));  
+			return null;  
+		}
+		return shader;
+	}
+	function getShaderFromDOM(gl, id) {
+		var shaderScript = document.getElementById(id), theSource = "", currentChild;
 		if (!shaderScript)
 			return null;
 		currentChild = shaderScript.firstChild;
@@ -108,26 +120,15 @@ $.fn.fmp4player = function (options) {
 			currentChild = currentChild.nextSibling;
 		}
 		if (shaderScript.type == "x-shader/x-fragment") {
-			shader = gl.createShader(gl.FRAGMENT_SHADER);
+			return getShader(gl, gl.FRAGMENT_SHADER, theSource);
 		} else if (shaderScript.type == "x-shader/x-vertex") {
-			shader = gl.createShader(gl.VERTEX_SHADER);
+			return getShader(gl, gl.VERTEX_SHADER, theSource);
 		} else {
 			// Unknown shader type
 			return null;
 		}
-		gl.shaderSource(shader, theSource);
-		// Compile the shader program
-		gl.compileShader(shader);  
-		// See if it compiled successfully
-		if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {  
-			alert("An error occurred compiling the shaders: " + gl.getShaderInfoLog(shader));  
-			return null;  
-		}
-		return shader;
 	}
-	function initShaders(gl, vertex_shader_id, fragment_shader_id) {
-		var fragmentShader = getShader(gl, fragment_shader_id);
-		var vertexShader = getShader(gl, vertex_shader_id);
+	function initShaders(gl, vertexShader, fragmentShader) {
 		// Create the shader program
 		var shaderProgram = gl.createProgram();
 		gl.attachShader(shaderProgram, vertexShader);
@@ -212,7 +213,92 @@ $.fn.fmp4player = function (options) {
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
 		// setup GLSL program
-		var program = initShaders(gl, "2d-vertex-shader", "2d-fragment-shader");
+		//var program = initShaders(gl, getShaderFromDOM(gl, "2d-vertex-shader"), getShaderFromDOM(gl, "2d-fragment-shader"));
+/*	<!-- script shader elements to use from HTML -->
+	<!-- vertex shader -->
+	<script id="2d-vertex-shader" type="x-shader/x-vertex">
+	attribute vec2 a_position;
+	attribute vec2 a_texCoord;
+
+	uniform vec2 u_resolution;
+
+	varying vec2 v_texCoord;
+
+	void main() {
+	   // convert the rectangle from pixels to 0.0 to 1.0
+	   vec2 zeroToOne = a_position / u_resolution;
+
+	   // convert from 0->1 to 0->2
+	   vec2 zeroToTwo = zeroToOne * 2.0;
+
+	   // convert from 0->2 to -1->+1 (clipspace)
+	   vec2 clipSpace = zeroToTwo - 1.0;
+
+	   gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
+
+	   // pass the texCoord to the fragment shader
+	   // The GPU will interpolate this value between points.
+	   v_texCoord = a_texCoord;
+	}
+	</script>
+	<!-- fragment shader -->
+	<script id="2d-fragment-shader" type="x-shader/x-fragment">
+	precision mediump float;
+
+	// our texture
+	uniform sampler2D u_image;
+
+	// the texCoords passed in from the vertex shader.
+	varying vec2 v_texCoord;
+
+	void main() {
+	   gl_FragColor = texture2D(u_image, v_texCoord);
+	}
+	</script>
+*/
+		var program = initShaders(gl, getShader(gl, gl.VERTEX_SHADER, "\n\
+\n\
+	// vertex shader\n\
+\n\
+	attribute vec2 a_position;\n\
+	attribute vec2 a_texCoord;\n\
+\n\
+	uniform vec2 u_resolution;\n\
+\n\
+	varying vec2 v_texCoord;\n\
+\n\
+	void main() {\n\
+	   // convert the rectangle from pixels to 0.0 to 1.0\n\
+	   vec2 zeroToOne = a_position / u_resolution;\n\
+\n\
+	   // convert from 0->1 to 0->2\n\
+	   vec2 zeroToTwo = zeroToOne * 2.0;\n\
+\n\
+	   // convert from 0->2 to -1->+1 (clipspace)\n\
+	   vec2 clipSpace = zeroToTwo - 1.0;\n\
+\n\
+	   gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);\n\
+\n\
+	   // pass the texCoord to the fragment shader\n\
+	   // The GPU will interpolate this value between points.\n\
+	   v_texCoord = a_texCoord;\n\
+	}\n\
+"), getShader(gl, gl.FRAGMENT_SHADER, "\n\
+\n\
+	// fragment shader\n\
+\n\
+	precision mediump float;\n\
+\n\
+	// our texture\n\
+	uniform sampler2D u_image;\n\
+\n\
+	// the texCoords passed in from the vertex shader.\n\
+	varying vec2 v_texCoord;\n\
+\n\
+	void main() {\n\
+	   gl_FragColor = texture2D(u_image, v_texCoord);\n\
+	}\n\
+"));
 
 		// look up where the vertex data needs to go.
 		var positionLocation = gl.getAttribLocation(program, "a_position");
