@@ -1285,6 +1285,7 @@ public class FFmpegProcess extends Observable {
 													}
 												}
 												if (fd.sn >= lastSn) {
+													lastSn = fd.sn;
 //													long startDrawing = System.nanoTime();
 													graphics.drawImage(image, 0, 0, null);
 //													if (DEBUG && fd.sn % 10 == 0)
@@ -1301,7 +1302,7 @@ public class FFmpegProcess extends Observable {
 										attempts = 0; // counts consecutive failures; reset for success
 								} catch (JSException | IOException | NullPointerException e) {
 									e.printStackTrace();
-									if (++attempts >= 10)
+									if (++attempts >= 50)
 										break;
 								}
 //								debug("Video Buffer empty");

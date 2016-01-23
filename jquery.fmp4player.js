@@ -14,6 +14,10 @@ if ( !window.requestAnimationFrame ) {
 	})();
 }
 
+Function.prototype.stringifyComment = function () {
+	return /^function(?:\s+[_$a-zA-Z\xA0-\uFFFF][_$a-zA-Z0-9\xA0-\uFFFF]*)?\s*\(\s*(?:[_$a-zA-Z\xA0-\uFFFF][_$a-zA-Z0-9\xA0-\uFFFF]*(?:\s*,\s*[_$a-zA-Z\xA0-\uFFFF][_$a-zA-Z0-9\xA0-\uFFFF]*)*)?\s*\)\s*\{\s*\/\*([^\x00]*?)\*\/\s*\}$/.test(this) && RegExp.$1;
+};
+
 /**
  * fmp4player jQuery plug-in.
  */
@@ -256,49 +260,51 @@ $.fn.fmp4player = function (options) {
 	}
 	</script>
 */
-		var program = initShaders(gl, getShader(gl, gl.VERTEX_SHADER, "\n\
-\n\
-	// vertex shader\n\
-\n\
-	attribute vec2 a_position;\n\
-	attribute vec2 a_texCoord;\n\
-\n\
-	uniform vec2 u_resolution;\n\
-\n\
-	varying vec2 v_texCoord;\n\
-\n\
-	void main() {\n\
-	   // convert the rectangle from pixels to 0.0 to 1.0\n\
-	   vec2 zeroToOne = a_position / u_resolution;\n\
-\n\
-	   // convert from 0->1 to 0->2\n\
-	   vec2 zeroToTwo = zeroToOne * 2.0;\n\
-\n\
-	   // convert from 0->2 to -1->+1 (clipspace)\n\
-	   vec2 clipSpace = zeroToTwo - 1.0;\n\
-\n\
-	   gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);\n\
-\n\
-	   // pass the texCoord to the fragment shader\n\
-	   // The GPU will interpolate this value between points.\n\
-	   v_texCoord = a_texCoord;\n\
-	}\n\
-"), getShader(gl, gl.FRAGMENT_SHADER, "\n\
-\n\
-	// fragment shader\n\
-\n\
-	precision mediump float;\n\
-\n\
-	// our texture\n\
-	uniform sampler2D u_image;\n\
-\n\
-	// the texCoords passed in from the vertex shader.\n\
-	varying vec2 v_texCoord;\n\
-\n\
-	void main() {\n\
-	   gl_FragColor = texture2D(u_image, v_texCoord);\n\
-	}\n\
-"));
+		var program = initShaders(gl, getShader(gl, gl.VERTEX_SHADER, (function () {/*
+
+	// vertex shader
+
+	attribute vec2 a_position;
+	attribute vec2 a_texCoord;
+
+	uniform vec2 u_resolution;
+
+	varying vec2 v_texCoord;
+
+	void main() {
+	   // convert the rectangle from pixels to 0.0 to 1.0
+	   vec2 zeroToOne = a_position / u_resolution;
+
+	   // convert from 0->1 to 0->2
+	   vec2 zeroToTwo = zeroToOne * 2.0;
+
+	   // convert from 0->2 to -1->+1 (clipspace)
+	   vec2 clipSpace = zeroToTwo - 1.0;
+
+	   gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
+
+	   // pass the texCoord to the fragment shader
+	   // The GPU will interpolate this value between points.
+	   v_texCoord = a_texCoord;
+	}
+
+*/}).stringifyComment()), getShader(gl, gl.FRAGMENT_SHADER, (function () {/*
+
+	// fragment shader
+
+	precision mediump float;
+
+	// our texture
+	uniform sampler2D u_image;
+
+	// the texCoords passed in from the vertex shader.
+	varying vec2 v_texCoord;
+
+	void main() {
+	   gl_FragColor = texture2D(u_image, v_texCoord);
+	}
+
+*/}).stringifyComment()));
 
 		// look up where the vertex data needs to go.
 		var positionLocation = gl.getAttribLocation(program, "a_position");
