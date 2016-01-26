@@ -43,6 +43,7 @@ import java.util.Observable;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
+import javax.imageio.IIOException;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 //import javax.imageio.metadata.IIOMetadata;
@@ -1133,7 +1134,47 @@ public class FFmpegProcess extends Observable {
 	private JFrame jframe = null;
 	private Graphics graphics = null;
 	private double timeQuantum = 0D; // time quantum for video in milliseconds
-	private int lastSn;
+//	private int lastSN = 0;
+	static class ListOfSNs
+	{
+		public static class Item { public Item prev, next; public int sn; public Item(int val, Item prev, Item next) { this.sn = val; this.prev = prev; this.next = next; } }
+		public Item head, tail;
+		void add(int val) { if (head == null) head = tail = new Item(val, null, null); else tail = tail.next = new Item(val, tail, null); }
+		void addAfter(Item item, int val) {
+			if (head == null)
+				head = tail = new Item(val, null, null);
+			else {
+				if (item == tail)
+					tail = tail.next = new Item(val, tail, null);
+				else {
+					if (item == null)
+						item = head = new Item(val, null, head);
+					else
+						item = item.next = new Item(val, item, item.next);
+					item.next.prev = item;
+				}
+			}
+		}
+		void remove() { head = head.next; if (head != null) head.prev = null; else tail = null; }
+		void remove(Item item) {
+			if (head == null || item == null)
+				return;
+			if (item == head)
+				remove();
+			else if (item == tail)
+				(tail = tail.prev).next = null;
+			else
+				(item.next.prev = item.prev).next = item.next;
+		}
+		void remove(int val) {
+			Item item = head;
+			while (item != null && item.sn != val)
+				item = item.next;
+			remove(item);
+		}
+		void clear() { head = tail = null; }
+	}
+	private ListOfSNs curSNs = new ListOfSNs();
 	
 	private void playMediaDemuxer() throws InterruptedException {
 		setChanged(); notifyObservers(Event.START);
@@ -1245,6 +1286,12 @@ public class FFmpegProcess extends Observable {
 //													fout.write(bytes);
 //												}
 //											}
+											synchronized (curSNs) {
+												ListOfSNs.Item item = curSNs.tail;
+												while (item != null && item.sn > fd.sn)
+													item = item.prev;
+												curSNs.addAfter(item, fd.sn);
+											}
 											try (	InputStream inputStream = new ByteArrayInputStream(fd.bytes);
 													ImageInputStream imageInputStream = ImageIO.createImageInputStream(inputStream)	) {
 
@@ -1284,15 +1331,27 @@ public class FFmpegProcess extends Observable {
 														sleep(td);
 													}
 												}
-												if (fd.sn >= lastSn) {
-													lastSn = fd.sn;
-//													long startDrawing = System.nanoTime();
-													graphics.drawImage(image, 0, 0, null);
-//													if (DEBUG && fd.sn % 10 == 0)
-//														System.out.printf("%.2f ms\r\n", (System.nanoTime() - startDrawing) / 1000000D);
-												} else {
-													debug("Skipped frame # " + fd.sn);
+//												if (fd.sn >= lastSN) {
+//													lastSN = fd.sn;
+////													long startDrawing = System.nanoTime();
+//													graphics.drawImage(image, 0, 0, null);
+////													if (DEBUG && fd.sn % 10 == 0)
+////														System.out.printf("%.2f ms\r\n", (System.nanoTime() - startDrawing) / 1000000D);
+//												} else {
+//													debug("Skipped frame # " + fd.sn);
+//												}
+												synchronized (curSNs) {
+													while (curSNs.head != null && fd.sn > curSNs.head.sn)
+														curSNs.wait();
+													if (curSNs.head != null && fd.sn == curSNs.head.sn) {
+														graphics.drawImage(image, 0, 0, null);
+														curSNs.remove();
+														curSNs.notifyAll();
+													}
 												}
+											} catch (Exception e) {
+												synchronized (curSNs) { curSNs.remove(fd.sn); curSNs.notifyAll(); }
+												throw e;
 											}
 										} else {
 											jsWindow.call(processFrameCallback, new Object[] { id, fd.sn, dataOut.toDataUri(fd.bytes) });
@@ -1300,9 +1359,11 @@ public class FFmpegProcess extends Observable {
 									}
 									if (attempts > 0)
 										attempts = 0; // counts consecutive failures; reset for success
+								} catch (IIOException e) {
+									e.printStackTrace();
 								} catch (JSException | IOException | NullPointerException e) {
 									e.printStackTrace();
-									if (++attempts >= 50)
+									if (++attempts >= 10)
 										break;
 								}
 //								debug("Video Buffer empty");
@@ -1343,6 +1404,8 @@ public class FFmpegProcess extends Observable {
 			if (demuxVideoStream != null) { try { demuxVideoStream.close(); } catch (IOException e) { e.printStackTrace(); } demuxVideoStream = null; }
 			try { audioLinePlayer.close(); } catch (IOException e) { e.printStackTrace(); }
 			timeQuantum = 0D;
+//			lastSN = 0;
+			synchronized (curSNs) { curSNs.clear(); curSNs.notifyAll(); }
 			if (jframe != null) { jframe.setVisible(false); jframe.dispose(); jframe = null; graphics = null; }
 			setChanged(); notifyObservers(Event.STOP);
 			debug("FFMPEG output thread ended.", "FFMPEG process terminated.");
