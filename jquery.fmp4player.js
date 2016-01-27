@@ -76,7 +76,20 @@ var defaults = {
   debug: "yes"
 };
 
-$.fn.fmp4player = function (options) {
+$.fn.fmp4player = function (options, _name, _value) {
+
+  function getApplet($cont, method) {
+	var applet = $cont.find( 'embed.img-applet' )[0], applet_ie = $cont.find( 'object.img-applet-ie' )[0];
+	return applet && applet[method] ? applet : applet_ie && typeof(applet_ie[method]) === "unknown" ? applet_ie : undefined;
+  }
+
+  if (options === "setFFmpegParam")
+	return this.each(function () {
+		var applet = getApplet($(this), "setFFmpegParam");
+		if (applet)
+			applet.setFFmpegParam(_name, _value);
+		}
+	});
 
   var opts = $.extend(true, {}, $.fn.fmp4player.defaults, options);
 	
@@ -147,16 +160,14 @@ $.fn.fmp4player = function (options) {
 		return shaderProgram;
 	}
 
-	var $cont = $(this), idPrefix = (this.id ? this.id : 'e' + Math.floor(Math.random() * 1000000000000000)) + '-';
-
-	$cont.append('<object id="' + idPrefix + 'img-applet-ie"\
+	var $cont = $(this).empty().append('<object class="img-applet-ie"\
   classid="clsid:8AD9C840-044E-11D1-B3E9-00805F499D93"\
   width="100" height="40">\
   <param name="archive" value="img-applet.jar">\
   <param name="code" value="img_applet.ImgApplet">\
   ' + objParams.join('\r\n  ') + '\
   <comment>\
-    <embed id="' + idPrefix + 'img-applet"\
+    <embed class="img-applet"\
       type="application/x-java-applet"\
       width="100" height="40" \
       archive="img-applet.jar"\
@@ -165,27 +176,27 @@ $.fn.fmp4player = function (options) {
       ' + embedParams.join('\r\n      ') + ' />\
     </comment>\
   </object>\
-<img id="' + idPrefix + 'image0" width="640" height="480" style="visibility: hidden; display: none;" />\
-<img id="' + idPrefix + 'image1" width="640" height="480" style="visibility: hidden; display: none;" />\
+<img class="image0" width="640" height="480" style="visibility: hidden; display: none;" />\
+<img class="image1" width="640" height="480" style="visibility: hidden; display: none;" />\
 <br />\
-<canvas id="' + idPrefix + 'videoImage" width="640" height="480"></canvas>\
-<audio id="' + idPrefix + 'audio" autoplay="autoplay" crossorigin="anonymous"' + (!isNo(opts['audioControls']) ? ' controls="controls"' : '') + '>Your browser does not support the <code>audio</code> element.</audio>\
-<div id="' + idPrefix + 'msg" style="font-family:Courier New;"></div>\
-'); // <audio id="audio" autoplay="autoplay" crossorigin="anonymous">Your browser does not support the <code>audio</code> element.</audio><!-- controls="controls" -->
+<canvas class="videoImage" width="640" height="480"' + (opts.appletParams["process-frame-callback"] === "-" ? ' style="display:none;"' : '') + '></canvas>\
+<audio class="audio" autoplay="autoplay" crossorigin="anonymous"' + (!isNo(opts['audioControls']) ? ' controls="controls"' : '') + '>Your browser does not support the <code>audio</code> element.</audio>\
+<div class="msg" style="font-family:Courier New;"></div>\
+');
 	
 	// global variables
 	var audio, image, videoImage, videoImageContext, gl, applet, applet_ie, applet_, prev_sn = 0, last_img = -1;
 
 	// assign variables to HTML elements
-	audio = document.getElementById( idPrefix + 'audio' );
-	image = [ document.getElementById( idPrefix + 'image0' ), document.getElementById( idPrefix + 'image1' ) ];
-	videoImage = document.getElementById( idPrefix + 'videoImage' );
+	audio = $cont.find( 'audio.audio' )[0];
+	image = [ $cont.find( 'img.image0' )[0], $cont.find( 'img.image1' )[0] ];
+	videoImage = $cont.find( 'canvas.videoImage' )[0];
 	if (!isNo(opts['use-webgl']))
 		gl = initWebGL(videoImage);
 	if (!gl)
 		videoImageContext = videoImage.getContext( '2d' );
-	applet = document.getElementById( idPrefix + 'img-applet' );
-	applet_ie = document.getElementById( idPrefix + 'img-applet-ie' );
+	applet = $cont.find( 'embed.img-applet' )[0];
+	applet_ie = $cont.find( 'object.img-applet-ie' )[0];
 
 	function checkApplet() {
 		if (!applet_) {
@@ -414,7 +425,7 @@ $.fn.fmp4player = function (options) {
 
 	var cnt = 0, playing = false, timeScale = 0, timeLine = 0, initial_ts = 0, prev_ts = 0, videoInfo, hasAudio = false;
 
-	var perf_prev = 0, perf_msg = document.getElementById(idPrefix + "msg"), perf_msg_lines = 10;
+	var perf_prev = 0, perf_msg = $cont.find( ".msg"), perf_msg_lines = 10;
 	function add_perf_msg(txt) {
 		if (perf_msg.childNodes.length >= perf_msg_lines)
 			perf_msg.removeChild(perf_msg.firstChild);
@@ -439,6 +450,7 @@ $.fn.fmp4player = function (options) {
 			}
 			image[last_img = (last_img + 1) % 2].src = dataUri;
 		};
+		$(audio).css('display', 'none');
 	} else {
 		// frame consumer in javascript:
 		// start the loop

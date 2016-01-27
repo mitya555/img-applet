@@ -75,7 +75,7 @@ public class FFmpegProcess extends Observable {
 //			System.out.println("Buffer grew to " + this.size);
 			return this.size;
 		}
-		public boolean persistent;
+		public boolean persistent, released;
 		public FrameData getFrameData(byte[] bytes) throws IOException { return new FrameData(sn, bytes); }
 		@Override
 		public String toString() { return " # " + sn + (persistent ? " \t f/s" : " \t mem"); }
@@ -121,7 +121,7 @@ public class FFmpegProcess extends Observable {
 		abstract byte[] getCurrentBytes() throws IOException;
 		abstract FrameData getCurrentFrameData() throws IOException;
 		abstract Buffer getCurrentBuffer();
-		abstract void releaseCurrentBuffer();
+		abstract void releaseCurrentBuffer() throws IOException;
 		abstract Buffer getCurrentBufferWait() throws InterruptedException;
 		abstract void getCurrentBufferNotify();
 		abstract int getQueueLength();
@@ -323,7 +323,7 @@ public class FFmpegProcess extends Observable {
 					synchronized (this) {
 						bb.position(write);
 						bb.put(b, off, res);
-						write = bb.position();
+						write += res;
 					}
 				return res;
 			}
@@ -331,10 +331,11 @@ public class FFmpegProcess extends Observable {
 				int res = (int) Math.min(len, write - read);
 				if (res > 0)
 					synchronized (this) {
-						bb.position(read);
-						bb.get(b, off, res);
-						read = bb.position();
-						if (read == write)
+						if (b != null) {
+							bb.position(read);
+							bb.get(b, off, res);
+						}
+						if ((read += res) == write)
 							read = write = 0;
 					}
 				return res;
@@ -383,7 +384,7 @@ public class FFmpegProcess extends Observable {
 		private _List<Buffer> filledBufferList = new _List<Buffer>(), emptyBufferList = new _List<Buffer>();
 		private _FileBuffer fileBuffer;
 		private volatile Buffer currentBuffer;
-		private int bufferCount;
+		private int memoryBufferCount;
 		final private int maxMemoryBufferCount, maxBufferCount;
 		private BufferedConsoleOut errOut = new BufferedConsoleOut(System.err);
 		public BufferList(BufferFactory bufferFactory, int maxMemoryBufferCount, int maxBufferCount, boolean debug, String name) {
@@ -402,10 +403,6 @@ public class FFmpegProcess extends Observable {
 			while (maxBufferCount > 0 && filledBufferList.count >= maxBufferCount) {
 				Buffer buf_ = filledBufferList.remove();
 				if (buf_ != null) {
-					if (buf_.persistent) {
-						byte[] tmp = new byte[buf_.len];
-						fileBuffer.read(tmp, 0, buf_.len); // release the file buffer
-					}
 					if (DEBUG)
 						errOut.println(" - " + name + buf_);
 					releaseBuffer_(buf_);
@@ -415,31 +412,26 @@ public class FFmpegProcess extends Observable {
 			Buffer buf = emptyBufferList.remove();
 			if (buf == null) {
 				buf = bufferFactory.newBuffer();
-				if (bufferCount < maxMemoryBufferCount) {
-					bufferCount++;
+				if (memoryBufferCount < maxMemoryBufferCount) {
+					memoryBufferCount++;
 				} else {
 					buf.persistent = true;
 				}
 			}
 			int res = buf.len = in.read(buf);
 			buf.sn = ++sn;
-			if (buf.persistent) {
-				if (res != -1) {
+			if (res != -1) {
+				if (buf.persistent) {
 					if (fileBuffer == null)
 						fileBuffer = new _FileBuffer();
 					fileBuffer.write(buf.b, 0, buf.len);
 					buf.b = null;
-					filledBufferList.add(buf);
-					if (notifyQueue != null) {
-						notifyQueue.offer(sn);
-					}
 				}
-			} else if (res != -1) {
 				filledBufferList.add(buf);
 				if (notifyQueue != null) {
 					notifyQueue.offer(sn);
 				}
-			} else {
+			} else if (!buf.persistent) {
 				 emptyBufferList.add(buf);
 			}
 			if (DEBUG && res != -1)
@@ -452,8 +444,11 @@ public class FFmpegProcess extends Observable {
 		byte[] getBytes(Buffer b) throws IOException {
 			byte[] ret = null;
 			if (b.persistent) {
+				if (b.released)
+					throw new IOException("The buffer's FileBuffer is already released");
 				ret = new byte[b.len];
 				fileBuffer.read(ret, 0, b.len);
+				b.released = true;
 			} else
 				ret = Arrays.copyOf(b.b, b.len);
 			return ret;
@@ -492,16 +487,21 @@ public class FFmpegProcess extends Observable {
 		}
 		private void getCurrentBuffer_() { if (currentBuffer == null) currentBuffer = filledBufferList.remove(); }
 		private void getCurrentBufferWait_() throws InterruptedException { if (currentBuffer == null) currentBuffer = filledBufferList.removeWait(); }
-		private void releaseBuffer_(Buffer buf) {
-			if (!buf.persistent) {
-				if (bufferCount > maxMemoryBufferCount / 2 && emptyBufferList.count > maxMemoryBufferCount / 2) {
-					bufferCount--;
+		private void releaseBuffer_(Buffer buf) throws IOException {
+			if (buf.persistent) {
+				if (!buf.released) {
+					fileBuffer.read(null, 0, buf.len); // release the file buffer
+					buf.released = true;
+				}
+			} else {
+				if (emptyBufferList.count > maxMemoryBufferCount / 2) {
+					memoryBufferCount--;
 					return;
 				}
 				emptyBufferList.add(buf);
 			}
 		}
-		private void releaseCurrentBuffer_() {
+		private void releaseCurrentBuffer_() throws IOException {
 			Buffer buf = currentBuffer;
 			currentBuffer = null;
 			releaseBuffer_(buf);
@@ -509,7 +509,7 @@ public class FFmpegProcess extends Observable {
 		@Override
 		Buffer getCurrentBuffer() { getCurrentBuffer_(); return currentBuffer; }
 		@Override
-		void releaseCurrentBuffer() { if (currentBuffer != null) releaseCurrentBuffer_(); }
+		void releaseCurrentBuffer() throws IOException { if (currentBuffer != null) releaseCurrentBuffer_(); }
 		@Override
 		Buffer getCurrentBufferWait() throws InterruptedException { getCurrentBufferWait_(); return currentBuffer; }
 		@Override
@@ -759,7 +759,7 @@ public class FFmpegProcess extends Observable {
 	}
 
 	private static final String PARAM_PREFIX = "ffmpeg-";
-	private Map<String,String> optName = new HashMap<String,String>(), optValue = new HashMap<String,String>();
+	private Map<String,String> optName = new HashMap<String,String>(), optValue = new HashMap<String,String>(), ffmpegParams = new HashMap<String,String>();
 	private void _addOptNV(String param, String opt, List<String> command, String value, String dflt) {
 		if (!strEmpty(value) || (value == null && !strEmpty(dflt))) {
 			if (!strEmpty(opt)) {
@@ -772,12 +772,15 @@ public class FFmpegProcess extends Observable {
 			optValue.put(param, _val);
 		}
 	}
-	private void addOptNV(String param, String opt, List<String> command, String dflt) { _addOptNV(param, opt, command, getParameter(PARAM_PREFIX + param), dflt); }
+	private String getFFmpegParam(String name) {
+		return ffmpegParams.containsKey(name) ? ffmpegParams.get(name) : getParameter(PARAM_PREFIX + name);
+	}
+	private void addOptNV(String param, String opt, List<String> command, String dflt) { _addOptNV(param, opt, command, getFFmpegParam(param), dflt); }
 	private void addOptNV(String param, String opt, List<String> command) { addOptNV(param, opt, command, null); }
 	private void addOptNV(String name, List<String> command, String dflt) { addOptNV(name, name, command, dflt); }
 	private void addOptNV(String name, List<String> command) { addOptNV(name, name, command); }
 	private void addOpt_V(String name, List<String> command, String dflt) { addOptNV(name, null, command, dflt); }
-	private void addOptN_(String name, List<String> command) { if (!isNo(getParameter(PARAM_PREFIX + name))) { String _opt = "-" + name; command.add(_opt); optName.put(name, _opt); } }
+	private void addOptN_(String name, List<String> command) { if (!isNo(getFFmpegParam(name))) { String _opt = "-" + name; command.add(_opt); optName.put(name, _opt); } }
 	
 	private enum OutputFormat { none, mjpeg, mp3, mp4, webm, wav, other, unknown }
 	private OutputFormat getOutputFormat() {
@@ -1432,11 +1435,13 @@ public class FFmpegProcess extends Observable {
 
 	public long getVideoTimestamp() { VideoBuffer cvb = demuxVideoStream != null ? (VideoBuffer)demuxVideoStream.multiBuffer.getCurrentBuffer() : null; return cvb != null ? cvb.timestamp : 0L; }
 	public long getVideoNextTimestamp() { VideoBuffer cvb = demuxVideoStream != null ? (VideoBuffer)demuxVideoStream.multiBuffer.getCurrentBuffer() : null; return cvb != null ? cvb.nextTimestamp : 0L; }
-	public void releaseCurrentBuffer() { if (demuxVideoStream != null) demuxVideoStream.multiBuffer.releaseCurrentBuffer(); }
+	public void releaseCurrentBuffer() throws IOException { if (demuxVideoStream != null) demuxVideoStream.multiBuffer.releaseCurrentBuffer(); }
 
 	public TrackInfo getVideoTrackInfo() { return demuxVideoStream != null ? demuxVideoStream.trackInfo : null; }
 
 	public String getStderrData() throws IOException { return stderrOut != null ? stderrOut.toString("UTF-8") : null; }
+	
+	public void setFFmpegParam(String name, String value) { ffmpegParams.put(name, value); }
 	
 	public boolean isDebug() { return DEBUG; }
 

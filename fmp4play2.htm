@@ -7,6 +7,8 @@
 </head>
 <body>
 
+Url: <input id="setUrl" onchange="$('#player').fmp4player('setFFmpegParam', 'i', this.value);" />
+
 <div id="player"></div>
 
 <script>
@@ -24,6 +26,8 @@ var opts = {
 		'debug-ffmpeg': debug_ffmpeg,
 		'debug-bufferlist': debug_bufferlist,
 		//'ffmpeg-re': 'yes',
+		
+		//'ffmpeg-i': 'rtmp://europaplus.cdnvideo.ru/europaplus-live/mp4:eptv_main.sdp',
 		
 		'ffmpeg-i': 'http://tv.life.ru/lifetv/720p/index.m3u8',
 		

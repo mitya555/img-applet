@@ -108,11 +108,11 @@ public class fMP4DemuxerInputStream extends MediaDemuxer {
 		byte[] boxName;
 		public NamedBox() {
 			boxName = new byte[] { buf.get(4), buf.get(5), buf.get(6), buf.get(7) };
-			if (DEBUG) { System.out.println("Begin " + this); }
+//			if (DEBUG) { System.out.println("Begin " + this); }
 		}
 		@Override
 		public long skip() throws IOException {
-			if (DEBUG) { System.out.println("End " + this); }
+//			if (DEBUG) { System.out.println("End " + this); }
 			return super.skip();
 		}
 		@Override

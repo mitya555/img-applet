@@ -134,20 +134,6 @@ public class ImgApplet extends JApplet {
 		
 		DEBUG = !isNo(getParameter("debug"));
 		
-		ffmpeg0 = new FFmpegProcess();
-		if (registerFFmpeg(ffmpeg0, this, this) != null) {
-			final Button stopButton = createButton("Stop", new ActionListener() { @Override public void actionPerformed(ActionEvent e) {
-				ffmpeg0.stopPlayback(); 
-			} }, ffmpeg0.isPlaying());
-			final Button playButton = createButton("Play", new ActionListener() { @Override public void actionPerformed(ActionEvent e) {
-				ffmpeg0.play();
-			} }, !ffmpeg0.isPlaying());
-			ffmpeg0.addObserver(new Observer() { @Override public void update(Observable o, Object arg) {
-				boolean playing = FFmpegProcess.Event.START.equals(arg);
-				stopButton.setEnabled(playing); /*stopButton.setVisible(playing);*/ playButton.setEnabled(!playing); /*startButton.setVisible(!playing);*/
-			} });
-		}
-
         //Execute a job on the event-dispatching thread:
         //creating this applet's GUI.
 //        try {
@@ -157,8 +143,24 @@ public class ImgApplet extends JApplet {
 //            e.printStackTrace();
 //        }
 
-		// Remove as many temp files as possible
 		try {
+			// Create defaultFFmpegProcess
+			//debug("Create default FFmpegProcess.");
+			ffmpeg0 = new FFmpegProcess();
+			if (registerFFmpeg(ffmpeg0, this, this) != null) {
+				final Button stopButton = createButton("Stop", new ActionListener() { @Override public void actionPerformed(ActionEvent e) {
+					ffmpeg0.stopPlayback(); 
+				} }, ffmpeg0.isPlaying());
+				final Button playButton = createButton("Play", new ActionListener() { @Override public void actionPerformed(ActionEvent e) {
+					ffmpeg0.play();
+				} }, !ffmpeg0.isPlaying());
+				ffmpeg0.addObserver(new Observer() { @Override public void update(Observable o, Object arg) {
+					boolean playing = FFmpegProcess.Event.START.equals(arg);
+					stopButton.setEnabled(playing); /*stopButton.setVisible(playing);*/ playButton.setEnabled(!playing); /*startButton.setVisible(!playing);*/
+				} });
+			}
+	
+			// Remove as many temp files as possible
 			int _fnd = 0, _del = 0;
 			for (File temp : JarLib.tmpdir.listFiles(new FilenameFilter() { @Override public boolean accept(File dir, String name) { return Pattern.matches("img_applet_\\d+\\.tmp", name); } })) {
 				_fnd++;
@@ -192,63 +194,67 @@ public class ImgApplet extends JApplet {
 	public void play(final int id) { AccessController.doPrivileged(new PrivilegedAction<Object>() { @Override public Object run() { ffmpegs.get(id).play(); return null; } }); }
 
 	public void stopPlayback(int id) { ffmpegs.get(id).stopPlayback(); }
-	
+
 	public boolean isPlaying(int id) { return ffmpegs.get(id).isPlaying(); }
 
 	public String getData(int id) throws IOException { byte[] res = ffmpegs.get(id).getData(); return res != null ? new String(res, "UTF-8") : null; }
 
 	public String getDataURI(int id) throws IOException { return ffmpegs.get(id).getDataURI(); }
-	
+
 	public int getSN(int id) { return ffmpegs.get(id).getSN(); }
-	
+
 	int getQueueLength(int id) { return ffmpegs.get(id).getQueueLength(); }
-	
+
 	public boolean isStreaming(int id) { return ffmpegs.get(id).isStreaming(); }
-	
+
 	public String startHttpServer(int id) throws InterruptedException { return ffmpegs.get(id).startHttpServer(); } 
 
 	public String getVideoDataURI(int id) throws IOException { return ffmpegs.get(id).getVideoDataURI(); }
-	
+
 	public int getVideoSN(int id) { return ffmpegs.get(id).getVideoSN(); }
 
 	public int getVideoQueueLength(int id) { return ffmpegs.get(id).getVideoQueueLength(); }
 
 	public long getVideoTimestamp(int id) { return ffmpegs.get(id).getVideoTimestamp(); }
 	public long getVideoNextTimestamp(int id) { return ffmpegs.get(id).getVideoNextTimestamp(); }
-	public void releaseCurrentBuffer(int id) { ffmpegs.get(id).releaseCurrentBuffer(); }
-	
+	public void releaseCurrentBuffer(int id) throws IOException { ffmpegs.get(id).releaseCurrentBuffer(); }
+
 	public TrackInfo getVideoTrackInfo(int id) { return ffmpegs.get(id).getVideoTrackInfo(); }
 
 	public String getStderrData(int id) throws IOException { return ffmpegs.get(id).getStderrData(); }
 
-	
+	public void setFFmpegParam(int id, String name, String value) { ffmpegs.get(id).setFFmpegParam(name, value); }
+
+
 	public boolean isPlaying() { return ffmpeg0.isPlaying(); }
 
 	public String getData() throws IOException { byte[] res = ffmpeg0.getData(); return res != null ? new String(res, "UTF-8") : null; }
 
 	public String getDataURI() throws IOException { return ffmpeg0.getDataURI(); }
-	
+
 	public int getSN() { return ffmpeg0.getSN(); }
-	
+
 	int getQueueLength() { return ffmpeg0.getQueueLength(); }
-	
+
 	public boolean isStreaming() { return ffmpeg0.isStreaming(); }
-	
+
 	public String startHttpServer() throws InterruptedException { return ffmpeg0.startHttpServer(); } 
 
 	public String getVideoDataURI() throws IOException { return ffmpeg0.getVideoDataURI(); }
-	
+
 	public int getVideoSN() { return ffmpeg0.getVideoSN(); }
 
 	public int getVideoQueueLength() { return ffmpeg0.getVideoQueueLength(); }
 
 	public long getVideoTimestamp() { return ffmpeg0.getVideoTimestamp(); }
 	public long getVideoNextTimestamp() { return ffmpeg0.getVideoNextTimestamp(); }
-	public void releaseCurrentBuffer() { ffmpeg0.releaseCurrentBuffer(); }
-	
+	public void releaseCurrentBuffer() throws IOException { ffmpeg0.releaseCurrentBuffer(); }
+
 	public TrackInfo getVideoTrackInfo() { return ffmpeg0.getVideoTrackInfo(); }
 
 	public String getStderrData() throws IOException { return ffmpeg0.getStderrData(); }
+
+	public void setFFmpegParam(String name, String value) { ffmpeg0.setFFmpegParam(name, value); }
 	
 	
 	public boolean isDebug() { return DEBUG; }
