@@ -88,7 +88,6 @@ $.fn.fmp4player = function (options, _name, _value) {
 		var applet = getApplet($(this), "setFFmpegParam");
 		if (applet)
 			applet.setFFmpegParam(_name, _value);
-		}
 	});
 
   var opts = $.extend(true, {}, $.fn.fmp4player.defaults, options);

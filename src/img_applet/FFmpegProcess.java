@@ -165,7 +165,8 @@ public class FFmpegProcess extends Observable {
 		@Override
 		public void close() throws IOException {
 			if (audioLine != null) {
-				audioLine.drain();
+				//audioLine.drain();
+				audioLine.close();
 				debug("Playback ended.");
 				audioLine = null;
 			}
@@ -518,7 +519,15 @@ public class FFmpegProcess extends Observable {
 		int getQueueLength() { return filledBufferList.count + (currentBuffer != null ? 1 : 0); }
 		@Override
 		public void close() throws IOException {
+			// drain the list
+			synchronized (filledBufferList) {
+				Buffer buf_;
+				while ((buf_ = filledBufferList.remove()) != null)
+					releaseBuffer_(buf_);
+			}
+			// close consumer threads and wait for them to close
 			super.close();
+			// close FileBuffer
 			if (fileBuffer != null) {
 				_File _file;
 				int closed = 0, deleted = 0;
@@ -793,6 +802,7 @@ public class FFmpegProcess extends Observable {
 				OutputFormat.other : OutputFormat.unknown : OutputFormat.none;
 	}
 	
+	private String input() { addOptNV("i", new ArrayList<String>()); return optValue.get("i"); } 
 	public boolean HasInput() { addOptNV("i", new ArrayList<String>()); return optValue.containsKey("i"); } 
 	
 	private boolean NoAudio() { return optValue.containsKey("an"); }
@@ -1234,7 +1244,7 @@ public class FFmpegProcess extends Observable {
 				final boolean drawImageInJava = "-".equals(processFrameCallback);
 				JSObject jsw = null;
 				if (drawImageInJava) {
-					jframe = new JFrame("ImageDrawing");
+					jframe = new JFrame(input());
 					jframe.addWindowListener(new WindowAdapter() {
 						public void windowClosing(WindowEvent e) {
 							//System.exit(0);

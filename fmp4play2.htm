@@ -7,7 +7,7 @@
 </head>
 <body>
 
-Url: <input id="setUrl" onchange="$('#player').fmp4player('setFFmpegParam', 'i', this.value);" />
+Url: <input id="setUrl" onchange="$('#player').fmp4player('setFFmpegParam', 'i', this.value);" style="width:100%;" />
 
 <div id="player"></div>
 
@@ -65,6 +65,7 @@ if (play_js) {
 if (ffmpeg_re)
 	opts.appletParams["ffmpeg-re"] = "yes";
 $('#player').fmp4player(opts);
+$('#setUrl').val('');
 </script>
 
 </body>
