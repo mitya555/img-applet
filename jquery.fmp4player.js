@@ -19,6 +19,26 @@ Function.prototype.stringifyComment = function () {
 };
 
 /**
+ * M3U parser
+ */
+(function(){
+	var a,b,c,d,e,f,g,h;
+	b="#EXTM3U",
+	a=/:\s*(-?\d+)(?:.*?,\s*|\s+)(?:(.*?)\n(.*)|(.*))/,
+	e=function(b){var c;return c=b.match(a),c&&5===c.length?{length:c[1]||0,title:h(c[2]||c[4]||""),file:(c[3]||"").trim()}:void 0},
+	h=function(a){var b;
+		while ((b=a.replace(/\[\s*COLOR\s+(\w+)\s*\](.*?)\[\s*\/\s*COLOR\s*\]/i,"<span style='color:$1;'>$2</span>"))!==a){a=b}
+		while ((b=a.replace(/\[\s*B\s*\](.*?)\[\s*\/\s*B\s*\]/i,"<span style='font-weight:bold;'>$1</span>"))!==a){a=b}
+		while ((b=a.replace(/\[\s*I\s*\](.*?)\[\s*\/\s*I\s*\]/i,"<span style='font-style:italic;'>$1</span>"))!==a){a=b}
+		return a.replace(/\[\s*(?:(?:B|I|COLOR\s+(\w+))|\/\s*(?:B|I|COLOR))\s*\]/gi,"")},
+	g=function(a){return{file:a.trim()}},
+	d=function(a){return!!a.trim().length},
+	c=function(a){return"#"!==a[0]},
+	f=function(a){var f;return a=a.replace(/\r/g,""),f=a.search("\n"),a.substr(0,f)===b?a.substr(f).split(/\n\s*#/).filter(d).map(e):a.split("\n").filter(d).filter(c).map(g)},
+	window.parseM3u=f
+}).call(this);
+
+/**
  * fmp4player jQuery plug-in.
  */
 (function ($) {
@@ -88,6 +108,12 @@ $.fn.fmp4player = function (options, _name, _value) {
 		var applet = getApplet($(this), "setFFmpegParam");
 		if (applet)
 			applet.setFFmpegParam(_name, _value);
+	});
+  else if (options === "play")
+	return this.each(function () {
+		var applet = getApplet($(this), "play");
+		if (applet)
+			applet.play();
 	});
 
   var opts = $.extend(true, {}, $.fn.fmp4player.defaults, options);

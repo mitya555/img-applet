@@ -190,8 +190,11 @@ public class ImgApplet extends JApplet {
 		});
 	}
 
-	
-	public void play(final int id) { AccessController.doPrivileged(new PrivilegedAction<Object>() { @Override public Object run() { ffmpegs.get(id).play(); return null; } }); }
+
+	private void play(final FFmpegProcess ffmpeg) { AccessController.doPrivileged(new PrivilegedAction<Object>() { @Override public Object run() { ffmpeg.play(); return null; } }); }
+
+
+	public void play(final int id) { play(ffmpegs.get(id)); }
 
 	public void stopPlayback(int id) { ffmpegs.get(id).stopPlayback(); }
 
@@ -226,6 +229,8 @@ public class ImgApplet extends JApplet {
 	public void setFFmpegParam(int id, String name, String value) { ffmpegs.get(id).setFFmpegParam(name, value); }
 
 
+	public void play() { play(ffmpeg0); }
+
 	public boolean isPlaying() { return ffmpeg0.isPlaying(); }
 
 	public String getData() throws IOException { byte[] res = ffmpeg0.getData(); return res != null ? new String(res, "UTF-8") : null; }
@@ -255,9 +260,10 @@ public class ImgApplet extends JApplet {
 	public String getStderrData() throws IOException { return ffmpeg0.getStderrData(); }
 
 	public void setFFmpegParam(String name, String value) { ffmpeg0.setFFmpegParam(name, value); }
-	
-	
+
+
 	public boolean isDebug() { return DEBUG; }
+
 
 	@Override
 	public void stop() {

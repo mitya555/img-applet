@@ -7,9 +7,15 @@
 </head>
 <body>
 
-Url: <input id="setUrl" onchange="$('#player').fmp4player('setFFmpegParam', 'i', this.value);" style="width:100%;" />
+<button onclick="$('#player').fmp4player('setFFmpegParam', 'i', $('#setUrl').val()).fmp4player('play')">Play URL</button>
+<input id="setUrl" style="width:100%;" />
+
+<button onclick="$('#msg').html(JSON.stringify(parseM3u($('#m3uSource').val())).replace(/\},\{/g,'},<br />\n{'))">Parse M3U</button>
+<textarea id="m3uSource" style="width:100%;" rows="2"></textarea>
 
 <div id="player"></div>
+
+<div style="background-color:black;"><code style="background-color:black;color:white;" id="msg"></code></div>
 
 <script>
 var debug_ffmpeg = window.location.search && window.location.search.indexOf('debug-ffmpeg') != -1 ? 'yes' : 'no',
@@ -65,7 +71,6 @@ if (play_js) {
 if (ffmpeg_re)
 	opts.appletParams["ffmpeg-re"] = "yes";
 $('#player').fmp4player(opts);
-$('#setUrl').val('');
 </script>
 
 </body>
