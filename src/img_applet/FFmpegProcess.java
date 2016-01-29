@@ -5,6 +5,7 @@ import img_applet.FFmpegProcess.MediaDemuxer.Gettable;
 
 import java.applet.Applet;
 import java.awt.Graphics;
+import java.awt.Insets;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
@@ -1144,6 +1145,8 @@ public class FFmpegProcess extends Observable {
 		}
 	}
 
+	private static int parseInt0(String val) { try { return Integer.parseInt(val); } catch (Throwable ex) { return 0; } }
+
 	private JFrame jframe = null;
 	private Graphics graphics = null;
 	private double timeQuantum = 0D; // time quantum for video in milliseconds
@@ -1241,8 +1244,9 @@ public class FFmpegProcess extends Observable {
 			final boolean processFrameCallbackSet = !strEmpty(processFrameCallback);
 			if (demuxVideoStream != null && processFrameCallbackSet) {
 				final BlockingQueue<Integer> _notifyQueue = demuxVideoStream.multiBuffer.notifyQueue = new ArrayBlockingQueue<Integer>(processFrameNumberOfConsumerThreads + 1);
-				final boolean drawImageInJava = "-".equals(processFrameCallback);
+				final boolean drawImageInJava = processFrameCallback.startsWith("-");
 				JSObject jsw = null;
+				Insets dis = null;
 				if (drawImageInJava) {
 					jframe = new JFrame(input());
 					jframe.addWindowListener(new WindowAdapter() {
@@ -1259,10 +1263,13 @@ public class FFmpegProcess extends Observable {
 //						System.out.println("ImageIO.getReaderFormatNames(): " + Arrays.toString(ImageIO.getReaderFormatNames()));
 //						System.out.println("ImageIO.getReaderMIMETypes(): " + Arrays.toString(ImageIO.getReaderMIMETypes()));
 //					}
+					String[] tmp = processFrameCallback.substring(1).split("[,;|:]");
+					dis = new Insets(tmp.length>0?parseInt0(tmp[0]):0,tmp.length>1?parseInt0(tmp[1]):0,tmp.length>2?parseInt0(tmp[2]):0,tmp.length>3?parseInt0(tmp[3]):0);
 				} else {
 					jsw = JSObject.getWindow(applet);
 				}
 				final JSObject jsWindow = jsw;
+				final Insets drawInsets = dis;
 				demuxVideoStream.multiBuffer.startConsumerThreads(processFrameNumberOfConsumerThreads, new Runnable() {
 					@Override
 					public void run() {
@@ -1326,7 +1333,7 @@ public class FFmpegProcess extends Observable {
 													imageReader.setInput(null);
 
 													jframe.setVisible(true);
-													jframe.setSize(image.getWidth(), image.getHeight());
+													jframe.setSize(image.getWidth() + drawInsets.left + drawInsets.right, image.getHeight() + drawInsets.top + drawInsets.bottom);
 													graphics = jframe.getGraphics();
 													
 												} else {
@@ -1357,7 +1364,7 @@ public class FFmpegProcess extends Observable {
 													while (curSNs.head != null && fd.sn > curSNs.head.sn)
 														curSNs.wait();
 													if (curSNs.head != null && fd.sn == curSNs.head.sn) {
-														graphics.drawImage(image, 0, 0, null);
+														graphics.drawImage(image, drawInsets.left, drawInsets.top, null);
 														curSNs.remove();
 														curSNs.notifyAll();
 													}
@@ -1452,6 +1459,7 @@ public class FFmpegProcess extends Observable {
 	public String getStderrData() throws IOException { return stderrOut != null ? stderrOut.toString("UTF-8") : null; }
 	
 	public void setFFmpegParam(String name, String value) { ffmpegParams.put(name, value); }
+	public void removeFFmpegParam(String name) { ffmpegParams.remove(name); }
 	
 	public boolean isDebug() { return DEBUG; }
 

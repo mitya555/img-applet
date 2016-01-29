@@ -228,6 +228,8 @@ public class ImgApplet extends JApplet {
 
 	public void setFFmpegParam(int id, String name, String value) { ffmpegs.get(id).setFFmpegParam(name, value); }
 
+	public void removeFFmpegParam(int id, String name) { ffmpegs.get(id).removeFFmpegParam(name); }
+
 
 	public void play() { play(ffmpeg0); }
 
@@ -260,6 +262,8 @@ public class ImgApplet extends JApplet {
 	public String getStderrData() throws IOException { return ffmpeg0.getStderrData(); }
 
 	public void setFFmpegParam(String name, String value) { ffmpeg0.setFFmpegParam(name, value); }
+
+	public void removeFFmpegParam(String name) { ffmpeg0.removeFFmpegParam(name); }
 
 
 	public boolean isDebug() { return DEBUG; }

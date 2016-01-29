@@ -21,6 +21,30 @@ Function.prototype.stringifyComment = function () {
 /**
  * M3U parser
  */
+/*
+This software is dual licensed under the MIT and Beerware license.
+The MIT License (MIT)
+Copyright (c) 2013 Nick Desaulniers
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"THE BEER-WARE LICENSE" (Revision 42):
+<nick@mozilla.com> wrote this file. As long as you retain this
+notice you can do whatever you want with this stuff. If we meet some day,
+and you think this stuff is worth it, you can buy me a beer in return.
+Nick Desaulniers
+*/
 (function(){
 	var a,b,c,d,e,f,g,h;
 	b="#EXTM3U",
@@ -35,7 +59,7 @@ Function.prototype.stringifyComment = function () {
 	d=function(a){return!!a.trim().length},
 	c=function(a){return"#"!==a[0]},
 	f=function(a){var f;return a=a.replace(/\r/g,""),f=a.search("\n"),a.substr(0,f)===b?a.substr(f).split(/\n\s*#/).filter(d).map(e):a.split("\n").filter(d).filter(c).map(g)},
-	window.parseM3u=f
+	("undefined"!=typeof module&&null!==module?module.exports:window).M3U={name:"m3u",parse:f}
 }).call(this);
 
 /**
@@ -106,8 +130,12 @@ $.fn.fmp4player = function (options, _name, _value) {
   if (options === "setFFmpegParam")
 	return this.each(function () {
 		var applet = getApplet($(this), "setFFmpegParam");
-		if (applet)
-			applet.setFFmpegParam(_name, _value);
+		if (applet) {
+			if (_value != null)
+				applet.setFFmpegParam(_name, _value);
+			else
+				applet.removeFFmpegParam(_name);
+		}
 	});
   else if (options === "play")
 	return this.each(function () {
@@ -204,7 +232,7 @@ $.fn.fmp4player = function (options, _name, _value) {
 <img class="image0" width="640" height="480" style="visibility: hidden; display: none;" />\
 <img class="image1" width="640" height="480" style="visibility: hidden; display: none;" />\
 <br />\
-<canvas class="videoImage" width="640" height="480"' + (opts.appletParams["process-frame-callback"] === "-" ? ' style="display:none;"' : '') + '></canvas>\
+<canvas class="videoImage" width="640" height="480"' + (opts.appletParams["process-frame-callback"] && opts.appletParams["process-frame-callback"].charAt(0) == "-" ? ' style="display:none;"' : '') + '></canvas>\
 <audio class="audio" autoplay="autoplay" crossorigin="anonymous"' + (!isNo(opts['audioControls']) ? ' controls="controls"' : '') + '>Your browser does not support the <code>audio</code> element.</audio>\
 <div class="msg" style="font-family:Courier New;"></div>\
 ');

@@ -5,17 +5,28 @@
 <script src="//code.jquery.com/jquery-1.11.3.min.js"></script>
 <script src="jquery.fmp4player.js"></script>
 </head>
-<body>
+<body style="font-family:Arial;font-size:10pt;margin:3px 0px 0px 3px;">
 
-<button onclick="$('#player').fmp4player('setFFmpegParam', 'i', $('#setUrl').val()).fmp4player('play')">Play URL</button>
-<input id="setUrl" style="width:100%;" />
+<a href="javascript:void 0" onclick="$('#player').fmp4player('setFFmpegParam', 'i', $('#setUrl').val()||null)/*.fmp4player('play')*/" title="Set URL">URL</a>
+<input id="setUrl" style="width:98%;" />
 
-<button onclick="$('#msg').html(JSON.stringify(parseM3u($('#m3uSource').val())).replace(/\},\{/g,'},<br />\n{'))">Parse M3U</button>
-<textarea id="m3uSource" style="width:100%;" rows="2"></textarea>
+<a href="javascript:void 0" onclick="
+	//$('#msg').html(JSON.stringify(M3U.parse($('#m3uSource').val())).replace(/\},\{/g,'},<br />\n{'));
+	var pl = M3U.parse($('#m3uSource').val());
+	$('#msg').empty();
+	for (var i in pl) {
+		var pi = pl[i];
+		$('#msg').append('&lt;span style=\'white-space:nowrap;\'>&amp;nbsp;' +
+			'&lt;a href=\'javascript:void 0\' title=\'' + pi.file + '\' onclick=\'var $url=$(&quot;#setUrl&quot;).val(&quot;' + pi.file + '&quot;);$(&quot;#player&quot;).fmp4player(&quot;setFFmpegParam&quot;, &quot;i&quot;, $url.val()||null)\'>URL&lt;/a>' +
+			'&amp;nbsp;' + 
+			pi.title + '&lt;/span>&lt;br />');
+	}
+" title="Parse M3U">M3U</button>
+<textarea id="m3uSource" style="width:98%;" rows="2"></textarea>
 
 <div id="player"></div>
 
-<div style="background-color:black;"><code style="background-color:black;color:white;" id="msg"></code></div>
+<div id="msgCont" style="background-color:black;overflow:auto;position:absolute;bottom:3px;top:155px;right:3px;left:3px;"><code style="color:white;" id="msg"></code></div>
 
 <script>
 var debug_ffmpeg = window.location.search && window.location.search.indexOf('debug-ffmpeg') != -1 ? 'yes' : 'no',
@@ -32,6 +43,7 @@ var opts = {
 		'debug-ffmpeg': debug_ffmpeg,
 		'debug-bufferlist': debug_bufferlist,
 		//'ffmpeg-re': 'yes',
+		//'ffmpeg-r': '35',
 		
 		//'ffmpeg-i': 'rtmp://europaplus.cdnvideo.ru/europaplus-live/mp4:eptv_main.sdp',
 		
@@ -63,7 +75,7 @@ if (play_js) {
 	opts.appletParams["process-frame-callback"] = ""; // javascript frames processing/synchronization (requestAnimationFrame() function)
 	opts.appletParams["ffmpeg-c:a"] = "libmp3lame"; // javascript frames processing/synchronization (requestAnimationFrame() function)
 } else if (video_java) {
-	opts.appletParams["process-frame-callback"] = "-"; // play video in Java
+	opts.appletParams["process-frame-callback"] = "-32,10,10,10"; // play video in Java
 	opts.appletParams["ffmpeg-pix_fmt"] = "yuv422p"; // play video in Java
 	//opts.appletParams["demux-fMP4-mjpeg2jpeg-bsf"] = "yes"; // play video in Java
 	//opts.appletParams["ffmpeg-o"] = "output_mjpeg_yuvj420p.mp4"; // play video in Java
