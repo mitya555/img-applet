@@ -5,10 +5,12 @@
 <script src="//code.jquery.com/jquery-1.11.3.min.js"></script>
 <script src="jquery.fmp4player.js"></script>
 <script>
-	function setUrl(url) {
+	function setUrl(url, program) {
 		var $url = $('#setUrl');
 		if (url) $url.val(url);
-		var $player = $('#player').fmp4player('setFFmpegParam', 'i', $url.val()||null);
+		var $player = $('#player').fmp4player('setFFmpegParam', 'i', $url.val()||null)
+			.fmp4player('setFFmpegParam', 'map', program?'0:p:'+program:null)
+			.fmp4player('setFFmpegParam', 'map1', program?'-0:d':null);
 		if (!$player.fmp4player('isPlaying')) $player.fmp4player('play');
 	}
 	function parseM3u() {
@@ -17,15 +19,24 @@
 		for (var i in pl) {
 			var pi = pl[i];
 			$msg.append('<span style=\'white-space:nowrap;\'>&nbsp;' +
-				'<a href=\'javascript:void 0\' title=\'' + pi.file + '\' onclick=\'setUrl("' + pi.file + '")\'>URL</a>' +
-				'&nbsp;' + pi.title + '</span><br />');
+				'<a href=\'' + pi.file + '\' title=\'' + pi.file + '\' onclick=\'setUrl("' + pi.file + '");return false;\'>URL</a>&nbsp;' +
+				pi.title + '</span><br />');
 		}
 	}
 </script>
 </head>
 <body style="font-family:Arial;font-size:10pt;margin:3px 0px 0px 3px;">
 
-<a href="javascript:void 0" onclick="setUrl()" title="Set URL">URL</a>
+<a href="javascript:void 0" onclick="setUrl()" title="Default Program">URL</a>
+<a href="javascript:void 0" onclick="setUrl(void 0, 1)" title="Program 1">1</a>
+<a href="javascript:void 0" onclick="setUrl(void 0, 2)" title="Program 2">2</a>
+<a href="javascript:void 0" onclick="setUrl(void 0, 3)" title="Program 3">3</a>
+<a href="javascript:void 0" onclick="setUrl(void 0, 4)" title="Program 4">4</a>
+<a href="javascript:void 0" onclick="setUrl(void 0, 5)" title="Program 5">5</a>
+<a href="javascript:void 0" onclick="setUrl(void 0, 6)" title="Program 6">6</a>
+<a href="javascript:void 0" onclick="setUrl(void 0, 7)" title="Program 7">7</a>
+<a href="javascript:void 0" onclick="setUrl(void 0, 8)" title="Program 8">8</a>
+<a href="javascript:void 0" onclick="setUrl(void 0, 9)" title="Program 9">9</a>
 <input id="setUrl" style="width:98%;" />
 
 <a href="javascript:void 0" onclick="parseM3u()" title="Parse M3U">M3U</a>
