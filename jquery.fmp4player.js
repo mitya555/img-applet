@@ -143,6 +143,10 @@ $.fn.fmp4player = function (options, _name, _value) {
 		if (applet)
 			applet.play();
 	});
+  else if (options === "isPlaying") {
+	var applet = getApplet($(this[0]), "isPlaying");
+	return applet && applet.isPlaying();
+}
 
   var opts = $.extend(true, {}, $.fn.fmp4player.defaults, options);
 	

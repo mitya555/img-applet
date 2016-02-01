@@ -4,10 +4,18 @@
 <title>fmp4play2</title>
 <script src="//code.jquery.com/jquery-1.11.3.min.js"></script>
 <script src="jquery.fmp4player.js"></script>
+<script>
+	function setUrl(url) {
+		var $url = $('#setUrl');
+		if (url) $url.val(url);
+		var $player = $('#player').fmp4player('setFFmpegParam', 'i', $url.val()||null);
+		if (!$player.fmp4player('isPlaying')) $player.fmp4player('play');
+	}
+</script>
 </head>
 <body style="font-family:Arial;font-size:10pt;margin:3px 0px 0px 3px;">
 
-<a href="javascript:void 0" onclick="$('#player').fmp4player('setFFmpegParam', 'i', $('#setUrl').val()||null)/*.fmp4player('play')*/" title="Set URL">URL</a>
+<a href="javascript:void 0" onclick="setUrl()" title="Set URL">URL</a>
 <input id="setUrl" style="width:98%;" />
 
 <a href="javascript:void 0" onclick="
@@ -17,11 +25,11 @@
 	for (var i in pl) {
 		var pi = pl[i];
 		$('#msg').append('&lt;span style=\'white-space:nowrap;\'>&amp;nbsp;' +
-			'&lt;a href=\'javascript:void 0\' title=\'' + pi.file + '\' onclick=\'var $url=$(&quot;#setUrl&quot;).val(&quot;' + pi.file + '&quot;);$(&quot;#player&quot;).fmp4player(&quot;setFFmpegParam&quot;, &quot;i&quot;, $url.val()||null)\'>URL&lt;/a>' +
+			'&lt;a href=\'javascript:void 0\' title=\'' + pi.file + '\' onclick=\'setUrl(&quot;' + pi.file + '&quot;)\'>URL&lt;/a>' +
 			'&amp;nbsp;' + 
 			pi.title + '&lt;/span>&lt;br />');
 	}
-" title="Parse M3U">M3U</button>
+" title="Parse M3U">M3U</a>
 <textarea id="m3uSource" style="width:98%;" rows="2"></textarea>
 
 <div id="player"></div>
