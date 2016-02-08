@@ -47,19 +47,19 @@
 <div id="msgCont" style="background-color:black;overflow:auto;position:absolute;bottom:3px;top:155px;right:3px;left:3px;"><code style="color:white;" id="msg"></code></div>
 
 <script>
-var debug_ffmpeg = window.location.search && window.location.search.indexOf('debug-ffmpeg') != -1 ? 'yes' : 'no',
-	debug_bufferlist = window.location.search && window.location.search.indexOf('debug-bufferlist') != -1 ? 'yes' : 'no',
-	debug_java = window.location.search && window.location.search.indexOf('debug-java') != -1 ? 'yes' : 'no',
-	debug_js = window.location.search && window.location.search.indexOf('debug-js') != -1 ? 'yes' : 'no',
-	use_webgl = window.location.search && window.location.search.indexOf('use-webgl') != -1 ? 'yes' : 'no',
+var debug_ffmpeg = window.location.search && window.location.search.indexOf('debug-ffmpeg') != -1,
+	debug_bufferlist = window.location.search && window.location.search.indexOf('debug-bufferlist') != -1,
+	debug_java = window.location.search && window.location.search.indexOf('debug-java') != -1,
+	debug_js = window.location.search && window.location.search.indexOf('debug-js') != -1,
+	use_webgl = window.location.search && window.location.search.indexOf('use-webgl') != -1,
 	play_js = window.location.search && window.location.search.indexOf('play-js') != -1,
 	video_java = window.location.search && window.location.search.indexOf('video-java') != -1,
 	ffmpeg_re = window.location.search && window.location.search.indexOf('ffmpeg-re') != -1;
 var opts = {
 	appletParams: {
-		debug: debug_java,
-		'debug-ffmpeg': debug_ffmpeg,
-		'debug-bufferlist': debug_bufferlist,
+		debug: debug_java ? 'yes' : 'no',
+		'debug-ffmpeg': debug_ffmpeg ? 'yes' : 'no',
+		'debug-bufferlist': debug_bufferlist ? 'yes' : 'no',
 		//'ffmpeg-re': 'yes',
 		//'ffmpeg-r': '35',
 		
@@ -85,9 +85,9 @@ var opts = {
 		//"ffmpeg-q:v": "8.0",
 		//"ffmpeg-r": "30",
 	},
-	debug: debug_js,
+	debug: debug_js ? 'yes' : 'no',
 	audioControls: 'yes',
-	'use-webgl': use_webgl,
+	'use-webgl': use_webgl ? 'yes' : 'no',
 };
 if (play_js) {
 	opts.appletParams["process-frame-callback"] = ""; // javascript frames processing/synchronization (requestAnimationFrame() function)
@@ -97,6 +97,8 @@ if (play_js) {
 	opts.appletParams["ffmpeg-pix_fmt"] = "yuv422p"; // play video in Java
 	//opts.appletParams["demux-fMP4-mjpeg2jpeg-bsf"] = "yes"; // play video in Java
 	//opts.appletParams["ffmpeg-o"] = "output_mjpeg_yuvj420p.mp4"; // play video in Java
+	opts.appletParams["java_arguments"] = "-Dsun.java2d.opengl=" + (debug_java ? "True" : "true"); // enable OpenGL for Java2D
+	opts.appletParams["process-frame-number-of-consumer-threads"] = "6";
 }
 if (ffmpeg_re)
 	opts.appletParams["ffmpeg-re"] = "yes";

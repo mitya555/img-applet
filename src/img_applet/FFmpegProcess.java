@@ -5,6 +5,7 @@ import img_applet.FFmpegProcess.MediaDemuxer.Gettable;
 
 import java.applet.Applet;
 import java.awt.Graphics;
+import java.awt.Image;
 import java.awt.Insets;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
@@ -134,7 +135,9 @@ public class FFmpegProcess extends Observable {
 			numberOfConsumerThreads = numOfThreads;
 			consumerThreads = new Thread[numOfThreads];
 			for (int i = 0; i < numOfThreads; i++) {
-				(consumerThreads[i] = new Thread(runnable)).start();
+				Thread _thread = consumerThreads[i] = new Thread(runnable);
+				_thread.setPriority(Thread.MAX_PRIORITY);
+				_thread.start();
 			}
 		}
 		@Override
@@ -457,7 +460,7 @@ public class FFmpegProcess extends Observable {
 		}
 		@Override
 		byte[] getCurrentBytes() throws IOException {
-			if (currentBuffer == null) {
+			if (currentBuffer == null) synchronized (this) { // synchronized to ensure persistent buffers reading in the order of SNs
 				Buffer buffer = filledBufferList.remove();
 				if (buffer != null) {
 					byte[] ret = getBytes(buffer);
@@ -473,7 +476,7 @@ public class FFmpegProcess extends Observable {
 		}
 		@Override
 		FrameData getCurrentFrameData() throws IOException {
-			if (currentBuffer == null) {
+			if (currentBuffer == null) synchronized (this) { // synchronized to ensure persistent buffers reading in the order of SNs
 				Buffer buffer = filledBufferList.remove();
 				if (buffer != null) {
 					FrameData ret = buffer.getFrameData(getBytes(buffer));
@@ -1345,18 +1348,13 @@ public class FFmpegProcess extends Observable {
 													double vts = ((VideoFrameData)fd).timestamp * timeQuantum, // video timestamp in milliseconds
 															ats = audioLinePlayer.audioLine.getMicrosecondPosition() / 1000D,
 															td = vts - ats;
-													if (td > 0) {
-//														if (DEBUG)
-//															System.out.printf("td = %.2f ms\r\n", td);
-														sleep(td);
+													if (td /*- 100*/ > 0) {
+														sleep(td /*- 100*/);
 													}
 												}
 //												if (fd.sn >= lastSN) {
 //													lastSN = fd.sn;
-////													long startDrawing = System.nanoTime();
-//													graphics.drawImage(image, 0, 0, null);
-////													if (DEBUG && fd.sn % 10 == 0)
-////														System.out.printf("%.2f ms\r\n", (System.nanoTime() - startDrawing) / 1000000D);
+//													drawImage(image, fd.sn);
 //												} else {
 //													debug("Skipped frame # " + fd.sn);
 //												}
@@ -1364,7 +1362,7 @@ public class FFmpegProcess extends Observable {
 													while (curSNs.head != null && fd.sn > curSNs.head.sn)
 														curSNs.wait();
 													if (curSNs.head != null && fd.sn == curSNs.head.sn) {
-														graphics.drawImage(image, drawInsets.left, drawInsets.top, null);
+														drawImage(image, fd.sn);
 														curSNs.remove();
 														curSNs.notifyAll();
 													}
@@ -1394,7 +1392,16 @@ public class FFmpegProcess extends Observable {
 						}
 					}
 
+					private void drawImage(Image image, int frameSN) {
+//						long startDrawing = System.nanoTime();
+						graphics.drawImage(image, drawInsets.left, drawInsets.top, null);
+//						if (DEBUG && frameSN % 10 == 0)
+//							System.out.printf("%.2f ms\r\n", (System.nanoTime() - startDrawing) / 1000000D);
+					}
+
 					private void sleep(double td/* in milliseconds */) throws InterruptedException {
+//						if (DEBUG)
+//							System.out.printf("td = %.2f ms\r\n", td);
 						long millis = (long)td;
 						int nanos = (int) ((td - millis) * 1000000D);
 						//debug("td = " + td + "; \t millis = " + millis + "; \t nanos = " + nanos);
